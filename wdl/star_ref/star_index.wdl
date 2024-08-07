@@ -6,10 +6,12 @@ task star_index {
         File annotation_gtf
         String prefix
         Int overhang
+
         Int memory
         Int disk_space
         Int ncpu
-
+        Int preemptible
+        String docker
     }
 
     command <<<
@@ -29,11 +31,11 @@ task star_index {
     }
 
     runtime {
-        docker: "us-docker.pkg.dev/motrpac-portal/rnaseq/star:latest"
+        cpu: ncpu
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${ncpu}"
-
+        docker: docker
+        preemptible: preemptible
     }
 
     meta {

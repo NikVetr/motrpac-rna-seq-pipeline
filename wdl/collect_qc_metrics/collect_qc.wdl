@@ -6,7 +6,7 @@ task rnaseqQC {
         Int memory
         Int disk_space
         Int ncpu
-
+        Int preemptible
         String docker
 
         File trim_summary
@@ -51,11 +51,11 @@ task rnaseqQC {
     }
 
     runtime {
-        docker: "${docker}"
+        cpu: ncpu
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${ncpu}"
-
+        docker: docker
+        preemptible: preemptible
     }
 
     parameter_meta {
@@ -83,6 +83,5 @@ task rnaseqQC {
         star_log: {
            label: "STAR Align Log"
         }
-
     }
 }

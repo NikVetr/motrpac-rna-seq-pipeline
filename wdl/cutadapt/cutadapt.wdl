@@ -13,7 +13,7 @@ task Cutadapt {
         Int cpus
         Int disk_space
         Int memory
-
+        Int preemptible
         String docker
     }
 
@@ -64,9 +64,10 @@ task Cutadapt {
     }
 
     runtime {
-        docker: "${docker}"
+        cpu: ncpu
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${cpus}"
+        docker: docker
+        preemptible: preemptible
     }
 }

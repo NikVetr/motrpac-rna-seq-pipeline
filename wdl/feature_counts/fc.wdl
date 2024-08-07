@@ -11,7 +11,7 @@ task feature_counts {
         Int memory
         Int disk_space
         Int ncpu
-
+        Int preemptible
         String docker
     }
 
@@ -36,6 +36,7 @@ task feature_counts {
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
         cpu: "${ncpu}"
+        preemptible: preemptible
     }
 
     parameter_meta {

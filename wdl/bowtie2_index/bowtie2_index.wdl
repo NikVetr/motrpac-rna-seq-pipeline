@@ -7,6 +7,7 @@ task bowtie2_index {
         Int memory
         Int disk_space
         Int ncpu
+        Int preemptible
 
     }
 
