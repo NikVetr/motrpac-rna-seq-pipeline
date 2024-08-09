@@ -270,7 +270,7 @@ workflow rnaseq_pipeline {
                     fastqr2=aumi.r2_umi_attached,
                     minimumLength=minimumLength,
                 # Runtime Parameters
-                    cpus=cutadapt_ncpu,
+                    ncpu=cutadapt_ncpu,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
                 preemptible=num_preemptible_attempts,
@@ -289,7 +289,7 @@ workflow rnaseq_pipeline {
                     fastqr2=fastq2[i],
                     minimumLength=minimumLength,
                 # Runtime Parameters
-                    cpus=cutadapt_ncpu,
+                    ncpu=cutadapt_ncpu,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
                 preemptible=num_preemptible_attempts,

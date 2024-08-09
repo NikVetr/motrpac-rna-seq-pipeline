@@ -10,7 +10,7 @@ task Cutadapt {
         String univ_adapter
         Int? minimumLength
         
-        Int cpus
+        Int ncpu
         Int disk_space
         Int memory
         Int preemptible
