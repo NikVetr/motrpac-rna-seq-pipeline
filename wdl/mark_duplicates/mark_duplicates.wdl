@@ -10,7 +10,7 @@ task markduplicates {
         Int memory
         Int disk_space
         Int ncpu
-
+        Int preemptible
         String docker
     }
 
