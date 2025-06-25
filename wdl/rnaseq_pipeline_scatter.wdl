@@ -111,6 +111,7 @@ workflow rnaseq_pipeline {
         Array[File]+ fastq2
         Array[File]? fastq_index
         Array[String]+ sample_prefix
+        # Change num_preemptible_attempts to 0 if you want to turn the behavior off
         Int num_preemptible_attempts = 2
 
         # FastQC Parameters
