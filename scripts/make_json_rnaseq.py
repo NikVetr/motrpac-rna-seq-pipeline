@@ -94,33 +94,33 @@ def make_json_dict(
 
     if organism == "rat" and version == "rn6":
         organism_references = {
-            "rnaseq_pipeline.star_index": "gs://omicspipelines/rnaseq/references/rat/Rnor6_v96_star_index.tar.gz",
-            "rnaseq_pipeline.gtf_file": "gs://omicspipelines/rnaseq/references/rat/Rattus_norvegicus.Rnor_6.0.96.gtf",
-            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines/rnaseq/references/rat/rn6_rsem_reference.tar.gz",
-            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines/rnaseq/references/rat/rn_globin.tar.gz",
-            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines/rnaseq/references/rat/rn_rRNA.tar.gz",
-            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines/rnaseq/references/rat/phix.tar.gz",
-            "rnaseq_pipeline.ref_flat": "gs://omicspipelines/rnaseq/references/rat/refFlat_rn6_v96.txt",
+            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/Rnor6_v96_star_index.tar.gz",
+            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/Rattus_norvegicus.Rnor_6.0.96.gtf",
+            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn6_rsem_reference.tar.gz",
+            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz",
+            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz",
+            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
+            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/refFlat_rn6_v96.txt",
         }
     elif organism == "rat" and version == "rn7" :
         organism_references = {
-            "rnaseq_pipeline.star_index": "gs://rna-seq_araja/generate_references/star_index/e7107bd5-f120-43ba-a80f-ecfe0be56db4/call-star_index/rn7_v108_star_index.tar.gz",
-            "rnaseq_pipeline.gtf_file": "gs://rna-seq_araja/references/rn/mRatBN7.2/v108/Rattus_norvegicus.mRatBN7.2.108.gtf",
-            "rnaseq_pipeline.rsem_reference": "gs://rna-seq_araja/generate_references/rsem_reference/78dabe18-2aaf-4ee9-9ccd-1b21dbaac6f3/call-rsem_reference/rn7_rsem_reference.tar.gz",
-            "rnaseq_pipeline.globin_genome_dir_tar": "gs://rna-seq_araja/references/rn/bowtie2_index/rn_globin.tar.gz",
-            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://rna-seq_araja/references/rn/bowtie2_index/rn_rRNA.tar.gz",
-            "rnaseq_pipeline.phix_genome_dir_tar": "gs://rna-seq_araja/references/rn/bowtie2_index/phix.tar.gz",
-            "rnaseq_pipeline.ref_flat": "gs://rna-seq_araja/references/rn/mRatBN7.2/v108/refFlat_mRatBN7.2_v108.txt",
+            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/rn7_v108_star_index.tar.gz",
+            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/Rattus_norvegicus.mRatBN7.2.108.gtf",
+            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/rn7_rsem_reference.tar.gz",
+            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz",
+            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz",
+            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
+            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/refFlat_mRatBN7.2_v108.txt",
         }
     elif organism == "human" and version == "gencode_v39" :
         organism_references = {
-            "rnaseq_pipeline.star_index": "gs://omicspipelines/rnaseq/references/human/hg38_v39_star_index.tar.gz",
-            "rnaseq_pipeline.gtf_file": "gs://omicspipelines/rnaseq/references/human/GRCh38.v39.primary_assembly.annotation.gtf",
-            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines/rnaseq/references/human/hg38_rsem_reference.tar.gz",
-            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines/rnaseq/references/human/hs_globin.tar.gz",
-            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines/rnaseq/references/human/hs_rRNA.tar.gz",
-            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines/rnaseq/references/human/phix.tar.gz",
-            "rnaseq_pipeline.ref_flat": "gs://omicspipelines/rnaseq/references/human/refFlat_hg38_v39.txt",
+            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/human/hg38_v39_star_index.tar.gz",
+            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/human/GRCh38.v39.primary_assembly.annotation.gtf",
+            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/human/hg38_rsem_reference.tar.gz",
+            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_globin.tar.gz",
+            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_rRNA.tar.gz",
+            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/phix.tar.gz",
+            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/human/refFlat_hg38_v39.txt",
         }
     else:
         print("Invalid organism")

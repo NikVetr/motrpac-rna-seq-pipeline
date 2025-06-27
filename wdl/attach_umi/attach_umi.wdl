@@ -11,6 +11,7 @@ task attachUMI {
         Int memory
         Int disk_space
         Int ncpu
+        Int preemptible
 
         String docker
     }
@@ -34,11 +35,11 @@ task attachUMI {
     }
 
     runtime {
-        docker: "${docker}"
+        docker: docker
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${ncpu}"
-
+        cpu: ncpu
+        preemptible: preemptible
     }
 
     parameter_meta {

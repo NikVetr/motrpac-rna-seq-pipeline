@@ -23,6 +23,7 @@ task checksum {
         Int memory
         Int disk_space
         Int ncpu
+        Int preemptible
 
         String docker
         File fastq
@@ -57,7 +58,7 @@ task gather_checksums {
         Int memory = 8
         Int disk_space = 8
         Int ncpu = 1
-         = 0
+        Int preemptible = 0
     }
 
     command <<<
@@ -76,7 +77,7 @@ task gather_checksums {
         docker: "gcr.io/motrpac-portal/motrpac_rnaseq:v0.1_04_20_19"
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${ncpu}"
-
+        cpu: ncpu
+        preemptible: preemptible
     }
 }

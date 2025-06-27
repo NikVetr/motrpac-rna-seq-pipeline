@@ -111,6 +111,8 @@ workflow rnaseq_pipeline {
         Array[File]+ fastq2
         Array[File]? fastq_index
         Array[String]+ sample_prefix
+        # Change num_preemptible_attempts to 2 or more if you want to use preemptible vm instances
+        Int num_preemptible_attempts = 0
 
         # FastQC Parameters
         Int pretrim_fastqc_ncpu
@@ -239,7 +241,7 @@ workflow rnaseq_pipeline {
                 ncpu=pretrim_fastqc_ncpu,
                 memory=pretrim_fastqc_ramGB,
                 disk_space=pretrim_fastqc_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=fastqc_docker
         }
 
@@ -255,7 +257,7 @@ workflow rnaseq_pipeline {
                     ncpu=attach_umi_ncpu,
                     memory=attach_umi_ramGB,
                     disk_space=attach_umi_disk,
-
+                preemptible=num_preemptible_attempts,
                     docker=attach_umi_docker
             }
 
@@ -269,10 +271,10 @@ workflow rnaseq_pipeline {
                     fastqr2=aumi.r2_umi_attached,
                     minimumLength=minimumLength,
                 # Runtime Parameters
-                    cpus=cutadapt_ncpu,
+                    ncpu=cutadapt_ncpu,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
-
+                preemptible=num_preemptible_attempts,
                     docker=cutadapt_docker,
             }
         }
@@ -288,10 +290,10 @@ workflow rnaseq_pipeline {
                     fastqr2=fastq2[i],
                     minimumLength=minimumLength,
                 # Runtime Parameters
-                    cpus=cutadapt_ncpu,
+                    ncpu=cutadapt_ncpu,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
-
+                preemptible=num_preemptible_attempts,
                     docker=cutadapt_docker,
             }
         }
@@ -311,7 +313,7 @@ workflow rnaseq_pipeline {
                 ncpu=posttrim_fastqc_ncpu,
                 memory=posttrim_fastqc_ramGB,
                 disk_space=posttrim_fastqc_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=fastqc_docker
         }
 
@@ -324,7 +326,7 @@ workflow rnaseq_pipeline {
                 ncpu=multiqc_ncpu,
                 memory=multiqc_ramGB,
                 disk_space=multiqc_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=multiqc_docker,
 
         }
@@ -340,7 +342,7 @@ workflow rnaseq_pipeline {
                 ncpu=star_ncpu,
                 memory=star_ramGB,
                 disk_space=star_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=star_docker,
         }
 
@@ -354,7 +356,7 @@ workflow rnaseq_pipeline {
                 ncpu=feature_counts_ncpu,
                 memory=feature_counts_ramGB,
                 disk_space=feature_counts_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=feature_counts_docker
         }
 
@@ -368,7 +370,7 @@ workflow rnaseq_pipeline {
                 ncpu=rsem_ncpu,
                 memory=rsem_ramGB,
                 disk_space=rsem_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=rsem_docker,
         }
 
@@ -383,7 +385,7 @@ workflow rnaseq_pipeline {
                 ncpu=bowtie2_globin_ncpu,
                 memory=bowtie2_globin_ramGB,
                 disk_space=bowtie2_globin_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=bowtie_docker,
 
         }
@@ -399,7 +401,7 @@ workflow rnaseq_pipeline {
                 ncpu=bowtie2_rrna_ncpu,
                 memory=bowtie2_rrna_ramGB,
                 disk_space=bowtie2_rrna_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=bowtie_docker,
 
         }
@@ -415,7 +417,7 @@ workflow rnaseq_pipeline {
                 ncpu=bowtie2_phix_ncpu,
                 memory=bowtie2_phix_ramGB,
                 disk_space=bowtie2_phix_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=bowtie_docker,
 
         }
@@ -429,7 +431,7 @@ workflow rnaseq_pipeline {
                 ncpu=markdup_ncpu,
                 memory=markdup_ramGB,
                 disk_space=markdup_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=picard_docker
         }
 
@@ -443,7 +445,7 @@ workflow rnaseq_pipeline {
                 ncpu=rnaqc_ncpu,
                 memory=rnaqc_ramGB,
                 disk_space=rnaqc_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=picard_docker
         }
 
@@ -457,7 +459,7 @@ workflow rnaseq_pipeline {
                     ncpu=umi_dup_ncpu,
                     memory=umi_dup_ramGB,
                     disk_space=umi_dup_disk,
-
+                    preemptible=num_preemptible_attempts,
                     docker=umi_dup_docker
             }
         }
@@ -471,7 +473,7 @@ workflow rnaseq_pipeline {
                 ncpu=mapped_ncpu,
                 memory=mapped_ramGB,
                 disk_space=mapped_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=samtools_docker
         }
 
@@ -489,7 +491,7 @@ workflow rnaseq_pipeline {
                 ncpu=mqc_postalign_ncpu,
                 memory=mqc_postalign_ramGB,
                 disk_space=mqc_postalign_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=multiqc_docker
         }
 
@@ -509,7 +511,7 @@ workflow rnaseq_pipeline {
                 ncpu=collect_qc_ncpu,
                 memory=collect_qc_ramGB,
                 disk_space=collect_qc_disk,
-
+                preemptible=num_preemptible_attempts,
                 docker=collect_qc_docker,
         }
     }
@@ -525,7 +527,7 @@ workflow rnaseq_pipeline {
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,
-
+            preemptible=num_preemptible_attempts,
             docker=merge_results_docker,
     }
 

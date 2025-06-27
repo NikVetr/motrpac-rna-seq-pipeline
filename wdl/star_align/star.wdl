@@ -15,7 +15,7 @@ task star {
         Int memory
         Int disk_space
         Int ncpu
-
+        Int preemptible
         String docker
     }
 
@@ -70,11 +70,11 @@ task star {
     }
 
     runtime {
-        docker: "${docker}"
+        cpu: ncpu
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
-        cpu: "${ncpu}"
-
+        docker: docker
+        preemptible: preemptible
     }
 
     parameter_meta {
