@@ -16,7 +16,7 @@ def main():
     with open(args.infile1, encoding="utf-8") as json_file1:
         file_a = json.load(json_file1)
 
-    with open(args.infile1, encoding="utf-8") as json_file2:
+    with open(args.infile2, encoding="utf-8") as json_file2:
         file_b = json.load(json_file2)
 
     a, b = json.dumps(file_a, sort_keys=True), json.dumps(file_b, sort_keys=True)
