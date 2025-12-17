@@ -113,7 +113,7 @@ A brief summary of the steps to set-up a VM to run the Motrpac pipelines on GCP 
 - Create a GCP account.
 - Enable cloud APIs.
 - Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (Software Development Kit) on your local machine.
-- Create a service account and download the key file to your local computer (e.g  "`service-account-191919.json`")
+- Create a service account and download the key file to your local computer (e.g. `service-account-191919.json`)
 - Create a bucket for pipeline inputs and outputs (e.g. gs://pipelines/). Note: a GCP bucket is similar to a folder on your computer or a storage unit, but it is stored on Google's servers in the cloud instead of on your local computer.
 - Set up a VM on GCP: create a Virtual Machine (VM) instance from where the pipelines will be run. We recommend the script available in the [caper repo](https://github.com/ENCODE-DCC/caper). For that, clone the repo on your local machine and run the following command:
 
