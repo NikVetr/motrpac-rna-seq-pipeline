@@ -23,7 +23,7 @@ MoTrPAC RNA-SEQ Pipeline
 
 ## Overview
 
-This repo contains the rna-seq data processing pipeline implemented in Workflow Description Language (WDL) based on harmonized [RNA-SEQ MOP](https://docs.google.com/document/d/e/2PACX-1vRFurZraZfxfMd5BWfIQEnETlalDNjQPyMjS7TCTgc3MMlMtB_-tmJfEK7lmRV7GD30I7R9-ISX3kuM/pub). This pipeline uses [caper](https://github.com/ENCODE-DCC/caper), a wrapper python package for the workflow management system [Cromwell](https://cromwell.readthedocs.io/en/stable/). All the data was processed on the Google Cloud Platform (GCP).
+This repo contains the rna-seq data processing pipeline implemented in Workflow Description Language (WDL) based on harmonized [RNA-SEQ MOP](https://docs.google.com/document/d/e/2PACX-1vRFurZraZfxfMd5BWfIQEnETlalDNjQPyMjS7TCTgc3MMlMtB_-tmJfEK7lmRV7GD30I7R9-ISX3kuM/pub). This pipeline uses [caper](https://github.com/MoTrPAC/caper), a wrapper python package for the workflow management system [Cromwell](https://cromwell.readthedocs.io/en/stable/). All the data was processed on the Google Cloud Platform (GCP).
 
 ### Supported Organisms and Genome Builds
 
@@ -108,14 +108,14 @@ Ensure the following APIs are enabled in your GCP project:
 
 The WDL/Cromwell framework is optimized to run pipelines in high-performance computing environments. The MoTrPAC Bioinformatics Center runs pipelines on Google Cloud Platform (GCP). We used a number of fantastic tools developed by our colleagues from the [ENCODE project](https://github.com/ENCODE-DCC) to run pipelines on GCP (and other HPC platforms).
 
-A brief summary of the steps to set-up a VM to run the Motrpac pipelines on GCP (**for details, please, check the [caper repo](https://github.com/ENCODE-DCC/caper/blob/master/scripts/gcp_caper_server/README.md)**):
+A brief summary of the steps to set-up a VM to run the Motrpac pipelines on GCP (**for details, please, check the [caper repo](https://github.com/MoTrPAC/caper/blob/master/scripts/gcp_caper_server/README.md)**):
 
 - Create a GCP account.
 - Enable cloud APIs.
 - Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (Software Development Kit) on your local machine.
 - Create a service account and download the key file to your local computer (e.g. `service-account-191919.json`)
 - Create a bucket for pipeline inputs and outputs (e.g. gs://pipelines/). Note: a GCP bucket is similar to a folder on your computer or a storage unit, but it is stored on Google's servers in the cloud instead of on your local computer.
-- Set up a VM on GCP: create a Virtual Machine (VM) instance from where the pipelines will be run. We recommend the script available in the [caper repo](https://github.com/ENCODE-DCC/caper). For that, clone the repo on your local machine and run the following command:
+- Set up a VM on GCP: create a Virtual Machine (VM) instance from where the pipelines will be run. We recommend the script available in the [caper repo](https://github.com/MoTrPAC/caper/). For that, clone the repo on your local machine and run the following command:
 
  ```bash
  $ bash create_instance.sh [INSTANCE_NAME] [PROJECT_ID] [GCP_SERVICE_ACCOUNT_KEY_JSON_FILE] [GCP_OUT_DIR]
@@ -458,7 +458,7 @@ cd cromwell-executions/rnaseq_pipeline/[WORKFLOW_ID]/
 
 If issues persist:
 1. Check the Cromwell documentation: https://cromwell.readthedocs.io/
-2. Review the Caper documentation: https://github.com/ENCODE-DCC/caper
+2. Review the Caper documentation: https://github.com/MoTrPAC/caper/
 3. Open an issue on the GitHub repository with:
    - Workflow ID
    - Error messages from logs
@@ -471,7 +471,7 @@ If issues persist:
 
 ### Workflow Management
 - [Cromwell](https://cromwell.readthedocs.io/en/stable/) - Workflow management system
-- [Caper](https://github.com/ENCODE-DCC/caper) - Cromwell wrapper for easy workflow execution
+- [Caper](https://github.com/MoTrPAC/caper/) - Cromwell wrapper for easy workflow execution
 - [WDL](https://openwdl.org/) - Workflow Description Language specification
 
 ### Analysis Tools
