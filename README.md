@@ -480,7 +480,7 @@ If issues persist:
 - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) - Quality control for high throughput sequence data
 - [MultiQC](https://multiqc.info/) - Ewels P, et al. MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics. 2016.
 - [Cutadapt](https://cutadapt.readthedocs.io/) - Martin M. Cutadapt removes adapter sequences from high-throughput sequencing reads. EMBnet.journal. 2011.
-- [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/) - Langmead B and Salzberg SL. Fast gapped-read alignment with Bowtie 2. Nature Methods. 2012.
+- [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/) - Langmead B and Salzberg SL. Fast gapped-read alignment with Bowtie 2. Nature Methods. 2012.
 - [Picard Tools](https://broadinstitute.github.io/picard/) - Broad Institute toolkit for SAM/BAM file manipulation
 
 ### Infrastructure
