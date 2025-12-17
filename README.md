@@ -186,6 +186,7 @@ python3 scripts/make_json_rnaseq.py \
   -d DOCKER_REPO \            # Docker repository prefix (optional)
   -i \                        # Include index files (for UMI processing)
   -u                          # Include undetermined reads (optional)
+  -v VERSION \                # Accepts values "rn6", "rn7", or "gencode_v39" to specify the genome build version 
 ```
 
 **Complete Example:**
