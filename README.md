@@ -102,7 +102,7 @@ The main dependencies include:
 Ensure the following APIs are enabled in your GCP project:
 - Compute Engine API
 - Cloud Storage API
-- Cloud Life Sciences API (for workflow execution)
+- Google Cloud Batch API (for workflow execution)
 
 ## GCP Set-up
 
