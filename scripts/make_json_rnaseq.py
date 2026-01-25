@@ -112,6 +112,16 @@ def make_json_dict(
             "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
             "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/refFlat_mRatBN7.2_v108.txt",
         }
+    elif organism == "rat" and version == "rn8":
+        organism_references = {
+            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_GRCr8_star_index.tar.gz",
+            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf",
+            "rnaseq_pipeline.rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_rsem_reference.tar.gz",
+            "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz",
+            "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz",
+            "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
+            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/refFlat_rn8_GRCr8.txt",
+        }
     elif organism == "human" and version == "gencode_v39" :
         organism_references = {
             "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/human/hg38_v39_star_index.tar.gz",
@@ -253,7 +263,7 @@ if __name__ == "__main__":
 	"-v",
         "--version",
         help="genome build version to use for references",
-        choices=["rn6","rn7","gencode_v39"],
+        choices=["rn6","rn7","rn8","gencode_v39"],
         default="rn7",
     )
     parser.add_argument(
