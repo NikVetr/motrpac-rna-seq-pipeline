@@ -1,8 +1,10 @@
 {
-  "rsem_reference_workflow.rsem_reference.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/GCF_036323735.1_GRCr8_genomic.fna",
-  "rsem_reference_workflow.rsem_reference.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf",
-  "rsem_reference_workflow.rsem_reference.prefix": "rn8_rsem_reference",
-  "rsem_reference_workflow.rsem_reference.ncpu": "10",
-  "rsem_reference_workflow.rsem_reference.memory": "60",
-  "rsem_reference_workflow.rsem_reference.disk_space": "100"
+  "rsem_reference_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/GCF_036323735.1_GRCr8_genomic.fna",
+  "rsem_reference_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf",
+  "rsem_reference_workflow.prefix": "rn8_rsem_reference",
+  "rsem_reference_workflow.ncpu": 10,
+  "rsem_reference_workflow.memory": 60,
+  "rsem_reference_workflow.disk_space": 100,
+  "rsem_reference_workflow.preemptible": 3,
+  "rsem_reference_workflow.docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/rsem:latest"
 }
