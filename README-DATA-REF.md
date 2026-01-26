@@ -233,24 +233,28 @@ After the workflow completes:
 
 ---
 
-### Step 6: Contamination Screening Indices (Optional)
+### Step 6: Contamination Screening Indices
 
-For a new genome version of an existing organism (e.g., rn8 for rat), you can **reuse** the existing globin, rRNA, and PhiX indices:
+The pipeline requires bowtie2 indices for globin, rRNA, and PhiX contamination screening. These are **required** inputs.
+
+For a **new genome version of an existing organism** (e.g., rn8 for rat), you can reuse the existing indices since the globin, rRNA, and PhiX sequences are conserved:
 
 - Globin: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz`
 - rRNA: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz`
 - PhiX: `gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz`
 
-For a **new organism**, you need to build these indices:
+For a **new organism**, you must build these indices from scratch:
 
 ```bash
 # Build bowtie2 index for globin sequences
-caper run wdl/bowtie2_index/bowtie2_index.wdl \
+caper submit wdl/bowtie2_index/bowtie2_index.wdl \
     -i examples/input_json/tasks/bowtie2_index_globin_inputs.json
 
 # Build bowtie2 index for rRNA sequences
-caper run wdl/bowtie2_index/bowtie2_index.wdl \
+caper submit wdl/bowtie2_index/bowtie2_index.wdl \
     -i examples/input_json/tasks/bowtie2_index_rrna_inputs.json
+
+# PhiX is organism-independent and can be reused
 ```
 
 ---
