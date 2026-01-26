@@ -106,7 +106,7 @@ Download the NCBI genome. For example, to download the rat RN8
 ```
 # create a "data" folder in this repo, `cd data` and download the genome like this:
 
-datasets download genome accession GCA_041222355.1 --include gff3,rna,cds,protein,genome,seq-report
+datasets download genome accession GCF_036323735.1 --include gff3,rna,cds,protein,genome,seq-report
 ```
 
 ### Step 1: Convert GFF3 to GTF (if needed)
