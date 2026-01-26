@@ -321,7 +321,7 @@ This directory contains the rat rn8 (GRCr8) reference genome:
 
 ### Directory Contents
 
-IF you download the data from the ncbi as explain above, this is the typical content:
+If you download the data from the NCBI as explained above, this is the typical content:
 
 ```
 data/
