@@ -1,6 +1,6 @@
 {
-  "star_index_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/GCF_036323735.1_GRCr8_genomic.fna",
-  "star_index_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf",
+  "star_index_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/GCF_036323735.1_GRCr8_genomic_ucsc.fna",
+  "star_index_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8_ucsc.gtf",
   "star_index_workflow.prefix": "rn8_GRCr8_star_index",
   "star_index_workflow.overhang": 100,
   "star_index_workflow.ncpu": 12,

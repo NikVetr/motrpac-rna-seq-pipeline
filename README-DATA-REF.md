@@ -8,17 +8,19 @@ The example below uses the rat rn8 (GRCr8) assembly, but the same process applie
 
 ## Overview
 
-The RNA-seq pipeline requires **7 reference files**:
+The RNA-seq pipeline requires **7 reference files**, all using **UCSC-style chromosome naming** (chr1, chrX, etc.):
 
 | # | File | Description | How to Create |
 |---|------|-------------|---------------|
-| 1 | **GTF file** | Gene annotation in GTF format | Convert from GFF3 (if needed) |
+| 1 | **GTF file** | Gene annotation in GTF format (UCSC naming) | Convert from GFF3, then rename chromosomes |
 | 2 | **STAR index** | Genome index for STAR aligner | Build with WDL workflow |
 | 3 | **RSEM reference** | Reference for RSEM quantification | Build with WDL workflow |
 | 4 | **refFlat file** | Gene intervals for Picard QC | Generate from GTF |
 | 5 | **Globin index** | Bowtie2 index for globin contamination | Build or reuse existing |
 | 6 | **rRNA index** | Bowtie2 index for rRNA contamination | Build or reuse existing |
 | 7 | **PhiX index** | Bowtie2 index for PhiX spike-in | Reuse existing |
+
+> ⚠️ **Important:** NCBI genomes use RefSeq accession-based chromosome names (e.g., `NC_086019.1`). These must be converted to UCSC-style names (e.g., `chr1`) before use in this pipeline. See Step 2 below.
 
 ---
 
@@ -131,16 +133,102 @@ head -5 data/GCF_036323735.1/Rattus_norvegicus.GRCr8.gtf
 
 ---
 
-### Step 2: Generate refFlat File
+### Step 2: Rename Chromosomes to UCSC-style Naming (CRITICAL)
 
-The refFlat file is used by Picard's `CollectRnaSeqMetrics` for QC. Generate it from the GTF:
+> ⚠️ **This step is required for NCBI genomes.** NCBI uses RefSeq accession-based chromosome names (e.g., `NC_086019.1`), but the RNA-seq pipeline expects UCSC-style names (e.g., `chr1`, `chrX`, `chrM`). Skipping this step will cause pipeline failures.
+
+The `sequence_report.jsonl` file from NCBI Datasets contains the mapping between RefSeq accessions and UCSC-style names. We provide a script to automate this conversion.
+
+#### Run the chromosome renaming script:
 
 ```bash
-# Navigate to the data directory
-cd data/GCF_036323735.1
+# Create output directory for UCSC-named files
+mkdir -p data/GCF_036323735.1_ucsc
+
+# Run the renaming script
+python3 scripts/rename_chromosomes.py \
+    data/GCF_036323735.1/sequence_report.jsonl \
+    data/GCF_036323735.1 \
+    data/GCF_036323735.1_ucsc
+```
+
+The script will:
+1. Parse the chromosome mapping from `sequence_report.jsonl`
+2. Rename chromosomes in the genomic FASTA file
+3. Rename chromosomes in the GTF annotation file
+4. Perform QC validation checks
+5. Generate a summary report and genes-per-chromosome plot
+
+#### Expected output:
+
+```
+data/GCF_036323735.1_ucsc/
+├── GCF_036323735.1_GRCr8_genomic_ucsc.fna   # Renamed FASTA
+├── Rattus_norvegicus.GRCr8_ucsc.gtf         # Renamed GTF
+├── chromosome_mapping.tsv                    # Mapping file for reference
+├── qc_report.txt                             # QC validation report
+└── genes_per_chromosome.png                  # QC plot
+```
+
+#### QC Validation
+
+The script performs automatic validation:
+
+- ✓ **Sequence count**: Verifies the same number of sequences in input/output FASTA
+- ✓ **File size**: Confirms file sizes match within 1% (small differences from header changes)
+- ✓ **Main chromosomes**: Checks that chr1, chr2, chrX, chrY exist in output
+- ✓ **Gene distribution**: Generates a plot showing genes per chromosome
+
+**Review the QC report before proceeding:**
+
+```bash
+cat data/GCF_036323735.1_ucsc/qc_report.txt
+```
+
+Sample output:
+```
+============================================================
+CHROMOSOME RENAMING QC REPORT
+============================================================
+
+FASTA File:
+  Total sequences: 76
+  Renamed sequences: 76
+  Input file size: 2,841,234,567 bytes
+  Output file size: 2,841,234,123 bytes
+  ✓ File size difference: 0.001% (OK)
+  ✓ All sequences were mapped
+
+GTF File:
+  Total lines: 1,234,567
+  Renamed lines: 1,234,567
+  ✓ All chromosomes were mapped
+
+Genes per Chromosome:
+  chr1                       3,245 ████████████
+  chr2                       2,891 ██████████
+  ...
+  chrX                       1,234 █████
+  chrY                         456 ██
+
+Total genes: 47,357
+============================================================
+```
+
+**Important:** Use the files from `data/GCF_036323735.1_ucsc/` for all subsequent steps.
+
+---
+
+### Step 3: Generate refFlat File
+
+The refFlat file is used by Picard's `CollectRnaSeqMetrics` for QC. Generate it from the **UCSC-renamed GTF**:
+
+```bash
+# Navigate to the UCSC-renamed data directory
+cd data/GCF_036323735.1_ucsc
 
 # Convert GTF to genePred format (intermediate file)
-gtfToGenePred -genePredExt Rattus_norvegicus.GRCr8.gtf rn8_genePred.txt
+gtfToGenePred -genePredExt Rattus_norvegicus.GRCr8_ucsc.gtf rn8_genePred.txt
 
 # Convert genePred to refFlat format
 # refFlat has 11 columns: geneName, name, chrom, strand, txStart, txEnd, cdsStart, cdsEnd, exonCount, exonStarts, exonEnds
@@ -157,31 +245,37 @@ cd ../..
 **Verify the output:**
 
 ```bash
-# Check file format (should have 11 tab-separated columns)
-head -3 data/GCF_036323735.1/refFlat_rn8_GRCr8.txt | cut -f1-5
+# Check file format (should have 11 tab-separated columns with chr-prefixed names)
+head -3 data/GCF_036323735.1_ucsc/refFlat_rn8_GRCr8.txt | cut -f1-5
+
+# Verify chromosomes have UCSC naming
+cut -f3 data/GCF_036323735.1_ucsc/refFlat_rn8_GRCr8.txt | sort -u | head -10
 
 # Count entries
-wc -l data/GCF_036323735.1/refFlat_rn8_GRCr8.txt
+wc -l data/GCF_036323735.1_ucsc/refFlat_rn8_GRCr8.txt
 ```
 
 ---
 
 ### Step 3: Upload Source Files to GCS
 
-Upload the genomic FASTA, GTF, and refFlat files to Google Cloud Storage:
+Upload the **UCSC-renamed** genomic FASTA, GTF, and refFlat files to Google Cloud Storage:
 
 ```bash
 # Set the destination path
 GCS_PATH="gs://omicspipelines-public-resources/rnaseq/references/rat/rn8"
 
-# Upload genomic FASTA
-gsutil cp data/GCF_036323735.1/GCF_036323735.1_GRCr8_genomic.fna ${GCS_PATH}/
+# Upload UCSC-renamed genomic FASTA
+gsutil cp data/GCF_036323735.1_ucsc/GCF_036323735.1_GRCr8_genomic_ucsc.fna ${GCS_PATH}/
 
-# Upload GTF annotation
-gsutil cp data/GCF_036323735.1/Rattus_norvegicus.GRCr8.gtf ${GCS_PATH}/
+# Upload UCSC-renamed GTF annotation
+gsutil cp data/GCF_036323735.1_ucsc/Rattus_norvegicus.GRCr8_ucsc.gtf ${GCS_PATH}/
 
-# Upload refFlat file
-gsutil cp data/GCF_036323735.1/refFlat_rn8_GRCr8.txt ${GCS_PATH}/
+# Upload refFlat file (generated from UCSC-renamed GTF)
+gsutil cp data/GCF_036323735.1_ucsc/refFlat_rn8_GRCr8.txt ${GCS_PATH}/
+
+# Upload chromosome mapping for reference
+gsutil cp data/GCF_036323735.1_ucsc/chromosome_mapping.tsv ${GCS_PATH}/
 ```
 
 **Verify uploads:**
@@ -191,7 +285,7 @@ gsutil ls ${GCS_PATH}/
 
 ---
 
-### Step 4: Build STAR Index
+### Step 5: Build STAR Index
 
 The STAR index is built using a WDL workflow. This runs on the cloud and requires significant resources (~120 GB RAM).
 
@@ -212,7 +306,7 @@ After the workflow completes:
 
 ---
 
-### Step 5: Build RSEM Reference
+### Step 6: Build RSEM Reference
 
 The RSEM reference is built using a WDL workflow.
 
@@ -233,7 +327,7 @@ After the workflow completes:
 
 ---
 
-### Step 6: Contamination Screening Indices
+### Step 7: Contamination Screening Indices
 
 The pipeline requires bowtie2 indices for globin, rRNA, and PhiX contamination screening. These are **required** inputs.
 
@@ -259,7 +353,7 @@ caper submit wdl/bowtie2_index/bowtie2_index.wdl \
 
 ---
 
-### Step 7: Update Pipeline Configuration
+### Step 8: Update Pipeline Configuration
 
 After all reference files are in GCS, update `scripts/make_json_rnaseq.py` to add support for the new genome version:
 
@@ -280,12 +374,24 @@ GCS_PATH="gs://omicspipelines-public-resources/rnaseq/references/rat/rn8"
 # List all files
 gsutil ls -l ${GCS_PATH}/
 
-# Expected files:
-# - GCF_036323735.1_GRCr8_genomic.fna    (source FASTA)
-# - Rattus_norvegicus.GRCr8.gtf          (GTF annotation)
-# - rn8_GRCr8_star_index.tar.gz          (STAR index)
-# - rn8_rsem_reference.tar.gz            (RSEM reference)
-# - refFlat_rn8_GRCr8.txt                (refFlat file)
+# Expected files (note: using UCSC-style chromosome naming):
+# - GCF_036323735.1_GRCr8_genomic_ucsc.fna   (FASTA with chr1, chrX, etc.)
+# - Rattus_norvegicus.GRCr8_ucsc.gtf         (GTF with chr1, chrX, etc.)
+# - rn8_GRCr8_star_index.tar.gz              (STAR index)
+# - rn8_rsem_reference.tar.gz                (RSEM reference)
+# - refFlat_rn8_GRCr8.txt                    (refFlat file)
+# - chromosome_mapping.tsv                    (RefSeq->UCSC name mapping)
+```
+
+**Verify chromosome naming is correct:**
+```bash
+# Check FASTA headers
+gsutil cat ${GCS_PATH}/GCF_036323735.1_GRCr8_genomic_ucsc.fna | head -1
+# Should show: >chr1 ...
+
+# Check GTF chromosome column
+gsutil cat ${GCS_PATH}/Rattus_norvegicus.GRCr8_ucsc.gtf | head -5
+# First column should be chr1, chr2, etc.
 ```
 
 ---
