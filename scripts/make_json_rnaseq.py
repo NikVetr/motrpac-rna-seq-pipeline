@@ -114,13 +114,13 @@ def make_json_dict(
         }
     elif organism == "rat" and version == "rn8":
         organism_references = {
-            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_GRCr8_star_index.tar.gz",
-            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf",
+            "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_v115_star_index.tar.gz",
+            "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.115.gtf",
             "rnaseq_pipeline.rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_rsem_reference.tar.gz",
             "rnaseq_pipeline.globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz",
             "rnaseq_pipeline.rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz",
             "rnaseq_pipeline.phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
-            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/refFlat_rn8_GRCr8.txt",
+            "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/refFlat_GRCr8_v115.txt",
         }
     elif organism == "human" and version == "gencode_v39" :
         organism_references = {

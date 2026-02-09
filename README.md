@@ -28,7 +28,7 @@ This repo contains the rna-seq data processing pipeline implemented in Workflow 
 ### Supported Organisms and Genome Builds
 
 The pipeline supports the following organisms and genome versions:
-- **Rat**: rn6 (Rnor_6.0), rn7 (mRatBN7.2), rn8 (GRCr8)
+- **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115)
 - **Human**: gencode_v39 (GRCh38)
 
 ### Pipeline Tools
@@ -219,8 +219,8 @@ The `make_json_rnaseq.py` script automatically selects the appropriate reference
 - RSEM reference: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/rn7_rsem_reference.tar.gz`
 
 **Rat (rn8):**
-- STAR index: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_GRCr8_star_index.tar.gz`
-- GTF: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.gtf`
+- STAR index: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_v115_star_index.tar.gz`
+- GTF: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.115.gtf`
 - RSEM reference: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_rsem_reference.tar.gz`
 
 **Human (gencode_v39):**
@@ -364,7 +364,7 @@ The repository also includes workflows for building reference files:
 - `wdl/rsem_index/` - Build RSEM reference indices
 - `wdl/bowtie2_index/` - Build Bowtie2 indices
 
-For detailed instructions on how to prepare all required reference files for a new organism or genome build (GFF3-to-GTF conversion, index building, refFlat generation, etc.), see [README-DATA-REF.md](README-DATA-REF.md).
+For detailed instructions on how to prepare all required reference files for a new organism or genome build (index building, refFlat generation, etc.), see [README-DATA-REF.md](README-DATA-REF.md).
 
 ## Local Development and Testing
 
@@ -496,7 +496,7 @@ If issues persist:
 ### Reference Genomes
 - **Rat rn6**: Ensembl Rnor_6.0 release 96
 - **Rat rn7**: Ensembl mRatBN7.2 release 108
-- **Rat rn8**: NCBI GRCr8 (GCF_036323735.1) RefSeq annotation 2024-02
+- **Rat rn8**: Ensembl GRCr8 release 115
 - **Human**: GENCODE v39 (GRCh38)
 
 ## Contributing and Support

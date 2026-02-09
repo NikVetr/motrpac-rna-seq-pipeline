@@ -1,6 +1,6 @@
 {
-  "rsem_reference_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/GCF_036323735.1_GRCr8_genomic_ucsc.fna",
-  "rsem_reference_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8_ucsc.gtf",
+  "rsem_reference_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.dna.toplevel.fa",
+  "rsem_reference_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.115.gtf",
   "rsem_reference_workflow.prefix": "rn8_rsem_reference",
   "rsem_reference_workflow.ncpu": 10,
   "rsem_reference_workflow.memory": 60,
