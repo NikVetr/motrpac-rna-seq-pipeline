@@ -12,8 +12,8 @@ The RNA-seq pipeline requires **7 reference files**:
 
 | # | File | Description | How to Create |
 |---|------|-------------|---------------|
-| 1 | **Genome FASTA** | Reference genome sequence | Download from Ensembl FTP |
-| 2 | **GTF file** | Gene annotation in GTF format | Download from Ensembl FTP |
+| 1 | **Genome FASTA** | Reference genome sequence | Download from Ensembl FTP, add `chr` prefix |
+| 2 | **GTF file** | Gene annotation in GTF format | Download from Ensembl FTP, add `chr` prefix |
 | 3 | **STAR index** | Genome index for STAR aligner | Build with WDL workflow |
 | 4 | **RSEM reference** | Reference for RSEM quantification | Build with WDL workflow |
 | 5 | **refFlat file** | Gene intervals for Picard QC | Generate from GTF |
@@ -21,7 +21,7 @@ The RNA-seq pipeline requires **7 reference files**:
 | 7 | **rRNA index** | Bowtie2 index for rRNA contamination | Build or reuse existing |
 | 8 | **PhiX index** | Bowtie2 index for PhiX spike-in | Reuse existing |
 
-Ensembl uses simple chromosome names (`1, 2, ..., 20, X, Y, MT`) — no conversion or renaming is needed.
+Ensembl uses simple chromosome names (`1, 2, ..., 20, X, Y, MT`), but the pipeline expects UCSC-style `chr` prefixes (`chr1, chr2, ..., chr20, chrX, chrY, chrM`). A renaming step is required after downloading (see Step 2).
 
 ---
 
@@ -88,18 +88,47 @@ cd ..
 
 **Verify the downloads:**
 ```bash
-# Check chromosome names in FASTA (should be 1, 2, ..., X, Y, MT)
+# Check chromosome names in FASTA (should be 1, 2, ..., X, Y, MT before chr prefix step)
 grep '^>' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -5
 
-# Check chromosome names in GTF (first column should be 1, 2, ..., X, Y, MT)
+# Check chromosome names in GTF (first column should be 1, 2, ..., X, Y, MT before chr prefix step)
 grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut -f1 | sort -u | head
 ```
 
 ---
 
-### Step 2: Generate refFlat File
+### Step 2: Add `chr` Prefix to Chromosome Names
 
-The refFlat file is used by Picard's `CollectRnaSeqMetrics` for QC. Generate it from the Ensembl GTF:
+The pipeline expects UCSC-style chromosome names (`chr1`, `chrX`, `chrM`, etc.), but Ensembl uses bare names (`1`, `X`, `MT`). Run the provided script to rename chromosomes in both the FASTA and GTF files:
+
+```bash
+bash scripts/add_chr_prefix.sh \
+    data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa \
+    data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf
+```
+
+This applies the following mapping (scaffolds/contigs are left unchanged):
+
+| Ensembl | UCSC |
+|---------|------|
+| 1, 2, ..., 20 | chr1, chr2, ..., chr20 |
+| X, Y | chrX, chrY |
+| MT | chrM |
+
+**Verify the renaming:**
+```bash
+# FASTA headers should now show chr1, chr2, etc.
+grep '^>' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -5
+
+# GTF first column should now show chr1, chr2, etc.
+grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut -f1 | sort -u | head
+```
+
+---
+
+### Step 3: Generate refFlat File
+
+The refFlat file is used by Picard's `CollectRnaSeqMetrics` for QC. Generate it from the GTF (which now has `chr` prefixes):
 
 ```bash
 cd data/rat-ensembl-release-115/
@@ -122,7 +151,7 @@ rm GRCr8_genePred.txt
 # Check file format (should have 11 tab-separated columns)
 head -3 refFlat_GRCr8_v115.txt | cut -f1-5
 
-# Verify chromosome names (should be 1, 2, ..., X, Y, MT)
+# Verify chromosome names (should be chr1, chr2, ..., chrX, chrY, chrM)
 cut -f3 refFlat_GRCr8_v115.txt | sort -u | head -10
 
 # Count entries
@@ -131,7 +160,7 @@ wc -l refFlat_GRCr8_v115.txt
 
 ---
 
-### Step 3: Upload Source Files to GCS
+### Step 4: Upload Source Files to GCS
 
 Upload the genome FASTA, GTF, and refFlat files to Google Cloud Storage (both in bash and fish):
 
@@ -173,7 +202,7 @@ gs ls "$GCS_PATH/"
 ```
 ---
 
-### Step 4: Build STAR Index
+### Step 5: Build STAR Index
 
 The STAR index is built using a WDL workflow. This runs on the cloud and requires significant resources (~120 GB RAM).
 
@@ -193,7 +222,7 @@ After the workflow completes:
 
 ---
 
-### Step 5: Build RSEM Reference
+### Step 6: Build RSEM Reference
 
 The RSEM reference is built using a WDL workflow.
 
@@ -215,7 +244,7 @@ After the workflow completes:
 
 ---
 
-### Step 6: Contamination Screening Indices
+### Step 7: Contamination Screening Indices
 
 The pipeline requires Bowtie2 indices for globin, rRNA, and PhiX contamination screening.
 
@@ -241,7 +270,7 @@ caper submit wdl/bowtie2_index/bowtie2_index.wdl \
 
 ---
 
-### Step 7: Update Pipeline Configuration
+### Step 8: Update Pipeline Configuration
 
 After all reference files are in GCS, add a version block to `scripts/make_json_rnaseq.py`:
 
@@ -272,13 +301,13 @@ gcloud storage ls -l "$GCS_PATH/"
 
 **Verify chromosome naming:**
 ```bash
-# Check FASTA headers (should be 1, 2, ..., X, Y, MT)
+# Check FASTA headers (should be chr1, chr2, ..., chrX, chrY, chrM)
 gcloud storage cat "$GCS_PATH/"/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -1
-# Should show: >1 dna:...
+# Should show: >chr1 dna:...
 
 # Check GTF chromosome column
 gcloud storage cat ${GCS_PATH}/Rattus_norvegicus.GRCr8.115.gtf | grep -v '^#' | head -5
-# First column should be 1, 2, etc.
+# First column should be chr1, chr2, etc.
 ```
 
 ---
@@ -303,11 +332,11 @@ python3 scripts/make_json_rnaseq.py \
 
 ## Reference Genome Summary
 
-| Version | Assembly | Ensembl Release | Chromosome Names |
-|---------|----------|-----------------|------------------|
-| rn6 | Rnor_6.0 | 96 | 1-20, X, Y, MT |
-| rn7 | mRatBN7.2 | 108 | 1-20, X, Y, MT |
-| rn8 | GRCr8 | 115 | 1-20, X, Y, MT |
+| Version | Assembly | Ensembl Release | Chromosome Names (in GCS) |
+|---------|----------|-----------------|---------------------------|
+| rn6 | Rnor_6.0 | 96 | chr1-chr20, chrX, chrY, chrM |
+| rn7 | mRatBN7.2 | 108 | chr1-chr20, chrX, chrY, chrM |
+| rn8 | GRCr8 | 115 | chr1-chr20, chrX, chrY, chrM |
 
 ---
 
