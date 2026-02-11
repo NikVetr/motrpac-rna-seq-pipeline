@@ -16,12 +16,36 @@ The RNA-seq pipeline requires **7 reference files**:
 | 2 | **GTF file** | Gene annotation in GTF format | Download from Ensembl FTP, add `chr` prefix |
 | 3 | **STAR index** | Genome index for STAR aligner | Build with WDL workflow |
 | 4 | **RSEM reference** | Reference for RSEM quantification | Build with WDL workflow |
-| 5 | **refFlat file** | Gene intervals for Picard QC | Generate from GTF |
+| 5 | **refFlat file** | Gene intervals for Picard QC | Generate from chr-prefixed GTF |
 | 6 | **Globin index** | Bowtie2 index for globin contamination | Build or reuse existing |
 | 7 | **rRNA index** | Bowtie2 index for rRNA contamination | Build or reuse existing |
 | 8 | **PhiX index** | Bowtie2 index for PhiX spike-in | Reuse existing |
 
-Ensembl uses simple chromosome names (`1, 2, ..., 20, X, Y, MT`), but the pipeline expects UCSC-style `chr` prefixes (`chr1, chr2, ..., chr20, chrX, chrY, chrM`). A renaming step is required after downloading (see Step 2).
+### Chromosome Naming Convention
+
+Ensembl uses simple chromosome names (`1, 2, ..., 20, X, Y, MT`), but the pipeline expects UCSC-style `chr` prefixes (`chr1, chr2, ..., chr20, chrX, chrY, chrM`). The pipeline's QC step (`wdl/compute_mapped/mapped.wdl`) uses `grep "chrX"`, `grep "chrY"`, etc. to compute chromosome mapping statistics, so reference files **must** use chr-prefixed names.
+
+A renaming script (`scripts/add_chr_prefix.sh`) is provided to convert Ensembl naming to UCSC convention after downloading. See Step 2 below.
+
+---
+
+## Current rn8 Reference Files
+
+The rn8 (GRCr8, Ensembl 115) reference files are stored in GCS at:
+
+```
+gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/
+```
+
+| File | Size | Description |
+|------|------|-------------|
+| `Rattus_norvegicus.GRCr8.dna.toplevel.fa` | 2.70 GiB | Rat GRCr8 reference genome sequence (FASTA), with UCSC-style chr-prefixed chromosome names |
+| `Rattus_norvegicus.GRCr8.115.gtf` | 586 MiB | Ensembl release 115 gene annotation for the rat GRCr8 genome, with UCSC-style chr-prefixed chromosome names |
+| `refFlat_GRCr8_v115.txt` | 20.8 MiB | Gene intervals in refFlat format, used by Picard's CollectRnaSeqMetrics for RNA-seq QC |
+| `rn8_v115_star_index.tar.gz` | 24.1 GiB | Pre-built STAR genome index for spliced read alignment |
+| `rn8_rsem_reference.tar.gz` | 162 MiB | Pre-built RSEM reference index for transcript-level quantification (counts, TPM, FPKM) |
+
+These files were built from Ensembl release 115, with chromosome names converted from Ensembl (`1, X, MT`) to UCSC (`chr1, chrX, chrM`) convention.
 
 ---
 
@@ -88,10 +112,10 @@ cd ..
 
 **Verify the downloads:**
 ```bash
-# Check chromosome names in FASTA (should be 1, 2, ..., X, Y, MT before chr prefix step)
+# Check chromosome names in FASTA (should be 1, 2, ..., X, Y, MT — bare Ensembl names)
 grep '^>' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -5
 
-# Check chromosome names in GTF (first column should be 1, 2, ..., X, Y, MT before chr prefix step)
+# Check chromosome names in GTF (first column should be 1, 2, ..., X, Y, MT — bare Ensembl names)
 grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut -f1 | sort -u | head
 ```
 
@@ -99,7 +123,7 @@ grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut 
 
 ### Step 2: Add `chr` Prefix to Chromosome Names
 
-The pipeline expects UCSC-style chromosome names (`chr1`, `chrX`, `chrM`, etc.), but Ensembl uses bare names (`1`, `X`, `MT`). Run the provided script to rename chromosomes in both the FASTA and GTF files:
+Ensembl files use bare chromosome names (`1`, `X`, `MT`), but the pipeline requires UCSC-style names (`chr1`, `chrX`, `chrM`). Run the provided script to rename chromosomes in both the FASTA and GTF files:
 
 ```bash
 bash scripts/add_chr_prefix.sh \
@@ -107,7 +131,7 @@ bash scripts/add_chr_prefix.sh \
     data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf
 ```
 
-This applies the following mapping (scaffolds/contigs are left unchanged):
+The script applies the following mapping (scaffolds/contigs are left unchanged):
 
 | Ensembl | UCSC |
 |---------|------|
@@ -121,7 +145,11 @@ This applies the following mapping (scaffolds/contigs are left unchanged):
 grep '^>' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -5
 
 # GTF first column should now show chr1, chr2, etc.
-grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut -f1 | sort -u | head
+grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf | cut -f1 | sort -uV
+
+# Sanity check: no bare Ensembl chromosome names should remain
+grep -v '^#' data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf \
+    | cut -f1 | grep -P '^([0-9]+|X|Y|MT)$' && echo "ERROR: bare names found" || echo "OK"
 ```
 
 ---
@@ -152,7 +180,7 @@ rm GRCr8_genePred.txt
 head -3 refFlat_GRCr8_v115.txt | cut -f1-5
 
 # Verify chromosome names (should be chr1, chr2, ..., chrX, chrY, chrM)
-cut -f3 refFlat_GRCr8_v115.txt | sort -u | head -10
+cut -f3 refFlat_GRCr8_v115.txt | sort -uV
 
 # Count entries
 wc -l refFlat_GRCr8_v115.txt
@@ -170,41 +198,42 @@ Upload the genome FASTA, GTF, and refFlat files to Google Cloud Storage (both in
 GCS_PATH="gs://omicspipelines-public-resources/rnaseq/references/rat/rn8"
 
 # Upload genome FASTA
-gcloud storage cp data/Rattus_norvegicus.GRCr8.dna.toplevel.fa gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/
+gcloud storage cp data/Rattus_norvegicus.GRCr8.dna.toplevel.fa "$GCS_PATH/"
 
 # Upload GTF annotation
-gcloud storage cp data/Rattus_norvegicus.GRCr8.115.gtf gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/
+gcloud storage cp data/Rattus_norvegicus.GRCr8.115.gtf "$GCS_PATH/"
 
 # Upload refFlat file
-gcloud storage cp data/refFlat_GRCr8_v115.txt gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/
+gcloud storage cp data/refFlat_GRCr8_v115.txt "$GCS_PATH/"
 
-# Verify uploads:**
-gcloud storage ls ${GCS_PATH}/
+# Verify uploads
+gcloud storage ls "$GCS_PATH/"
 ```
 
-**fish**
+**fish**:
 
 ```bash
 # Set the variable for this session
 set -g GCS_PATH "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8"
 
 # Upload genome FASTA
-gs cp Rattus_norvegicus.GRCr8.dna.toplevel.fa "$GCS_PATH/"
+gcloud storage cp Rattus_norvegicus.GRCr8.dna.toplevel.fa "$GCS_PATH/"
 
 # Upload GTF annotation
-gs cp Rattus_norvegicus.GRCr8.115.gtf "$GCS_PATH/"
+gcloud storage cp Rattus_norvegicus.GRCr8.115.gtf "$GCS_PATH/"
 
 # Upload refFlat file
-gs cp refFlat_GRCr8_v115.txt "$GCS_PATH/"
+gcloud storage cp refFlat_GRCr8_v115.txt "$GCS_PATH/"
 
 # Verify uploads
-gs ls "$GCS_PATH/"
+gcloud storage ls "$GCS_PATH/"
 ```
+
 ---
 
 ### Step 5: Build STAR Index
 
-The STAR index is built using a WDL workflow. This runs on the cloud and requires significant resources (~120 GB RAM).
+The STAR index is built using a WDL workflow. This runs on the cloud and requires significant resources (~120 GB RAM). The WDL reads the FASTA and GTF from GCS, so these must already be uploaded (Step 4).
 
 **Input JSON file:** `examples/input_json/tasks/star_index_rn8_inputs.json`
 
@@ -224,7 +253,7 @@ After the workflow completes:
 
 ### Step 6: Build RSEM Reference
 
-The RSEM reference is built using a WDL workflow.
+The RSEM reference is built using a WDL workflow. Like the STAR index, it reads from GCS.
 
 **Input JSON file:** `examples/input_json/tasks/rsem_reference_rn8.json`
 
@@ -292,22 +321,22 @@ GCS_PATH="gs://omicspipelines-public-resources/rnaseq/references/rat/rn8"
 gcloud storage ls -l "$GCS_PATH/"
 
 # Expected files:
-# - Rattus_norvegicus.GRCr8.dna.toplevel.fa   (genome FASTA)
-# - Rattus_norvegicus.GRCr8.115.gtf           (GTF annotation)
+# - Rattus_norvegicus.GRCr8.dna.toplevel.fa   (genome FASTA, chr-prefixed)
+# - Rattus_norvegicus.GRCr8.115.gtf           (GTF annotation, chr-prefixed)
 # - rn8_v115_star_index.tar.gz                (STAR index)
 # - rn8_rsem_reference.tar.gz                 (RSEM reference)
-# - refFlat_GRCr8_v115.txt                    (refFlat file)
+# - refFlat_GRCr8_v115.txt                    (refFlat file, chr-prefixed)
 ```
 
 **Verify chromosome naming:**
 ```bash
 # Check FASTA headers (should be chr1, chr2, ..., chrX, chrY, chrM)
-gcloud storage cat "$GCS_PATH/"/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -1
-# Should show: >chr1 dna:...
+gcloud storage cat "$GCS_PATH"/Rattus_norvegicus.GRCr8.dna.toplevel.fa | head -1
+# Should show: >chr1 dna:primary_assembly ...
 
 # Check GTF chromosome column
-gcloud storage cat ${GCS_PATH}/Rattus_norvegicus.GRCr8.115.gtf | grep -v '^#' | head -5
-# First column should be chr1, chr2, etc.
+gcloud storage cat "$GCS_PATH"/Rattus_norvegicus.GRCr8.115.gtf | grep -v '^#' | cut -f1 | sort -uV
+# Should show: chr1, chr2, ..., chr20, chrM, chrX, chrY (plus scaffolds)
 ```
 
 ---
@@ -331,6 +360,8 @@ python3 scripts/make_json_rnaseq.py \
 ---
 
 ## Reference Genome Summary
+
+All reference files stored in GCS use UCSC-style chr-prefixed chromosome names, regardless of the Ensembl source.
 
 | Version | Assembly | Ensembl Release | Chromosome Names (in GCS) |
 |---------|----------|-----------------|---------------------------|
