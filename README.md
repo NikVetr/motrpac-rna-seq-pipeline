@@ -28,7 +28,7 @@ This repo contains the rna-seq data processing pipeline implemented in Workflow 
 ### Supported Organisms and Genome Builds
 
 The pipeline supports the following organisms and genome versions:
-- **Rat**: rn6 (Rnor_6.0), rn7 (mRatBN7.2)
+- **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115)
 - **Human**: gencode_v39 (GRCh38)
 
 ### Pipeline Tools
@@ -180,13 +180,12 @@ python3 scripts/make_json_rnaseq.py \
   -o OUTPUT_PATH \            # Local path where JSON files will be written
   -r OUTPUT_REPORT_NAME \     # Name for the output QC metrics report
   -a {rat,human} \            # Organism
-  -v {rn6,rn7,gencode_v39} \  # Genome build version
+  -v {rn6,rn7,rn8,gencode_v39} \  # Genome build version
   -n NUM_CHUNKS \             # Number of batches to split samples into
   -p PROJECT \                # GCP project name
   -d DOCKER_REPO \            # Docker repository prefix (optional)
   -i \                        # Include index files (for UMI processing)
   -u                          # Include undetermined reads (optional)
-  -v VERSION \                # Accepts values "rn6", "rn7", or "gencode_v39" to specify the genome build version 
 ```
 
 **Complete Example:**
@@ -218,6 +217,11 @@ The `make_json_rnaseq.py` script automatically selects the appropriate reference
 - STAR index: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/rn7_v108_star_index.tar.gz`
 - GTF: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/Rattus_norvegicus.mRatBN7.2.108.gtf`
 - RSEM reference: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn7/rn7_rsem_reference.tar.gz`
+
+**Rat (rn8):**
+- STAR index: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_v115_star_index.tar.gz`
+- GTF: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.115.gtf`
+- RSEM reference: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/rn8_rsem_reference.tar.gz`
 
 **Human (gencode_v39):**
 - STAR index: `gs://omicspipelines-public-resources/rnaseq/references/human/hg38_v39_star_index.tar.gz`
@@ -360,6 +364,8 @@ The repository also includes workflows for building reference files:
 - `wdl/rsem_index/` - Build RSEM reference indices
 - `wdl/bowtie2_index/` - Build Bowtie2 indices
 
+For detailed instructions on how to prepare all required reference files for a new organism or genome build (index building, refFlat generation, etc.), see [README-DATA-REF.md](README-DATA-REF.md).
+
 ## Local Development and Testing
 
 ### Setup for Development
@@ -490,6 +496,7 @@ If issues persist:
 ### Reference Genomes
 - **Rat rn6**: Ensembl Rnor_6.0 release 96
 - **Rat rn7**: Ensembl mRatBN7.2 release 108
+- **Rat rn8**: Ensembl GRCr8 release 115
 - **Human**: GENCODE v39 (GRCh38)
 
 ## Contributing and Support

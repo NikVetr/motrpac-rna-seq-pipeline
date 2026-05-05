@@ -24,3 +24,5 @@ workdir
 venv/
 .idea/
 *.jar
+*.code-workspace
+data/*

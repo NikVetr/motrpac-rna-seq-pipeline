@@ -1,0 +1,11 @@
+{
+  "star_index_workflow.reference_fasta": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.dna.toplevel.fa",
+  "star_index_workflow.annotation_gtf": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn8/Rattus_norvegicus.GRCr8.115.gtf",
+  "star_index_workflow.prefix": "rn8_v115_star_index",
+  "star_index_workflow.overhang": 100,
+  "star_index_workflow.ncpu": 12,
+  "star_index_workflow.memory": 120,
+  "star_index_workflow.disk_space": 400,
+  "star_index_workflow.preemptible": 3,
+  "star_index_workflow.docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/star:latest"
+}
