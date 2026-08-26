@@ -20,6 +20,7 @@ MoTrPAC RNA-SEQ Pipeline
 - [Citations and References](#citations-and-references)
 - [Contributing and Support](#contributing-and-support)
 - [Version Information](#version-information)
+- [License](#license)
 
 ## Overview
 
@@ -558,3 +559,9 @@ Major updates and changes are documented in the repository's commit history. For
 - Workflow optimizations and bug fixes
 
 Check the [commit history](https://github.com/MoTrPAC/motrpac-rna-seq-pipeline/commits/) for detailed changes.
+
+## License
+
+This project is licensed under the MIT License. Copyright (c) 2025 MoTrPAC.
+
+See the [LICENSE.md](LICENSE.md) file for the full license text.
