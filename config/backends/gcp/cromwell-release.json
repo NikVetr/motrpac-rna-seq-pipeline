@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "cromwell": {
+    "jar_url": "https://github.com/broadinstitute/cromwell/releases/download/92/cromwell-92.jar",
+    "sha256": "e0e3a050d4124e81369a79059e5774142b2f06bd89df4a0b035f559db85cedf5",
+    "version": "92"
+  },
+  "java": {
+    "distribution": "Eclipse Temurin",
+    "major_version": 17
+  }
+}

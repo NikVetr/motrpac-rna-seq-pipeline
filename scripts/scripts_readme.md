@@ -12,11 +12,15 @@ usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            -r OUTPUT_REPORT_NAME [-u] -a {rat,human}
                            -v {rn6,rn7,rn8,gencode_v39,gencode_v47}
                            -n NUM_CHUNKS [-d DOCKER_REPO]
-                           [--release-manifest RELEASE_MANIFEST] [-i]
+                           [--release-manifest RELEASE_MANIFEST]
+                           [--runtime-profile RUNTIME_PROFILE]
+                           [--star-disk-type {HDD,SSD}] [-i]
                            [--legacy-all-read-expression-only]
                            [--skip-pretrim-fastqc]
                            [--skip-posttrim-fastqc]
                            [--skip-contamination-qc]
+                           [--combine-contamination-qc]
+                           [--contamination-qc-pairs CONTAMINATION_QC_PAIRS]
                            [--skip-alignment-qc] [--skip-umi-qc]
                            [-p PROJECT]
 
@@ -50,6 +54,12 @@ optional arguments:
   --release-manifest RELEASE_MANIFEST
                         complete release profile overriding reference and
                         Docker workflow inputs
+  --runtime-profile RUNTIME_PROFILE
+                        complete, explicitly selected CPU, RAM, and disk
+                        override profile
+  --star-disk-type {HDD,SSD}
+                        STAR working-disk class; omit to retain the historical
+                        HDD default
   -i, --index           add matched I1 FASTQs for UMI processing (enabled by
                         default)
   --legacy-all-read-expression-only
@@ -61,6 +71,12 @@ optional arguments:
                         skip trimmed-read FastQC
   --skip-contamination-qc
                         skip globin, rRNA, and PhiX Bowtie2 screens
+  --combine-contamination-qc
+                        run full-depth globin, rRNA, and PhiX screens serially
+                        on one worker
+  --contamination-qc-pairs CONTAMINATION_QC_PAIRS
+                        deterministically sample this many post-trim pairs for
+                        the combined screens; 0 retains full depth
   --skip-alignment-qc
                         skip Picard duplicate/RNA metrics and chromosome
                         summaries

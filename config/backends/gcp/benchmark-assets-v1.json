@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "asset_id": "gcp_human_v47_benchmark_assets_v1",
+  "publication_state": "published",
+  "monitoring_script": {
+    "uri": "gs://omicspipelines-public-resources/rnaseq/monitoring/sha256-9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f/monitor_resources.sh",
+    "generation": "1787945101786070",
+    "size_bytes": 2304,
+    "sha256": "9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f"
+  },
+  "controlled_inputs": {
+    "sample_id": "13146031002",
+    "selection": "deterministic source-order prefixes with paired R1, R2, and I1 records",
+    "sets": {
+      "100k": {
+        "records": 100000,
+        "prefix": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/100k/",
+        "manifest": {
+          "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/100k/manifest.json",
+          "generation": "1787945169649555",
+          "size_bytes": 949,
+          "sha256": "a0ec44815f8225b5eff67363c825dcdf238d5abc177aa6b0030cb6c70d872133"
+        },
+        "fastqs": {
+          "R1": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/100k/13146031002_R1.fastq.gz",
+            "generation": "1787945170112949",
+            "size_bytes": 6241702,
+            "sha256": "e377f011c3653ffe39661a1f58f953db2789087ce9cd43b232f720e4c9c76355"
+          },
+          "R2": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/100k/13146031002_R2.fastq.gz",
+            "generation": "1787945170023816",
+            "size_bytes": 6244181,
+            "sha256": "2be8ee24867f123e09534f11bba46b84005396aab9e457f197daa1826310049b"
+          },
+          "I1": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/100k/13146031002_I1.fastq.gz",
+            "generation": "1787945170447713",
+            "size_bytes": 1271037,
+            "sha256": "d6e824f7932d30b571664ad8a7d00f3d4fb7fc28c29cd5d61bf2d0e25af50c19"
+          }
+        }
+      },
+      "5m": {
+        "records": 5000000,
+        "prefix": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/5m/",
+        "manifest": {
+          "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/5m/manifest.json",
+          "generation": "1787945187141466",
+          "size_bytes": 931,
+          "sha256": "009bfbc9996cd04d17f566cbd2167b3bb7267d9e756a00f3a4383b8656a56d1c"
+        },
+        "fastqs": {
+          "R1": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/5m/13146031002_R1.fastq.gz",
+            "generation": "1787945204597516",
+            "size_bytes": 297848497,
+            "sha256": "a930d859b7abeeb5fad10314684c7d999752c5cd5202623a17a46841a5f7339b"
+          },
+          "R2": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/5m/13146031002_R2.fastq.gz",
+            "generation": "1787945208825543",
+            "size_bytes": 297874758,
+            "sha256": "8dd71145e20e8ba01bd3fb591ba89a0ed46bdfe803dcfa0ede05a977a71d3297"
+          },
+          "I1": {
+            "uri": "gs://omicspipelines-get/benchmarks/rnaseq-modernization/v1/inputs/13146031002/source-order-v1/5m/13146031002_I1.fastq.gz",
+            "generation": "1787945204279083",
+            "size_bytes": 53935128,
+            "sha256": "b1468ec597c9c9f41031a1d192056521d3a12ebcf8a4a2bbc3f79aa9a3ab865e"
+          }
+        }
+      }
+    }
+  },
+  "full_depth_inputs": {
+    "muscle_13146031002": {
+      "records": 39435139,
+      "combined_compressed_bytes": 5787934962,
+      "prefix": "gs://motrpac-data-raw-human-main/human-main/transcriptomics/t10-muscle/rna-seq/fastq/tr04/",
+      "generations": {
+        "R1": "1782603146770861",
+        "R2": "1782603192718018",
+        "I1": "1782603154148188"
+      }
+    },
+    "blood_12301010401": {
+      "combined_compressed_bytes": 4351712264,
+      "prefix": "gs://motrpac-data-raw-human-main/human-main/transcriptomics/t04-blood-rna/rna-seq/fastq/tr03/",
+      "generations": {
+        "R1": "1779869966872786",
+        "R2": "1779869968260950",
+        "I1": "1779869939909842"
+      }
+    },
+    "adipose_12765011102_p95_candidate": {
+      "selection": "adipose p95 and overall rank 4692 of 4981 complete R1/R2/I1 triplets by combined compressed bytes",
+      "records": 54443480,
+      "overall_percentile": 94.19795221843004,
+      "combined_compressed_bytes": 7921236060,
+      "prefix": "gs://motrpac-data-raw-human-main/human-main/transcriptomics/t11-adipose/rna-seq/fastq/tr04/",
+      "sizes_bytes": {
+        "R1": 3647681122,
+        "R2": 3668172558,
+        "I1": 605382380
+      },
+      "generations": {
+        "R1": "1782585616504230",
+        "R2": "1782585691597533",
+        "I1": "1782585628557481"
+      },
+      "md5_base64": {
+        "R1": "DSTQJodfgkgGzXQ1WK8CbA==",
+        "R2": "sUpt52rZUTs2nbHzcnz2/w==",
+        "I1": "9Qn64Od9rWL/0BSq7Bqy2A=="
+      }
+    }
+  }
+}

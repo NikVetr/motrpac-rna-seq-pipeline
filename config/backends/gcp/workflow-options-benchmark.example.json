@@ -1,0 +1,10 @@
+{
+  "google_labels": {
+    "pipeline": "motrpac-rnaseq",
+    "purpose": "modernization-benchmark"
+  },
+  "monitoring_script": "gs://omicspipelines-public-resources/rnaseq/monitoring/sha256-9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f/monitor_resources.sh",
+  "read_from_cache": false,
+  "use_reference_disks": false,
+  "write_to_cache": false
+}

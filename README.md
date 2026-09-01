@@ -29,7 +29,7 @@ This repo contains the rna-seq data processing pipeline implemented in Workflow 
 
 The pipeline supports the following organisms and genome versions:
 - **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115)
-- **Human**: gencode_v39 (GRCh38)
+- **Human**: GENCODE v39 or v47 (GRCh38)
 
 ### Pipeline Tools
 
@@ -37,6 +37,7 @@ The pipeline uses:
 - [STAR aligner](https://github.com/alexdobin/STAR) for read alignment
 - [RSEM](https://github.com/deweylab/RSEM) for transcript quantification (TPM, FPKM, counts)
 - [featureCounts](https://subread.sourceforge.net/) for gene-level read quantification
+- [UMI-tools](https://umi-tools.readthedocs.io/) for directional UMI grouping
 - Quality control tools including FastQC, MultiQC, Picard, and Bowtie2 (for contamination assessment)
 
 ### Pipeline Outputs
@@ -64,7 +65,7 @@ python3 scripts/make_json_rnaseq.py \
   -o ./input_json \
   -r batch1_qc_metrics \
   -a human \
-  -v gencode_v39 \
+  -v gencode_v47 \
   -n 1 \
   -p your-gcp-project \
   -d us-docker.pkg.dev/motrpac-portal/rnaseq
@@ -180,11 +181,10 @@ python3 scripts/make_json_rnaseq.py \
   -o OUTPUT_PATH \            # Local path where JSON files will be written
   -r OUTPUT_REPORT_NAME \     # Name for the output QC metrics report
   -a {rat,human} \            # Organism
-  -v {rn6,rn7,rn8,gencode_v39} \  # Genome build version
+  -v {rn6,rn7,rn8,gencode_v39,gencode_v47} \  # Genome/annotation version
   -n NUM_CHUNKS \             # Number of batches to split samples into
   -p PROJECT \                # GCP project name
   -d DOCKER_REPO \            # Docker repository prefix (optional)
-  -i \                        # Include index files (for UMI processing)
   -u                          # Include undetermined reads (optional)
 ```
 
@@ -195,7 +195,7 @@ python3 scripts/make_json_rnaseq.py \
   -o ./input_json \
   -r batch7_qc_metrics.csv \
   -a human \
-  -v gencode_v39 \
+  -v gencode_v47 \
   -n 1 \
   -p motrpac-portal \
   -d us-docker.pkg.dev/motrpac-portal/rnaseq \
@@ -203,6 +203,28 @@ python3 scripts/make_json_rnaseq.py \
 ```
 
 This will create JSON configuration file(s) (e.g., `set1_rnaseq.json`, `set2_rnaseq.json`, etc.) in the specified output directory.
+
+### Modernization controls
+
+GENCODE v47 automatically selects the immutable release profile in
+`config/release-profiles/human-gencode-v47.json`; v39 retains the historical
+references and images. Matched I1 reads and directional UMI molecule-expression
+matrices are enabled by default, while the conventional all-read RSEM and
+featureCounts outputs are retained. Pass `--legacy-all-read-expression-only`
+to omit only the molecule-level matrices.
+
+Pre-trim FastQC, post-trim FastQC, contamination QC, alignment QC, and UMI QC
+remain enabled by default and can be disabled independently with the documented
+`--skip-*` options. `--combine-contamination-qc` runs the three screens on one
+worker; adding `--contamination-qc-pairs N` deterministically samples the same
+post-trim read pairs for all three screens (`N=0` retains full depth).
+
+For GCP tests, select a complete profile with `--runtime-profile` and select
+STAR scratch explicitly with `--star-disk-type HDD|SSD`. These options augment
+the existing JSON format and Caper submission command; see
+[`scripts/scripts_readme.md`](scripts/scripts_readme.md) for the full generator
+interface and [`docs/gcp-cli-canary-runbook.md`](docs/gcp-cli-canary-runbook.md)
+for the bounded benchmark procedure.
 
 ### Organism Reference Files
 
@@ -227,6 +249,10 @@ The `make_json_rnaseq.py` script automatically selects the appropriate reference
 - STAR index: `gs://omicspipelines-public-resources/rnaseq/references/human/hg38_v39_star_index.tar.gz`
 - GTF: `gs://omicspipelines-public-resources/rnaseq/references/human/GRCh38.v39.primary_assembly.annotation.gtf`
 - RSEM reference: `gs://omicspipelines-public-resources/rnaseq/references/human/hg38_rsem_reference.tar.gz`
+
+**Human (gencode_v47):**
+- Immutable references and matching tool images are defined together in
+  `config/release-profiles/human-gencode-v47.json`.
 
 For more details, see the [scripts documentation](scripts/scripts_readme.md).
 
@@ -350,7 +376,7 @@ The pipeline consists of the following task modules (in `wdl/` directory):
 **Post-alignment QC:**
 - `mark_duplicates/` - PCR duplicate marking with Picard
 - `collect_rnaseq_metrics/` - RNA-seq QC metrics with Picard
-- `umi_dup/` - UMI-based duplication assessment
+- `umi_dup/` - Directional UMI grouping, duplication QC, and molecule BAM preparation
 - `compute_mapped/` - Chromosome mapping statistics
 - `collect_qc_metrics/` - Consolidated QC metrics collection
 
@@ -497,7 +523,7 @@ If issues persist:
 - **Rat rn6**: Ensembl Rnor_6.0 release 96
 - **Rat rn7**: Ensembl mRatBN7.2 release 108
 - **Rat rn8**: Ensembl GRCr8 release 115
-- **Human**: GENCODE v39 (GRCh38)
+- **Human**: GENCODE v39 or v47 (GRCh38)
 
 ## Contributing and Support
 
