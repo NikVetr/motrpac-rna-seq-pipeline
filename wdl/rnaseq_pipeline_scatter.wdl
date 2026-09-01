@@ -519,6 +519,7 @@ workflow rnaseq_pipeline {
     call final_merge.merge_results as merge_results {
         input:
         # Inputs
+            sample_prefix=sample_prefix,
             output_report_name=output_report_name,
             rsem_files=rsem_quant.genes,
             feature_counts_files=feature_counts.fc_out,

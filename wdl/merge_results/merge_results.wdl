@@ -2,6 +2,7 @@ version 1.0
 
 task merge_results {
     input {
+        Array[String]+ sample_prefix
         Array[File] rsem_files
         Array[File] feature_counts_files
         Array[File] qc_report_files
@@ -13,6 +14,8 @@ task merge_results {
         Int preemptible
         String docker
     }
+
+    File sample_order = write_lines(sample_prefix)
 
     command <<<
         set -eou pipefail
@@ -27,13 +30,20 @@ task merge_results {
         cp ~{sep=" " qc_report_files} qc_report_files/
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Merging RSEM results ---"
-        python3 /usr/local/src/merge_rsem.py --rsem_dir rsem_files
+        python3 /usr/local/src/merge_rsem.py \
+            --rsem-dir rsem_files \
+            --sample-order ~{sample_order}
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging RSEM results, consolidating QC reports ---"
-        python3 /usr/local/src/consolidate_qc_report.py --qc_dir qc_report_files --output_name ~{output_report_name}.csv
+        python3 /usr/local/src/consolidate_qc_report.py \
+            --qc-dir qc_report_files \
+            --sample-order ~{sample_order} \
+            --output-name ~{output_report_name}.csv
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging consolidating QC reports, merging feature counts ---"
-        python3 /usr/local/src/merge_fc.py --fc_dir feature_counts_files
+        python3 /usr/local/src/merge_fc.py \
+            --fc-dir feature_counts_files \
+            --sample-order ~{sample_order}
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging feature counts, finished task  ---"
     >>>
@@ -47,6 +57,9 @@ task merge_results {
     }
 
     parameter_meta {
+        sample_prefix: {
+            type: "id"
+        }
         rsem_files: {
             label: "RSEM Gene Count Files"
         }

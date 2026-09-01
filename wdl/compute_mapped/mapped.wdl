@@ -16,17 +16,62 @@ task samtools_mapped {
         set -euo pipefail
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task ---"
 
-        echo "--- $(date "+[%b %d %H:%M:%S]") Running samtools view ---"
-        samtools view -b -F 0x900 ~{input_bam} -o ~{SID}_aligned_primary.bam
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Running samtools index ---"
-        samtools index ~{SID}_aligned_primary.bam
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Running samtools idxstats ---"
-        samtools idxstats ~{SID}_aligned_primary.bam > ~{SID}_aligned_chr_info.txt
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Removing ~{SID}_aligned_primary.bam ~{SID}_aligned_primary.bam.bai ---"
-        rm ~{SID}_aligned_primary.bam ~{SID}_aligned_primary.bam.bai
+        echo "--- $(date "+[%b %d %H:%M:%S]") Counting primary alignments by reference ---"
+        samtools view -H ~{input_bam} > ~{SID}_header.sam
+        samtools view -F 0x900 ~{input_bam} | awk '
+            BEGIN {
+                FS = OFS = "\t"
+                while ((getline line < "~{SID}_header.sam") > 0) {
+                    field_count = split(line, fields, "\t")
+                    if (fields[1] == "@SQ") {
+                        name = ""
+                        reference_size = ""
+                        for (i = 2; i <= field_count; i++) {
+                            if (fields[i] ~ /^SN:/) {
+                                name = substr(fields[i], 4)
+                            } else if (fields[i] ~ /^LN:/) {
+                                reference_size = substr(fields[i], 4)
+                            }
+                        }
+                        if (name == "" || reference_size == "") {
+                            print "invalid @SQ header line: " line > "/dev/stderr"
+                            exit 2
+                        }
+                        key = "R:" name
+                        if (key in known_reference) {
+                            print "duplicate @SQ reference: " name > "/dev/stderr"
+                            exit 2
+                        }
+                        reference_order[++reference_count] = name
+                        reference_length[key] = reference_size
+                        known_reference[key] = 1
+                    }
+                }
+                close("~{SID}_header.sam")
+            }
+            {
+                flag = $2 + 0
+                reference = $3
+                key = (reference == "*" ? "*" : "R:" reference)
+                if (reference != "*" && !(key in known_reference)) {
+                    print "alignment has unknown reference: " reference > "/dev/stderr"
+                    exit 2
+                }
+                if (int(flag / 4) % 2 == 1) {
+                    unmapped[key]++
+                } else {
+                    mapped[key]++
+                }
+            }
+            END {
+                for (i = 1; i <= reference_count; i++) {
+                    reference = reference_order[i]
+                    key = "R:" reference
+                    printf "%s\t%s\t%.0f\t%.0f\n", reference, reference_length[key], mapped[key] + 0, unmapped[key] + 0
+                }
+                printf "*\t0\t0\t%.0f\n", unmapped["*"] + 0
+            }
+        ' > ~{SID}_aligned_chr_info.txt
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Extracting reports, info ---"
         Total=$(awk '{sum+=$3}END{print sum}' ~{SID}_aligned_chr_info.txt)

@@ -1,78 +1,177 @@
-# Usage example : python3 make_json_rnaseq.py -g gs://xyz/rna-seq/human/batch7_20220316/fastq_raw -o `pwd` -r batch7_qc_metrics.csv -a human -n 1 -d gcr.io/motrpac-portal/motrpac-rna-seq-pipeline/
+# Usage example: python3 make_json_rnaseq.py -g gs://example/fastq_raw -o . -r batch7_qc_metrics -a human -v gencode_v39 -n 1
 import argparse
 import json
 import os
-import sys
+import re
+from pathlib import Path
 
-import gcsfs
-import numpy as np
+
+R1_SUFFIX = "_R1.fastq.gz"
+R2_SUFFIX = "_R2.fastq.gz"
+I1_SUFFIX = "_I1.fastq.gz"
+OUTPUT_REPORT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+GENERATED_JSON_PATTERN = re.compile(r"set[1-9][0-9]*_rnaseq\.json")
+SUPPORTED_REFERENCES = {
+    ("rat", "rn6"),
+    ("rat", "rn7"),
+    ("rat", "rn8"),
+    ("human", "gencode_v39"),
+}
+
+
+def output_report_stem(value):
+    if not isinstance(value, str):
+        raise ValueError("output_report_name must be a filename-safe string")
+    stem = re.sub(r"(?:\.csv)+$", "", value)
+    if not OUTPUT_REPORT_PATTERN.fullmatch(stem) or stem in (".", ".."):
+        raise ValueError("output_report_name must be a filename-safe stem or CSV name")
+    return stem
+
+
+def as_gcs_uri(path):
+    return path if path.startswith("gs://") else "gs://" + path
+
+
+def split_batches(values, count):
+    if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+        raise ValueError("num_chunks must be a positive integer")
+    if not values:
+        raise ValueError("no R1 FASTQs remain after filtering")
+    if count > len(values):
+        raise ValueError("num_chunks cannot exceed the filtered R1 FASTQ count")
+    quotient, remainder = divmod(len(values), count)
+    batches = []
+    start = 0
+    for index in range(count):
+        size = quotient + (1 if index < remainder else 0)
+        batches.append(values[start : start + size])
+        start += size
+    return batches
+
+
+def build_batches(r1_paths, num_chunks, include_undetermined=False, include_index=False):
+    selected = sorted(
+        as_gcs_uri(path)
+        for path in r1_paths
+        if include_undetermined or "Undetermined_" not in os.path.basename(path)
+    )
+    if len(selected) != len(set(selected)):
+        raise ValueError("R1 FASTQ listing contains duplicate objects")
+
+    result = []
+    seen_samples = set()
+    for r1_batch in split_batches(selected, num_chunks):
+        sample_prefix = []
+        r2_batch = []
+        i1_batch = []
+        for r1 in r1_batch:
+            basename = os.path.basename(r1)
+            if not basename.endswith(R1_SUFFIX) or basename == R1_SUFFIX:
+                raise ValueError("R1 object has an invalid filename: {}".format(r1))
+            sample = basename[: -len(R1_SUFFIX)]
+            if not OUTPUT_REPORT_PATTERN.fullmatch(sample) or sample in (".", ".."):
+                raise ValueError("sample prefix is not filename-safe: {}".format(sample))
+            if sample in seen_samples:
+                raise ValueError("duplicate sample prefix: {}".format(sample))
+            seen_samples.add(sample)
+            sample_prefix.append(sample)
+            r2_batch.append(r1[: -len(R1_SUFFIX)] + R2_SUFFIX)
+            if include_index:
+                i1_batch.append(r1[: -len(R1_SUFFIX)] + I1_SUFFIX)
+        result.append(
+            {
+                "r1": r1_batch,
+                "r2": r2_batch,
+                "i1": i1_batch if include_index else None,
+                "sample_prefix": sample_prefix,
+            }
+        )
+    return result
 
 
 def main(command_args: argparse.Namespace):
-    fs = gcsfs.GCSFileSystem(args.project)
-    batch_num = 0
-    gcp_path = command_args.gcp_path + "/*_R1.fastq.gz"
-    gcp_prefix = "gs://"
-    print("Number of batches to split:" + "\t" + str(command_args.num_chunks))
-    # Verify if the number of batches to split is <= the total number of input files
-    if command_args.num_chunks > len(fs.glob(gcp_path)):
-        print(
-            "Script exited. Reason : num_chunks exceeded the number of files in the "
-            "bucket, please enter a value that's <= the total number of input "
-            "*_R1.fastq.gz "
-        )
-        sys.exit(1)
-
-    else:
-        np_split_r1 = np.array_split(fs.glob(gcp_path), command_args.num_chunks)
-        split_r1 = [splitted_list.tolist() for splitted_list in np_split_r1]
-
-        if not command_args.undetermined:
-            split_r1 = [
-                list(filter(lambda x: "Undetermined_" not in x, l)) for l in split_r1
-            ]
-
-        s_name = [
-            [os.path.basename(i).split("_R1.fastq.gz")[0] for i in l] for l in split_r1
-        ]
-        # gcsfs chops off the gs:// hence i have to do append gs:// to each path as below
-        split_r1 = [
-            list(map(lambda orig_path: gcp_prefix + orig_path, l)) for l in split_r1
-        ]
-        split_r2 = [
-            [sub.replace("_R1.fastq.gz", "_R2.fastq.gz") for sub in l] for l in split_r1
-        ]
-        if args.index:
-            split_i1 = [
-                [sub.replace("_R1.fastq.gz", "_I1.fastq.gz") for sub in l]
-                for l in split_r1
-            ]
-        else:
-            split_i1 = [None] * len(split_r1)
-        docker_repo = command_args.docker_repo.rstrip("/").strip()
-
-        for r1, r2, i1, prefix_list in zip(split_r1, split_r2, split_i1, s_name):
-            json_dict = make_json_dict(
-                command_args.organism,
-		command_args.version,
-                docker_repo,
-                args.output_report_name,
-                r1,
-                r2,
-                i1,
-                prefix_list,
+    if (command_args.organism, command_args.version) not in SUPPORTED_REFERENCES:
+        raise ValueError(
+            "unsupported organism/reference combination: {} {}".format(
+                command_args.organism, command_args.version
             )
-            batch_num = batch_num + 1
-            with open(
-                os.path.join(
-                    command_args.output_path, f"set{str(batch_num)}_rnaseq.json"
-                ),
-                "w",
-                encoding="utf-8",
-            ) as file:
-                json.dump(obj=json_dict, fp=file, indent=4)
+        )
+    output_report_stem(command_args.output_report_name)
 
-        print("Success! Finished generating input jsons")
+    try:
+        import gcsfs
+    except ImportError as exc:
+        raise RuntimeError("gcsfs is required to list the configured GCS input path") from exc
+
+    if not command_args.gcp_path or not command_args.gcp_path.startswith("gs://"):
+        raise ValueError("gcp_path must be a gs:// URI")
+    output_path = Path(command_args.output_path)
+    if not output_path.is_dir():
+        raise ValueError("output_path must be an existing directory")
+    existing_outputs = sorted(
+        path.name
+        for path in output_path.iterdir()
+        if path.is_file() and GENERATED_JSON_PATTERN.fullmatch(path.name)
+    )
+    if existing_outputs:
+        raise ValueError(
+            "output_path already contains generated set JSONs: {}".format(
+                ", ".join(existing_outputs)
+            )
+        )
+    docker_repo = command_args.docker_repo.rstrip("/").strip()
+    if not docker_repo:
+        raise ValueError("docker_repo must be nonempty")
+
+    fs = gcsfs.GCSFileSystem(project=command_args.project)
+    batches = build_batches(
+        fs.glob(command_args.gcp_path.rstrip("/") + "/*_R1.fastq.gz"),
+        command_args.num_chunks,
+        include_undetermined=command_args.undetermined,
+        include_index=command_args.index,
+    )
+    expected_inputs = [
+        path
+        for batch in batches
+        for key in ("r2", "i1")
+        for path in (batch[key] or [])
+    ]
+    missing = [path for path in expected_inputs if not fs.exists(path)]
+    if missing:
+        raise ValueError(
+            "required mate/index objects are missing: {}".format(", ".join(missing))
+        )
+
+    print("Number of batches to split:\t{}".format(command_args.num_chunks))
+    documents = []
+    for batch in batches:
+        documents.append(
+            make_json_dict(
+                command_args.organism,
+                command_args.version,
+                docker_repo,
+                command_args.output_report_name,
+                batch["r1"],
+                batch["r2"],
+                batch["i1"],
+                batch["sample_prefix"],
+            )
+        )
+
+    for batch_num, document in enumerate(documents, start=1):
+        destination = output_path / "set{}_rnaseq.json".format(batch_num)
+        temporary = destination.with_name(destination.name + ".tmp")
+        try:
+            with temporary.open("x", encoding="utf-8") as file:
+                json.dump(obj=document, fp=file, indent=4)
+                file.write("\n")
+            os.replace(temporary, destination)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+    print("Success! Finished generating input jsons")
+    return 0
 
 
 def make_json_dict(
@@ -91,6 +190,16 @@ def make_json_dict(
         r2 = []
     if prefix_list is None:
         prefix_list = []
+    if not r1 or len(r1) != len(r2) or len(r1) != len(prefix_list):
+        raise ValueError("R1, R2, and sample-prefix arrays must be nonempty and aligned")
+    if i1 is not None and len(i1) != len(r1):
+        raise ValueError("I1 array must be absent or aligned with R1 and R2")
+    if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
+        raise ValueError("sample prefixes must be nonempty and unique")
+    fastq_uris = r1 + r2 + (i1 or [])
+    if len(fastq_uris) != len(set(fastq_uris)):
+        raise ValueError("FASTQ URIs must be unique across R1, R2, and I1 roles")
+    output_report_name = output_report_stem(output_report_name)
 
     if organism == "rat" and version == "rn6":
         organism_references = {
@@ -133,8 +242,7 @@ def make_json_dict(
             "rnaseq_pipeline.ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/human/refFlat_hg38_v39.txt",
         }
     else:
-        print("Invalid organism")
-        sys.exit(1)
+        raise ValueError("unsupported organism/reference combination: {} {}".format(organism, version))
 
     filled_dict = {
         "rnaseq_pipeline.fastq1": r1,
@@ -230,18 +338,21 @@ if __name__ == "__main__":
         help="location of the submission batch directory in gcp that contains the "
         "fastq_raw dir",
         type=str,
+        required=True,
     )
     parser.add_argument(
         "-o",
         "--output_path",
         help="output path, where you want the input jsons to be written",
         type=str,
+        required=True,
     )
     parser.add_argument(
         "-r",
         "--output_report_name",
-        help="name of the output report to be written",
+        help="suffix-free report stem or name ending in one or more .csv suffixes",
         type=str,
+        required=True,
     )
     parser.add_argument(
         "-u",
@@ -257,14 +368,14 @@ if __name__ == "__main__":
         "--organism",
         help="organism name, e.g. rat or human",
         choices=["rat", "human"],
-        default="rat",
+        required=True,
     )
     parser.add_argument(
 	"-v",
         "--version",
         help="genome build version to use for references",
         choices=["rn6","rn7","rn8","gencode_v39"],
-        default="rn7",
+        required=True,
     )
     parser.add_argument(
         "-n",
@@ -272,6 +383,7 @@ if __name__ == "__main__":
         help="number of chunks to split the input files, should always be <= number of "
         "input files",
         type=int,
+        required=True,
     )
     parser.add_argument(
         "-d",
@@ -284,7 +396,7 @@ if __name__ == "__main__":
         "-i",
         "--index",
         help="Adding this flag will add index files to the input JSON",
-        default=True,
+        default=False,
         action="store_true",
     )
     parser.add_argument(
@@ -294,4 +406,4 @@ if __name__ == "__main__":
 	type=str
     )
     args = parser.parse_args()
-    main(args)
+    raise SystemExit(main(args))

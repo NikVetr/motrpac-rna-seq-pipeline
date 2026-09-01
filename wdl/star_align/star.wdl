@@ -41,6 +41,7 @@ task star {
             --outFileNamePrefix star_out/~{prefix}. \
             --readFilesCommand zcat \
             --outSAMattributes ~{outSAMattributes} \
+            --outSAMattrRGline ID:~{prefix} SM:~{prefix} PL:ILLUMINA \
             --outFilterType ~{outFilterType} \
             --runThreadN ~{ncpu} \
             --outSAMtype ~{outSAMtype} \
@@ -49,17 +50,11 @@ task star {
         cd star_out
         ls
 
-        echo "--- $(date "+[%b %d %H:%M:%S]") Running samtools index ---"
-        samtools index ~{prefix}.Aligned.sortedByCoord.out.bam
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Finished running samtools index ---"
-        ls
         echo "--- $(date "+[%b %d %H:%M:%S]") Completed task ---"
     >>>
 
     output {
         File bam_file = "star_out/${prefix}.Aligned.sortedByCoord.out.bam"
-        File bam_index = "star_out/${prefix}.Aligned.sortedByCoord.out.bam.bai"
         File transcriptome_bam = "star_out/${prefix}.Aligned.toTranscriptome.out.bam"
         File junctions = "star_out/${prefix}.SJ.out.tab"
         Array[File] logs = [

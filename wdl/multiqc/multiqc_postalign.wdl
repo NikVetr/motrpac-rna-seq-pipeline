@@ -28,7 +28,6 @@ task multiQC_postalign {
         echo "--- $(date "+[%b %d %H:%M:%S]") Extracting fastQC report files from input tarball ---"
         for FILE in ~{sep=' ' fastQCReport}  ; do
             tar -zxvf $FILE
-            rm $FILE
         done
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Copying input files to working directory ---"

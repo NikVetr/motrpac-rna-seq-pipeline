@@ -22,7 +22,6 @@ task multiQC {
         for FILE in ~{sep=' ' fastQCReports}  ; do
             echo "Extracting $FILE"
             tar -zxvf $FILE
-            rm $FILE
         done
 
         cd ..

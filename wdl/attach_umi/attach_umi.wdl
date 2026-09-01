@@ -17,14 +17,27 @@ task attachUMI {
     }
 
     command <<<
+        set -euo pipefail
+
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, making output directories ---"
         mkdir fastq_attach
 
+        r1_tmp="fastq_attach/~{SID}_R1.fastq.gz.tmp"
+        r2_tmp="fastq_attach/~{SID}_R2.fastq.gz.tmp"
+        trap 'rm -f -- "$r1_tmp" "$r2_tmp"' EXIT
+
         echo "--- $(date "+[%b %d %H:%M:%S]") Running attachUMI for ~{fastqr1} ---"
-        zcat ~{fastqr1} | /usr/local/src/UMI_attach.awk -v Ifq=~{fastqi1} | gzip -c > "fastq_attach/~{SID}_R1.fastq.gz"
+        gzip -cd -- "~{fastqr1}" | gawk -v Ifq="~{fastqi1}" -f /usr/local/src/UMI_attach.awk | gzip -c > "$r1_tmp"
+        gzip -t "$r1_tmp"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Running attachUMI for ~{fastqr2} ---"
-        zcat ~{fastqr2}| /usr/local/src/UMI_attach.awk -v Ifq=~{fastqi1} | gzip -c > "fastq_attach/~{SID}_R2.fastq.gz"
+        gzip -cd -- "~{fastqr2}" | gawk -v Ifq="~{fastqi1}" -f /usr/local/src/UMI_attach.awk | gzip -c > "$r2_tmp"
+        gzip -t "$r2_tmp"
+
+        mv -- "$r1_tmp" "fastq_attach/~{SID}_R1.fastq.gz"
+        mv -- "$r2_tmp" "fastq_attach/~{SID}_R2.fastq.gz"
+
+        trap - EXIT
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished task ---"
     >>>
@@ -59,5 +72,6 @@ task attachUMI {
 
     meta {
         author: "Archana Raja"
+        description: "Attach synchronized eight-base index-read UMIs to paired FASTQ headers"
     }
 }
