@@ -63,7 +63,7 @@ class GcpCostSummaryTests(unittest.TestCase):
             }
             job = {
                 "name": job_id,
-                "createTime": "2026-08-30T00:00:00Z",
+                "createTime": "2026-08-30T00:00:00.123456789Z",
                 "status": {
                     "runDuration": f"{seconds}s",
                     "state": state,

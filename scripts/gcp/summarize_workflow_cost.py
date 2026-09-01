@@ -89,6 +89,7 @@ def out(value: Decimal | None) -> float | None:
 def timestamp(value: object, label: str) -> datetime:
     if not isinstance(value, str):
         fail(f"missing {label}")
+    value = re.sub(r"(\.\d{6})\d+(?=Z$|[+-]\d{2}:\d{2}$)", r"\1", value)
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
