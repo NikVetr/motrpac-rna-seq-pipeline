@@ -67,10 +67,25 @@ set -euo pipefail
 mkdir fastq_attach
 r1_tmp=fastq_attach/sample_R1.fastq.gz.tmp
 r2_tmp=fastq_attach/sample_R2.fastq.gz.tmp
-trap 'rm -f -- "$r1_tmp" "$r2_tmp"' EXIT
+r1_pid=
+r2_pid=
+trap 'rm -f -- "$r1_tmp" "$r2_tmp"; kill $r1_pid $r2_pid 2>/dev/null || true' EXIT
+(
+set -euo pipefail
 gzip -cd -- {r1} | {awk} -v Ifq={i1} -f {script} | gzip -c > "$r1_tmp"
-gzip -t "$r1_tmp"
+) &
+r1_pid=$!
+(
+set -euo pipefail
 gzip -cd -- {r2} | {awk} -v Ifq={i1} -f {script} | gzip -c > "$r2_tmp"
+) &
+r2_pid=$!
+set +e
+wait "$r1_pid"; r1_status=$?
+wait "$r2_pid"; r2_status=$?
+set -e
+(( r1_status == 0 && r2_status == 0 ))
+gzip -t "$r1_tmp"
 gzip -t "$r2_tmp"
 mv -- "$r1_tmp" fastq_attach/sample_R1.fastq.gz
 mv -- "$r2_tmp" fastq_attach/sample_R2.fastq.gz
@@ -164,6 +179,9 @@ trap - EXIT
         wdl = (REPO_ROOT / "wdl/attach_umi/attach_umi.wdl").read_text()
         dockerfile = (REPO_ROOT / "dockerfiles/umi_attach.Dockerfile").read_text()
         self.assertIn("set -euo pipefail", wdl)
+        self.assertIn('wait "$r1_pid"', wdl)
+        self.assertIn('wait "$r2_pid"', wdl)
+        self.assertIn("UMI attachment mate failures", wdl)
         self.assertLess(wdl.index('gzip -t "$r2_tmp"'), wdl.index('mv -- "$r1_tmp"'))
         self.assertIn(
             "COPY wdl/attach_umi/UMI_attach.awk /usr/local/src/UMI_attach.awk",

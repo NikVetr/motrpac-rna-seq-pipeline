@@ -161,6 +161,7 @@ workflow rnaseq_pipeline {
         Int star_ncpu
         Int star_ramGB
         Int star_disk
+        String star_disk_type = "HDD"
         String star_docker
 
         # FeatureCounts Parameters
@@ -213,7 +214,7 @@ workflow rnaseq_pipeline {
         Int umi_dup_ramGB
         Int umi_dup_disk
         String umi_dup_docker
-        Boolean use_umi_molecule_expression = false
+        Boolean use_umi_molecule_expression = true
 
         # Samtools Parameters
         Int mapped_ncpu
@@ -354,6 +355,7 @@ workflow rnaseq_pipeline {
                 ncpu=star_ncpu,
                 memory=star_ramGB,
                 disk_space=star_disk,
+                disk_type=star_disk_type,
                 preemptible=num_preemptible_attempts,
                 docker=star_docker,
         }

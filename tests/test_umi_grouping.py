@@ -164,7 +164,7 @@ class UmiGroupingTests(unittest.TestCase):
 
         self.assertIn("umi_report=udup.umi_report", workflow)
         self.assertIn("Array[File] umi_metrics = select_all(udup.umi_metrics)", workflow)
-        self.assertIn("Boolean use_umi_molecule_expression = false", workflow)
+        self.assertIn("Boolean use_umi_molecule_expression = true", workflow)
         self.assertIn(
             "call fc.feature_counts as umi_molecule_feature_counts_task", workflow
         )

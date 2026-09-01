@@ -13,7 +13,7 @@ usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            -v {rn6,rn7,rn8,gencode_v39,gencode_v47}
                            -n NUM_CHUNKS [-d DOCKER_REPO]
                            [--release-manifest RELEASE_MANIFEST] [-i]
-                           [--umi-deduplicated-expression]
+                           [--legacy-all-read-expression-only]
                            [--skip-pretrim-fastqc]
                            [--skip-posttrim-fastqc]
                            [--skip-contamination-qc]
@@ -50,10 +50,11 @@ optional arguments:
   --release-manifest RELEASE_MANIFEST
                         complete release profile overriding reference and
                         Docker workflow inputs
-  -i, --index           add matched I1 FASTQs for UMI processing
-  --umi-deduplicated-expression
-                        add directional UMI molecule RSEM and featureCounts
-                        matrices; requires -i
+  -i, --index           add matched I1 FASTQs for UMI processing (enabled by
+                        default)
+  --legacy-all-read-expression-only
+                        omit directional UMI molecule matrices and retain
+                        historical all-read matrices only
   --skip-pretrim-fastqc
                         skip raw-read FastQC
   --skip-posttrim-fastqc
@@ -74,7 +75,12 @@ The QC options are independent and default to the historical enabled behavior.
 Skipped metrics remain as empty fields in the stable QC matrix. Cutadapt and
 STAR metrics remain available because those core processing tasks always run.
 
-UMI molecule-expression example after the updated helper image is available:
+The generator includes matched I1 FASTQs and directional UMI molecule-expression
+matrices by default. The conventional all-read matrices are always retained.
+Use `--legacy-all-read-expression-only` to omit only the additional molecule
+matrices.
+
+Default molecule-expression example:
 
 ```
 python3 scripts/make_json_rnaseq.py -g gs://motrpac/rna-seq/test \
@@ -83,7 +89,5 @@ python3 scripts/make_json_rnaseq.py -g gs://motrpac/rna-seq/test \
 -a human \
 -v gencode_v39 \
 -n 1 \
--d us-docker.pkg.dev/motrpac-portal/rnaseq \
--i \
---umi-deduplicated-expression
+-d us-docker.pkg.dev/motrpac-portal/rnaseq
 ```

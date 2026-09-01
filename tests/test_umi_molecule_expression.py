@@ -150,7 +150,7 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
         workflow = (REPO_ROOT / "wdl/rnaseq_pipeline_scatter.wdl").read_text()
         merge = (REPO_ROOT / "wdl/merge_results/merge_expression.wdl").read_text()
 
-        self.assertIn("Boolean use_umi_molecule_expression = false", workflow)
+        self.assertIn("Boolean use_umi_molecule_expression = true", workflow)
         self.assertIn(
             "if !use_umi_molecule_expression || has_fastq_index then [true] else []",
             workflow,

@@ -42,6 +42,29 @@ COMPATIBILITY_ROLES = {
     "rsem_reference_builder",
     "rsem_runtime",
 }
+RUNTIME_RESOURCE_ROLES = (
+    "pretrim_fastqc",
+    "attach_umi",
+    "cutadapt",
+    "posttrim_fastqc",
+    "star",
+    "feature_counts",
+    "rsem",
+    "bowtie2_globin",
+    "bowtie2_rrna",
+    "bowtie2_phix",
+    "markdup",
+    "rnaqc",
+    "umi_dup",
+    "mapped",
+    "collect_qc",
+    "merge_results",
+)
+RUNTIME_RESOURCE_KEYS = {
+    "rnaseq_pipeline.{}_{}".format(role, resource)
+    for role in RUNTIME_RESOURCE_ROLES
+    for resource in ("ncpu", "ramGB", "disk")
+}
 DEFAULT_RELEASE_MANIFESTS = {
     ("human", "gencode_v47"): REPO_ROOT
     / "config"
@@ -260,6 +283,58 @@ def resolve_release_inputs(organism, version, release_manifest=None):
     return load_release_manifest(manifest_path, organism, version)
 
 
+def load_runtime_profile(path):
+    profile_path = Path(path)
+    try:
+        with profile_path.open(encoding="utf-8") as file:
+            profile = json.load(file)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "cannot read runtime profile {}: {}".format(profile_path, exc)
+        ) from exc
+
+    if not isinstance(profile, dict):
+        raise ValueError("runtime profile root must be an object")
+    if (
+        type(profile.get("schema_version")) is not int
+        or profile["schema_version"] != 1
+    ):
+        raise ValueError("runtime profile schema_version must equal 1")
+    profile_id = profile.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise ValueError("runtime profile profile_id must be a nonempty string")
+    description = profile.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError("runtime profile description must be a nonempty string")
+    overrides = profile.get("overrides")
+    if not isinstance(overrides, dict):
+        raise ValueError("runtime profile overrides must be an object")
+
+    actual_keys = set(overrides)
+    missing = sorted(RUNTIME_RESOURCE_KEYS - actual_keys)
+    unknown = sorted(actual_keys - RUNTIME_RESOURCE_KEYS)
+    if missing or unknown:
+        details = []
+        if missing:
+            details.append("missing {}".format(", ".join(missing)))
+        if unknown:
+            details.append("unknown {}".format(", ".join(unknown)))
+        raise ValueError(
+            "runtime profile keys are invalid: {}".format("; ".join(details))
+        )
+
+    invalid = sorted(
+        key for key, value in overrides.items() if type(value) is not int or value <= 0
+    )
+    if invalid:
+        raise ValueError(
+            "runtime profile values must be positive integers: {}".format(
+                ", ".join(invalid)
+            )
+        )
+    return overrides
+
+
 def main(command_args: argparse.Namespace):
     if (command_args.organism, command_args.version) not in SUPPORTED_REFERENCES:
         raise ValueError(
@@ -269,7 +344,7 @@ def main(command_args: argparse.Namespace):
         )
     output_report_stem(command_args.output_report_name)
     use_umi_molecule_expression = getattr(
-        command_args, "umi_molecule_expression", False
+        command_args, "umi_molecule_expression", True
     )
     qc_settings = {
         "run_pretrim_fastqc": not getattr(command_args, "skip_pretrim_fastqc", False),
@@ -284,12 +359,16 @@ def main(command_args: argparse.Namespace):
     }
     if use_umi_molecule_expression and not command_args.index:
         raise ValueError(
-            "--umi-deduplicated-expression requires --index and matched I1 FASTQs"
+            "directional UMI molecule expression requires matched I1 FASTQs"
         )
     release_inputs = resolve_release_inputs(
         command_args.organism,
         command_args.version,
         getattr(command_args, "release_manifest", None),
+    )
+    runtime_profile = getattr(command_args, "runtime_profile", None)
+    runtime_overrides = (
+        load_runtime_profile(runtime_profile) if runtime_profile is not None else None
     )
 
     try:
@@ -350,6 +429,8 @@ def main(command_args: argparse.Namespace):
                 batch["i1"],
                 batch["sample_prefix"],
                 release_inputs=release_inputs,
+                runtime_overrides=runtime_overrides,
+                star_disk_type=getattr(command_args, "star_disk_type", None),
                 use_umi_molecule_expression=use_umi_molecule_expression,
                 **qc_settings,
             )
@@ -381,6 +462,7 @@ def make_json_dict(
     i1=None,
     prefix_list=None,
     release_inputs=None,
+    runtime_overrides=None,
     use_umi_molecule_expression=False,
     run_pretrim_fastqc=True,
     run_posttrim_fastqc=True,
@@ -389,6 +471,7 @@ def make_json_dict(
     contamination_qc_pairs=0,
     run_alignment_qc=True,
     run_umi_qc=True,
+    star_disk_type=None,
 ):
     if r1 is None:
         r1 = []
@@ -406,6 +489,8 @@ def make_json_dict(
         )
     if type(contamination_qc_pairs) is not int or contamination_qc_pairs < 0:
         raise ValueError("contamination_qc_pairs must be a nonnegative integer")
+    if star_disk_type not in (None, "HDD", "SSD"):
+        raise ValueError("star_disk_type must be HDD or SSD")
     if not run_contamination_qc and (
         combine_contamination_qc or contamination_qc_pairs != 0
     ):
@@ -534,8 +619,9 @@ def make_json_dict(
         "rnaseq_pipeline.merge_results_disk": 200,
         "rnaseq_pipeline.merge_results_docker": f"{docker_repo}/merge_results:latest",
     }
-    if use_umi_molecule_expression:
-        filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = True
+    filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = (
+        use_umi_molecule_expression
+    )
     for name, enabled in {
         "run_pretrim_fastqc": run_pretrim_fastqc,
         "run_posttrim_fastqc": run_posttrim_fastqc,
@@ -549,8 +635,15 @@ def make_json_dict(
         filled_dict["rnaseq_pipeline.combine_contamination_qc"] = True
     if contamination_qc_pairs > 0:
         filled_dict["rnaseq_pipeline.contamination_qc_pairs"] = contamination_qc_pairs
+    if star_disk_type is not None:
+        filled_dict["rnaseq_pipeline.star_disk_type"] = star_disk_type
 
-    d = {**filled_dict, **organism_references, **(release_inputs or {})}
+    d = {
+        **filled_dict,
+        **organism_references,
+        **(release_inputs or {}),
+        **(runtime_overrides or {}),
+    }
 
     return d
 
@@ -626,18 +719,29 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "--runtime-profile",
+        help="complete, explicitly selected CPU, RAM, and disk override profile",
+        type=str,
+    )
+    parser.add_argument(
+        "--star-disk-type",
+        help="STAR working-disk class; omit to retain the historical HDD default",
+        choices=["HDD", "SSD"],
+    )
+    parser.add_argument(
         "-i",
         "--index",
-        help="Adding this flag will add index files to the input JSON",
-        default=False,
+        help="add matched I1 FASTQs for UMI processing (enabled by default)",
+        default=True,
         action="store_true",
     )
     parser.add_argument(
-        "--umi-deduplicated-expression",
+        "--legacy-all-read-expression-only",
         dest="umi_molecule_expression",
-        help="add directional UMI molecule RSEM and featureCounts matrices; requires -i",
-        default=False,
-        action="store_true",
+        help="omit directional UMI molecule matrices and retain historical "
+        "all-read matrices only",
+        default=True,
+        action="store_false",
     )
     parser.add_argument(
         "--skip-pretrim-fastqc",

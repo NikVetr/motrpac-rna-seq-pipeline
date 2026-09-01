@@ -59,6 +59,16 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertNotIn("samtools index", wdl)
         self.assertNotIn("File bam_index", wdl)
 
+    def test_star_disk_type_is_optional_and_passed_to_the_runtime(self):
+        workflow = source("wdl/rnaseq_pipeline_scatter.wdl")
+        task = source("wdl/star_align/star.wdl")
+        self.assertIn('String star_disk_type = "HDD"', workflow)
+        self.assertIn("disk_type=star_disk_type", workflow)
+        self.assertIn("String disk_type", task)
+        self.assertIn(
+            'disks: "local-disk ${disk_space} ${disk_type}"', task
+        )
+
     def test_multiqc_does_not_remove_localized_inputs(self):
         for path in (
             "wdl/multiqc/multiqc.wdl",
