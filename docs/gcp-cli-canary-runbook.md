@@ -60,15 +60,15 @@ This works for ordinary clones and linked worktrees, and transfers only the
 committed, reviewable history.
 
 ```bash
-cd ~/repos/rnaseq-pipeline-audit/motrpac-rna-seq-pipeline-modernization
+cd ~/repos/rnaseq-pipeline-audit/worktrees/modernization-production
 test -z "$(git status --porcelain)"
-git bundle create /tmp/motrpac-rnaseq-modernization.bundle modernization
-git bundle verify /tmp/motrpac-rnaseq-modernization.bundle
+git bundle create /tmp/motrpac-rnaseq-modernization-production.bundle modernization-production
+git bundle verify /tmp/motrpac-rnaseq-modernization-production.bundle
 ```
 
 ```bash
 gcloud compute scp \
-  /tmp/motrpac-rnaseq-modernization.bundle \
+  /tmp/motrpac-rnaseq-modernization-production.bundle \
   rnaseq-modernization-controller:~/ \
   --project=motrpac-portal \
   --zone=us-west1-a
@@ -78,7 +78,7 @@ gcloud compute scp \
 gcloud compute ssh rnaseq-modernization-controller \
   --project=motrpac-portal \
   --zone=us-west1-a \
-  --command='git clone --branch modernization ~/motrpac-rnaseq-modernization.bundle ~/motrpac-rna-seq-pipeline-modernization && git -C ~/motrpac-rna-seq-pipeline-modernization status --short --branch && git -C ~/motrpac-rna-seq-pipeline-modernization rev-parse HEAD'
+  --command='git clone --branch modernization-production ~/motrpac-rnaseq-modernization-production.bundle ~/motrpac-rna-seq-pipeline-modernization && git -C ~/motrpac-rna-seq-pipeline-modernization status --short --branch && git -C ~/motrpac-rna-seq-pipeline-modernization rev-parse HEAD'
 ```
 
 ## 4. Install only the controller prerequisites
