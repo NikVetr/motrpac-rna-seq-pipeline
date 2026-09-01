@@ -77,6 +77,13 @@ class ContaminationQcSamplingTests(unittest.TestCase):
             check=False,
         )
 
+    def assert_sampler_fails(
+        self, r1: Path, r2: Path, message: str, stem: str = "bad"
+    ) -> None:
+        result = self.run_sampler(r1, r2, 1, stem)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(message, result.stderr)
+
     def test_sample_is_exact_paired_deterministic_and_auditable(self) -> None:
         names = ["read{:02d}".format(index) for index in range(20)]
         r1 = self.write_fastq("input_R1.fastq.gz", names, 1)
@@ -111,14 +118,20 @@ class ContaminationQcSamplingTests(unittest.TestCase):
         self.assertFalse(manifest["used_full_input"])
         self.assertRegex(manifest["selected_name_sha256"], r"^[0-9a-f]{64}$")
 
-    def test_unsynchronized_fastqs_fail_loudly(self) -> None:
+    def test_malformed_paired_fastqs_fail_loudly(self) -> None:
         r1 = self.write_fastq("input_R1.fastq.gz", ["a", "b"], 1)
         r2 = self.write_fastq("input_R2.fastq.gz", ["a", "wrong"], 2)
-        result = self.run_sampler(r1, r2, 1, "bad")
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("paired FASTQs are unsynchronized at record 2", result.stderr)
+        self.assert_sampler_fails(
+            r1, r2, "paired FASTQs are unsynchronized at record 2"
+        )
 
-    def test_oversized_samples_use_all_pairs_and_invalid_inputs_fail(self) -> None:
+        with gzip.open(r1, "wt", encoding="ascii") as handle:
+            handle.write("@read 2:N:0:INDEX\nACGT\n+\nIIII\n")
+        with gzip.open(r2, "wt", encoding="ascii") as handle:
+            handle.write("@read 2:N:0:INDEX\nACGT\n+\nIIII\n")
+        self.assert_sampler_fails(r1, r2, "wrong read-number field", "wrong_role")
+
+    def test_boundary_sample_sizes_and_invalid_counts_are_explicit(self) -> None:
         r1 = self.write_fastq("input_R1.fastq.gz", ["a", "b"], 1)
         r2 = self.write_fastq("input_R2.fastq.gz", ["a", "b"], 2)
         oversized = self.run_sampler(r1, r2, 3, "oversized")
@@ -139,10 +152,6 @@ class ContaminationQcSamplingTests(unittest.TestCase):
         )
         self.assertNotEqual(0, count_mismatch.returncode)
         self.assertIn("Cutadapt reports 3 pairs, but the FASTQs contain 2", count_mismatch.stderr)
-
-    def test_zero_pairs_records_full_depth_without_writing_a_sample(self) -> None:
-        r1 = self.write_fastq("input_R1.fastq.gz", ["a", "b"], 1)
-        r2 = self.write_fastq("input_R2.fastq.gz", ["a", "b"], 2)
         result = self.run_sampler(r1, r2, 0, "full")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse((self.temp / "full_R1.fastq.gz").exists())
@@ -154,17 +163,6 @@ class ContaminationQcSamplingTests(unittest.TestCase):
         self.assertEqual(2, manifest["input_pairs"])
         self.assertEqual(2, manifest["selected_pairs"])
         self.assertTrue(manifest["used_full_input"])
-
-    def test_wrong_illumina_read_number_fails_loudly(self) -> None:
-        r1 = self.temp / "input_R1.fastq.gz"
-        r2 = self.temp / "input_R2.fastq.gz"
-        with gzip.open(r1, "wt", encoding="ascii") as handle:
-            handle.write("@read 2:N:0:INDEX\nACGT\n+\nIIII\n")
-        with gzip.open(r2, "wt", encoding="ascii") as handle:
-            handle.write("@read 2:N:0:INDEX\nACGT\n+\nIIII\n")
-        result = self.run_sampler(r1, r2, 1, "wrong_role")
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("wrong read-number field", result.stderr)
 
 
 if __name__ == "__main__":

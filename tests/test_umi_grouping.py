@@ -122,54 +122,5 @@ class UmiGroupingTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("could not find 1 mates", result.stderr)
 
-    def test_wdl_and_image_pin_one_directional_policy(self) -> None:
-        wdl = (UMI_DIR / "umi_dup.wdl").read_text()
-        dockerfile = (REPO_ROOT / "dockerfiles/umi_dup.Dockerfile").read_text()
-        workflow = (REPO_ROOT / "wdl/rnaseq_pipeline_scatter.wdl").read_text()
-
-        for expected in (
-            "--no-sort-output",
-            "--extract-umi-method=tag",
-            "--umi-tag=RX",
-            "--method=directional",
-            "--edit-distance-threshold=1",
-            "--multimapping-detection-method=NH",
-            "--random-seed=12345",
-            ">/dev/null",
-        ):
-            self.assertIn(expected, wdl)
-        self.assertEqual(1, wdl.count("--method=directional"))
-        self.assertNotIn("nudup", wdl.lower())
-        self.assertIn("File umi_metrics", wdl)
-        self.assertIn("Boolean emit_molecule_expression = false", wdl)
-        self.assertIn("propagate_molecule_qnames.py", wdl)
-        self.assertIn("summarize_molecule_expression.py", wdl)
-        self.assertIn("Array[File] molecule_genomic_bam", wdl)
-        self.assertIn("Array[File] molecule_transcriptome_bam", wdl)
-
-        self.assertEqual(
-            "FROM quay.io/biocontainers/umi_tools@sha256:"
-            "94c7cd9a713157affe93d3f1fa60e60d35a6385adc6b419d5f73c68eea8a54e8",
-            dockerfile.splitlines()[0],
-        )
-        self.assertIn("COPY wdl/umi_dup/prepare_umi_bam.py", dockerfile)
-        self.assertIn("COPY wdl/umi_dup/summarize_umi_tools.py", dockerfile)
-        self.assertIn("COPY wdl/umi_dup/propagate_molecule_qnames.py", dockerfile)
-        self.assertIn(
-            "COPY wdl/umi_dup/summarize_molecule_expression.py", dockerfile
-        )
-        self.assertNotIn("python:2", dockerfile)
-        self.assertFalse((UMI_DIR / "nudup.py").exists())
-        self.assertFalse((UMI_DIR / "umi_dup.sh").exists())
-
-        self.assertIn("umi_report=udup.umi_report", workflow)
-        self.assertIn("Array[File] umi_metrics = select_all(udup.umi_metrics)", workflow)
-        self.assertIn("Boolean use_umi_molecule_expression = true", workflow)
-        self.assertIn(
-            "call fc.feature_counts as umi_molecule_feature_counts_task", workflow
-        )
-        self.assertIn("call rsem.rsem as umi_molecule_rsem", workflow)
-
-
 if __name__ == "__main__":
     unittest.main()

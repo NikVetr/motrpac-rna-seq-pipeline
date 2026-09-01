@@ -117,29 +117,25 @@ trap - EXIT
         self.assertEqual(0, no_metadata.returncode, no_metadata.stderr.decode())
         self.assertEqual(b"@read1:AACCGGTT\nACGT\n+\nIIII\n", no_metadata.stdout)
 
-    def test_rejects_missing_extra_or_mismatched_index_records(self) -> None:
+    def test_rejects_malformed_or_inconsistent_fastq_inputs(self) -> None:
         two_biological = fastq_record("read1", "ACGT") + fastq_record("read2", "TGCA")
         one_index = fastq_record("read1", "AACCGGTT")
-        self.assertNotEqual(0, self.run_attach(two_biological, one_index).returncode)
-
         one_biological = fastq_record("read1", "ACGT")
         two_index = one_index + fastq_record("read2", "TTGGCCAA")
-        self.assertNotEqual(0, self.run_attach(one_biological, two_index).returncode)
-
-        mismatched = fastq_record("different", "AACCGGTT")
-        self.assertNotEqual(0, self.run_attach(one_biological, mismatched).returncode)
-
-    def test_rejects_truncated_fastq_and_non_eight_base_umi(self) -> None:
         truncated = b"@read1 read metadata\nACGT\n+\n"
-        valid_index = fastq_record("read1", "AACCGGTT")
-        self.assertNotEqual(0, self.run_attach(truncated, valid_index).returncode)
-
-        short_index = fastq_record("read1", "AACCGGT")
-        self.assertNotEqual(
-            0, self.run_attach(fastq_record("read1", "ACGT"), short_index).returncode
+        cases = (
+            (two_biological, one_index),
+            (one_biological, two_index),
+            (one_biological, fastq_record("different", "AACCGGTT")),
+            (truncated, one_index),
+            (one_biological, fastq_record("read1", "AACCGGT")),
         )
+        for biological, index in cases:
+            with self.subTest(index=index):
+                self.assertNotEqual(
+                    0, self.run_attach(biological, index).returncode
+                )
 
-    def test_rejects_corrupt_index_gzip(self) -> None:
         index_path = self.temp / "index.fastq.gz"
         index_path.write_bytes(b"not a gzip stream")
         result = subprocess.run(

@@ -25,8 +25,7 @@ propagate = load_module(
     "propagate_molecule_qnames", UMI_DIR / "propagate_molecule_qnames.py"
 )
 summarize = load_module(
-    "summarize_molecule_expression",
-    UMI_DIR / "summarize_molecule_expression.py",
+    "summarize_molecule_expression", UMI_DIR / "summarize_molecule_expression.py"
 )
 
 
@@ -108,15 +107,10 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             output_path = directory / "output.json"
             umi_path.write_text(json.dumps(umi), encoding="utf-8")
             propagation_path.write_text(json.dumps(propagation), encoding="utf-8")
-            arguments = [
-                "summarize_molecule_expression.py",
-                "--umi-metrics",
-                str(umi_path),
-                "--propagation-metrics",
-                str(propagation_path),
-                "--output",
-                str(output_path),
-            ]
+            arguments = ["summarize_molecule_expression.py"]
+            arguments += ["--umi-metrics", str(umi_path)]
+            arguments += ["--propagation-metrics", str(propagation_path)]
+            arguments += ["--output", str(output_path)]
             with patch.object(sys, "argv", arguments):
                 self.assertEqual(0, summarize.main())
             result = json.loads(output_path.read_text(encoding="utf-8"))
@@ -131,48 +125,71 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             result["algorithm"],
         )
         self.assertEqual("production-shadow", result["status"])
+        denominators = result["denominators"]
         self.assertEqual(
-            4,
-            result["denominators"][
-                "selected_representative_qnames_present_in_transcriptome"
-            ],
+            4, denominators["selected_representative_qnames_present_in_transcriptome"]
         )
         self.assertEqual(
-            1,
-            result["denominators"][
-                "selected_representative_qnames_absent_from_transcriptome"
-            ],
+            1, denominators["selected_representative_qnames_absent_from_transcriptome"]
         )
 
     def test_workflow_keeps_all_read_outputs_and_namespaces_molecule_matrices(
         self,
     ) -> None:
         workflow = (REPO_ROOT / "wdl/rnaseq_pipeline_scatter.wdl").read_text()
+        umi_wdl = (UMI_DIR / "umi_dup.wdl").read_text()
+        dockerfile = (REPO_ROOT / "dockerfiles/umi_dup.Dockerfile").read_text()
         merge = (REPO_ROOT / "wdl/merge_results/merge_expression.wdl").read_text()
 
-        self.assertIn("Boolean use_umi_molecule_expression = true", workflow)
-        self.assertIn(
+        for expected in (
+            "--no-sort-output",
+            "--extract-umi-method=tag",
+            "--umi-tag=RX",
+            "--method=directional",
+            "--edit-distance-threshold=1",
+            "--multimapping-detection-method=NH",
+            "--random-seed=12345",
+            ">/dev/null",
+            "Boolean emit_molecule_expression = false",
+            "Array[File] molecule_genomic_bam",
+            "Array[File] molecule_transcriptome_bam",
+        ):
+            self.assertIn(expected, umi_wdl)
+        self.assertEqual(1, umi_wdl.count("--method=directional"))
+        self.assertNotIn("nudup", umi_wdl.lower())
+        self.assertIn("File umi_metrics", umi_wdl)
+        self.assertIn("propagate_molecule_qnames.py", umi_wdl)
+        self.assertIn("summarize_molecule_expression.py", umi_wdl)
+        self.assertEqual(
+            "FROM quay.io/biocontainers/umi_tools@sha256:"
+            "94c7cd9a713157affe93d3f1fa60e60d35a6385adc6b419d5f73c68eea8a54e8",
+            dockerfile.splitlines()[0],
+        )
+        for script in (
+            "prepare_umi_bam.py",
+            "summarize_umi_tools.py",
+            "propagate_molecule_qnames.py",
+            "summarize_molecule_expression.py",
+        ):
+            self.assertIn("COPY wdl/umi_dup/{}".format(script), dockerfile)
+        self.assertNotIn("python:2", dockerfile)
+        for retired in ("nudup.py", "umi_dup.sh"):
+            self.assertFalse((UMI_DIR / retired).exists())
+
+        for expected in (
+            "Boolean use_umi_molecule_expression = true",
+            "umi_report=udup.umi_report",
+            "Array[File] umi_metrics = select_all(udup.umi_metrics)",
             "if !use_umi_molecule_expression || has_fastq_index then [true] else []",
-            workflow,
-        )
-        self.assertIn(
             "Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]",
-            workflow,
-        )
-        self.assertIn(
             "transcriptome_align=if use_umi_molecule_expression then "
             "[star_align.transcriptome_bam] else []",
-            workflow,
-        )
-        self.assertIn("rsem_files=rsem_quant.genes", workflow)
-        self.assertIn("feature_counts_files=feature_counts.fc_out", workflow)
-        self.assertIn(
-            "rsem_files=select_all(umi_molecule_rsem.genes)", workflow
-        )
-        self.assertIn(
+            "rsem_files=rsem_quant.genes",
+            "feature_counts_files=feature_counts.fc_out",
+            "rsem_files=select_all(umi_molecule_rsem.genes)",
             "feature_counts_files=select_all(umi_molecule_feature_counts_task.fc_out)",
-            workflow,
-        )
+        ):
+            self.assertIn(expected, workflow)
         molecule_calls = workflow[
             workflow.index("call fc.feature_counts as umi_molecule_feature_counts_task") :
             workflow.index("call collect_qc.rnaseqQC as qc_report")

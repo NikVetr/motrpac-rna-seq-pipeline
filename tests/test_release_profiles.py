@@ -4,7 +4,6 @@ import json
 import sys
 import tempfile
 import unittest
-from copy import deepcopy
 from pathlib import Path
 
 
@@ -52,18 +51,34 @@ class ReleaseProfileTests(unittest.TestCase):
         path.write_text(json.dumps(profile), encoding="utf-8")
         return path
 
-    def test_legacy_v39_inputs_are_unchanged_without_a_manifest(self) -> None:
-        self.assertIsNone(generator.resolve_release_inputs("human", "gencode_v39"))
-        document = generator.make_json_dict(
+    @staticmethod
+    def document(release_inputs=None, *, version: str = "gencode_v47") -> dict:
+        return generator.make_json_dict(
             "human",
-            "gencode_v39",
+            version,
             "registry.example/rnaseq",
             "cohort",
             ["gs://example/sample_R1.fastq.gz"],
             ["gs://example/sample_R2.fastq.gz"],
             None,
             ["sample"],
+            release_inputs,
         )
+
+    def changed_profile(self, path: tuple[str, ...], value) -> dict:
+        profile = self.complete_profile()
+        target = profile
+        for key in path[:-1]:
+            target = target[key]
+        if value is None:
+            del target[path[-1]]
+        else:
+            target[path[-1]] = value
+        return profile
+
+    def test_legacy_v39_inputs_are_unchanged_without_a_manifest(self) -> None:
+        self.assertIsNone(generator.resolve_release_inputs("human", "gencode_v39"))
+        document = self.document(version="gencode_v39")
         expected_references = {
             "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/human/hg38_v39_star_index.tar.gz",
             "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/human/GRCh38.v39.primary_assembly.annotation.gtf",
@@ -113,17 +128,7 @@ class ReleaseProfileTests(unittest.TestCase):
             set(inputs),
         )
 
-        document = generator.make_json_dict(
-            "human",
-            "gencode_v47",
-            "ignored.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-            inputs,
-        )
+        document = self.document(inputs)
         for section_name in ("references", "images"):
             for role, value in profile[section_name].items():
                 self.assertEqual(value, document["rnaseq_pipeline." + role])
@@ -144,41 +149,35 @@ class ReleaseProfileTests(unittest.TestCase):
             self.assertTrue(inputs["rnaseq_pipeline." + role].startswith("gs://"))
 
     def test_manifest_identity_and_compatibility_are_enforced(self) -> None:
-        cases = []
-
-        wrong_schema = self.complete_profile()
-        wrong_schema["schema_version"] = 2
-        cases.append((wrong_schema, "schema_version"))
-
-        wrong_identity = self.complete_profile()
-        wrong_identity["organism"] = "rat"
-        cases.append((wrong_identity, "declares rat"))
-
-        missing_reference = self.complete_profile()
-        del missing_reference["references"]["star_index"]
-        cases.append((missing_reference, "missing star_index"))
-
-        empty_reference = self.complete_profile()
-        empty_reference["references"]["star_index"] = ""
-        cases.append((empty_reference, "empty execution values"))
-
-        star_mismatch = self.complete_profile()
-        star_mismatch["compatibility"]["star_index_builder"] = "2.7.0d"
-        cases.append((star_mismatch, "STAR index-builder/runtime"))
-
-        rsem_mismatch = self.complete_profile()
-        rsem_mismatch["compatibility"]["rsem_reference_builder"] = "1.3.0"
-        cases.append((rsem_mismatch, "RSEM reference-builder/runtime"))
-
-        mutable_image = self.complete_profile()
-        mutable_image["images"]["star_docker"] = "registry.example/star:latest"
-        cases.append((mutable_image, "immutable sha256"))
-
-        for index, (profile, message) in enumerate(cases):
+        cases = (
+            (("schema_version",), 2, "schema_version"),
+            (("organism",), "rat", "declares rat"),
+            (("references", "star_index"), None, "missing star_index"),
+            (("references", "star_index"), "", "empty execution values"),
+            (
+                ("compatibility", "star_index_builder"),
+                "2.7.0d",
+                "STAR index-builder/runtime",
+            ),
+            (
+                ("compatibility", "rsem_reference_builder"),
+                "1.3.0",
+                "RSEM reference-builder/runtime",
+            ),
+            (
+                ("images", "star_docker"),
+                "registry.example/star:latest",
+                "immutable sha256",
+            ),
+        )
+        for index, (path, value, message) in enumerate(cases):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
                     generator.load_release_manifest(
-                        self.write_profile(deepcopy(profile), "case{}.json".format(index)),
+                        self.write_profile(
+                            self.changed_profile(path, value),
+                            "case{}.json".format(index),
+                        ),
                         "human",
                         "gencode_v47",
                     )

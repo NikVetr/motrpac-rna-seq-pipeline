@@ -13,6 +13,10 @@ RATES = REPO_ROOT / "config/backends/gcp/gcp-rates-americas-20260830.json"
 
 
 class GcpCostSummaryTests(unittest.TestCase):
+    @staticmethod
+    def write_json(path: Path, value) -> None:
+        path.write_text(json.dumps(value), encoding="utf-8")
+
     def make_evidence(self, root: Path) -> Path:
         evidence = root / "evidence"
         (evidence / "batch-jobs").mkdir(parents=True)
@@ -39,6 +43,24 @@ class GcpCostSummaryTests(unittest.TestCase):
                 }
             )
             terminal_time = "2026-08-30T00:01:45Z" if seconds == 100 else "2026-08-30T00:03:25Z"
+            events = (
+                ("QUEUED to SCHEDULED", "2026-08-30T00:00:02Z"),
+                ("SCHEDULED to RUNNING", "2026-08-30T00:00:05Z"),
+                (f"RUNNING to {state}", terminal_time),
+            )
+            allocation = {
+                "disks": [{
+                    "deviceName": "local-disk",
+                    "newDisk": {"sizeGb": "120", "type": "pd-ssd"},
+                }],
+                "machineType": "n2-custom-2-8192",
+                "provisioningModel": market,
+            }
+            status_instance = {
+                "bootDisk": {"sizeGb": "41", "type": "pd-balanced"},
+                "machineType": allocation["machineType"],
+                "provisioningModel": market,
+            }
             job = {
                 "name": job_id,
                 "createTime": "2026-08-30T00:00:00Z",
@@ -46,57 +68,14 @@ class GcpCostSummaryTests(unittest.TestCase):
                     "runDuration": f"{seconds}s",
                     "state": state,
                     "statusEvents": [
-                        {
-                            "description": "Job state is set from QUEUED to SCHEDULED",
-                            "eventTime": "2026-08-30T00:00:02Z",
-                        },
-                        {
-                            "description": "Job state is set from SCHEDULED to RUNNING",
-                            "eventTime": "2026-08-30T00:00:05Z",
-                        },
-                        {
-                            "description": f"Job state is set from RUNNING to {state}",
-                            "eventTime": terminal_time,
-                        },
+                        {"description": f"Job state is set from {transition}", "eventTime": time}
+                        for transition, time in events
                     ],
-                    "taskGroups": {
-                        "group0": {
-                            "instances": [
-                                {
-                                    "bootDisk": {
-                                        "sizeGb": "41",
-                                        "type": "pd-balanced",
-                                    },
-                                    "machineType": "n2-custom-2-8192",
-                                    "provisioningModel": market,
-                                }
-                            ]
-                        }
-                    },
+                    "taskGroups": {"group0": {"instances": [status_instance]}},
                 },
-                "allocationPolicy": {
-                    "instances": [
-                        {
-                            "policy": {
-                                "disks": [
-                                    {
-                                        "deviceName": "local-disk",
-                                        "newDisk": {
-                                            "sizeGb": "120",
-                                            "type": "pd-ssd",
-                                        },
-                                    }
-                                ],
-                                "machineType": "n2-custom-2-8192",
-                                "provisioningModel": market,
-                            }
-                        }
-                    ]
-                },
+                "allocationPolicy": {"instances": [{"policy": allocation}]},
             }
-            (evidence / "batch-jobs" / f"{job_name}.json").write_text(
-                json.dumps(job), encoding="utf-8"
-            )
+            self.write_json(evidence / "batch-jobs" / f"{job_name}.json", job)
             monitor = evidence / "task-streams" / (
                 f"star_align.shard-0.attempt-{attempt}.monitoring"
             )
@@ -118,51 +97,43 @@ class GcpCostSummaryTests(unittest.TestCase):
             "end": "2026-08-30T00:06:00Z",
             "calls": {"rnaseq_pipeline.star_align": attempts},
         }
-        (evidence / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
-        (evidence / "repository.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "revision": revision,
-                    "expected_submission_revision": revision,
-                    "clean": False,
-                }
-            ),
-            encoding="utf-8",
+        self.write_json(evidence / "metadata.json", metadata)
+        self.write_json(
+            evidence / "repository.json",
+            {
+                "schema_version": 1,
+                "revision": revision,
+                "expected_submission_revision": revision,
+                "clean": False,
+            },
         )
-        (evidence / "capture-status.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "workflow_id": workflow_id,
-                    "repository_revision": revision,
-                    "repository_clean": False,
-                    "attempt_count": 2,
-                    "submitted_gcs_object_count": 2,
-                    "top_level_output_object_count": 2,
-                    "missing_artifact_count": 0,
-                    "complete": True,
-                }
-            ),
-            encoding="utf-8",
+        self.write_json(
+            evidence / "capture-status.json",
+            {
+                "schema_version": 1,
+                "workflow_id": workflow_id,
+                "repository_revision": revision,
+                "repository_clean": False,
+                "attempt_count": 2,
+                "submitted_gcs_object_count": 2,
+                "top_level_output_object_count": 2,
+                "missing_artifact_count": 0,
+                "complete": True,
+            },
         )
-        (evidence / "input-objects.json").write_text(
-            json.dumps(
-                [
-                    {"uri": "gs://test/R1.fastq.gz", "size_bytes": "1000"},
-                    {"uri": "gs://test/R2.fastq.gz", "size_bytes": "2000"},
-                ]
-            ),
-            encoding="utf-8",
+        self.write_json(
+            evidence / "input-objects.json",
+            [
+                {"uri": "gs://test/R1.fastq.gz", "size_bytes": "1000"},
+                {"uri": "gs://test/R2.fastq.gz", "size_bytes": "2000"},
+            ],
         )
-        (evidence / "output-objects.json").write_text(
-            json.dumps(
-                [
-                    {"uri": "gs://test/counts.txt", "size_bytes": "3000"},
-                    {"uri": "gs://test/qc.csv", "size_bytes": "4000"},
-                ]
-            ),
-            encoding="utf-8",
+        self.write_json(
+            evidence / "output-objects.json",
+            [
+                {"uri": "gs://test/counts.txt", "size_bytes": "3000"},
+                {"uri": "gs://test/qc.csv", "size_bytes": "4000"},
+            ],
         )
         manifest_lines = []
         for path in sorted(item for item in evidence.rglob("*") if item.is_file()):

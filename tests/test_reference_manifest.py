@@ -56,8 +56,6 @@ class ReferenceManifestTests(unittest.TestCase):
         self.assertRegex(annotation["gcs_generation"], r"^[1-9][0-9]+$")
         self.assertIn("published", manifest["publication_state"])
 
-    def test_sources_record_compressed_and_decompressed_digests(self):
-        manifest = json.loads(MANIFEST.read_text())
         expected_sha256 = {
             "annotation": (
                 "f02ee3e1c8e7fd9be264be6d0b974feb225a1e9d6c81915ee271804b060bd8c0",

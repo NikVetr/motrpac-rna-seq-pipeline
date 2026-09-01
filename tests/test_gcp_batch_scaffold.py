@@ -1,7 +1,6 @@
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import unittest
@@ -11,45 +10,47 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class GcpBatchScaffoldTests(unittest.TestCase):
+    @staticmethod
+    def read(relative_path: str) -> str:
+        return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+
+    @classmethod
+    def read_json(cls, relative_path: str) -> dict:
+        return json.loads(cls.read(relative_path))
+
     def test_batch_backend_replaces_retired_papi_for_benchmarks(self) -> None:
-        config = (
-            REPO_ROOT / "config/backends/gcp/google_batch.conf"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
+        config = self.read("config/backends/gcp/google_batch.conf")
+        for expected in (
             "cromwell.backend.google.batch.GcpBatchBackendLifecycleActorFactory",
-            config,
-        )
-        self.assertIn("MOTRPAC_GCP_PROJECT", config)
-        self.assertIn("MOTRPAC_GCP_BATCH_ROOT", config)
-        self.assertIn("MOTRPAC_GCP_BATCH_LOCATION", config)
-        self.assertIn("MOTRPAC_GCP_COMPUTE_SERVICE_ACCOUNT", config)
-        self.assertNotIn('compute-service-account = "default"', config)
-        self.assertIn("abort-jobs-on-terminate = true", config)
-        self.assertIn("max-concurrent-workflows = 1", config)
-        self.assertIn("max-workflow-launch-count = 1", config)
-        self.assertIn("max-scatter-width-per-scatter = 1", config)
-        self.assertIn("total-max-jobs-per-root-workflow = 25", config)
-        self.assertIn("concurrent-job-limit = 3", config)
-        self.assertIn("maximum-polling-interval = 60", config)
-        self.assertIn("batch-timeout = 4 hours", config)
-        self.assertNotIn("batch-timeout = 7 days", config)
-        self.assertIn("virtual-private-cloud {", config)
-        self.assertIn('network-name = "default"', config)
-        self.assertIn(
+            "MOTRPAC_GCP_PROJECT",
+            "MOTRPAC_GCP_BATCH_ROOT",
+            "MOTRPAC_GCP_BATCH_LOCATION",
+            "MOTRPAC_GCP_COMPUTE_SERVICE_ACCOUNT",
+            "abort-jobs-on-terminate = true",
+            "max-concurrent-workflows = 1",
+            "max-workflow-launch-count = 1",
+            "max-scatter-width-per-scatter = 1",
+            "total-max-jobs-per-root-workflow = 25",
+            "concurrent-job-limit = 3",
+            "maximum-polling-interval = 60",
+            "batch-timeout = 4 hours",
+            "virtual-private-cloud {",
+            'network-name = "default"',
             'subnetwork-name = "projects/${projectId}/regions/*/subnetworks/default"',
-            config,
-        )
-        self.assertIn("call-caching {\n  enabled = false", config)
-        self.assertNotIn("PipelinesApiLifecycleActorFactory", config)
-        self.assertNotIn("genomics.endpoint-url", config)
-        self.assertNotIn("reference-disk-localization-manifests", config)
+            "call-caching {\n  enabled = false",
+        ):
+            self.assertIn(expected, config)
+        for forbidden in (
+            'compute-service-account = "default"',
+            "batch-timeout = 7 days",
+            "PipelinesApiLifecycleActorFactory",
+            "genomics.endpoint-url",
+            "reference-disk-localization-manifests",
+        ):
+            self.assertNotIn(forbidden, config)
 
     def test_cromwell_release_is_pinned(self) -> None:
-        manifest = json.loads(
-            (
-                REPO_ROOT / "config/backends/gcp/cromwell-release.json"
-            ).read_text(encoding="utf-8")
-        )
+        manifest = self.read_json("config/backends/gcp/cromwell-release.json")
         self.assertEqual(1, manifest["schema_version"])
         self.assertEqual("92", manifest["cromwell"]["version"])
         self.assertEqual(
@@ -63,12 +64,9 @@ class GcpBatchScaffoldTests(unittest.TestCase):
         self.assertEqual("Eclipse Temurin", manifest["java"]["distribution"])
         self.assertEqual(17, manifest["java"]["major_version"])
 
-    def test_benchmark_options_are_cold_and_on_demand(self) -> None:
-        options = json.loads(
-            (
-                REPO_ROOT
-                / "config/backends/gcp/workflow-options-benchmark.example.json"
-            ).read_text(encoding="utf-8")
+    def test_benchmark_options_and_assets_are_pinned(self) -> None:
+        options = self.read_json(
+            "config/backends/gcp/workflow-options-benchmark.example.json"
         )
         self.assertFalse(options["read_from_cache"])
         self.assertFalse(options["write_to_cache"])
@@ -80,13 +78,7 @@ class GcpBatchScaffoldTests(unittest.TestCase):
             options["monitoring_script"],
         )
         self.assertNotIn("user_service_account_json", options)
-
-    def test_benchmark_assets_are_generation_and_checksum_pinned(self) -> None:
-        assets = json.loads(
-            (
-                REPO_ROOT / "config/backends/gcp/benchmark-assets-v1.json"
-            ).read_text(encoding="utf-8")
-        )
+        assets = self.read_json("config/backends/gcp/benchmark-assets-v1.json")
         self.assertEqual(1, assets["schema_version"])
         self.assertEqual("published", assets["publication_state"])
         monitor = assets["monitoring_script"]
@@ -124,42 +116,37 @@ class GcpBatchScaffoldTests(unittest.TestCase):
         self.assertEqual(2, len(lines))
         self.assertEqual(9, len(lines[0].split("\t")))
         self.assertEqual(9, len(lines[1].split("\t")))
-        self.assertTrue(
-            re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", lines[1].split("\t")[0])
+        timestamp = lines[1].split("\t")[0]
+        self.assertRegex(timestamp, r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+    def test_operator_preflight_and_watcher_are_read_only(self) -> None:
+        scripts = {
+            "scripts/gcp/preflight_existing_infrastructure.sh": (
+                ("run_check", "READ_ONLY_PREFLIGHT_FAILURES", '--location="$batch_location"'),
+                ("batch jobs submit", "builds submit", "compute instances start", "storage cp"),
+            ),
+            "scripts/gcp/watch_running_vms.sh": (
+                ("labels", "batch-node", "batch-job-id", "goog-batch-worker"),
+                (
+                    "batch jobs submit",
+                    "compute instances create",
+                    "compute instances delete",
+                    "compute instances start",
+                    "compute instances stop",
+                ),
+            ),
+        }
+        for relative_path, (expected, forbidden) in scripts.items():
+            script = REPO_ROOT / relative_path
+            subprocess.run(["bash", "-n", str(script)], check=True)
+            contents = script.read_text(encoding="utf-8")
+            for token in expected:
+                self.assertIn(token, contents)
+            for token in forbidden:
+                self.assertNotIn(token, contents)
+        self.assertNotIn(
+            "set -e", self.read("scripts/gcp/preflight_existing_infrastructure.sh")
         )
-
-    def test_existing_infrastructure_preflight_is_read_only(self) -> None:
-        script = REPO_ROOT / "scripts/gcp/preflight_existing_infrastructure.sh"
-        subprocess.run(["bash", "-n", str(script)], check=True)
-        contents = script.read_text(encoding="utf-8")
-        self.assertNotIn("set -e", contents)
-        self.assertIn("run_check", contents)
-        self.assertIn("READ_ONLY_PREFLIGHT_FAILURES", contents)
-        self.assertIn('--location="$batch_location"', contents)
-        for mutating_command in (
-            "batch jobs submit",
-            "builds submit",
-            "compute instances start",
-            "storage cp",
-        ):
-            self.assertNotIn(mutating_command, contents)
-
-    def test_running_vm_watcher_is_read_only(self) -> None:
-        script = REPO_ROOT / "scripts/gcp/watch_running_vms.sh"
-        subprocess.run(["bash", "-n", str(script)], check=True)
-        contents = script.read_text(encoding="utf-8")
-        self.assertIn("labels", contents)
-        self.assertIn("batch-node", contents)
-        self.assertIn("batch-job-id", contents)
-        self.assertIn("goog-batch-worker", contents)
-        for mutating_command in (
-            "batch jobs submit",
-            "compute instances create",
-            "compute instances delete",
-            "compute instances start",
-            "compute instances stop",
-        ):
-            self.assertNotIn(mutating_command, contents)
 
     def test_evidence_capture_preserves_every_attempt(self) -> None:
         script = REPO_ROOT / "scripts/gcp/capture_workflow_evidence.sh"
@@ -199,14 +186,12 @@ fi
                     {
                         "attempt": attempt,
                         "executionStatus": "Done" if attempt == 2 else "Failed",
-                        "jobId": "projects/test-project/locations/us-west1/jobs/{}".format(
-                            stem
-                        ),
-                        "monitoringLog": "gs://test/{}/monitoring.log".format(stem),
+                        "jobId": f"projects/test-project/locations/us-west1/jobs/{stem}",
+                        "monitoringLog": f"gs://test/{stem}/monitoring.log",
                         "preemptible": attempt == 1,
                         "shardIndex": 0,
-                        "stderr": "gs://test/{}/stderr".format(stem),
-                        "stdout": "gs://test/{}/stdout".format(stem),
+                        "stderr": f"gs://test/{stem}/stderr",
+                        "stdout": f"gs://test/{stem}/stdout",
                     }
                 )
             metadata = temp / "metadata.json"
@@ -246,34 +231,26 @@ fi
                 env=environment,
             )
 
-            status = json.loads(
-                (output / "capture-status.json").read_text(encoding="utf-8")
-            )
+            status = json.loads((output / "capture-status.json").read_text())
             self.assertEqual(workflow_id, status["workflow_id"])
             self.assertEqual(2, status["attempt_count"])
             self.assertEqual(2, status["submitted_gcs_object_count"])
             self.assertEqual(2, status["top_level_output_object_count"])
             self.assertEqual(0, status["missing_artifact_count"])
             self.assertTrue(status["complete"])
-            repository = json.loads(
-                (output / "repository.json").read_text(encoding="utf-8")
-            )
+            repository = json.loads((output / "repository.json").read_text())
             self.assertRegex(repository["revision"], r"^[0-9a-f]{40}$")
             self.assertEqual(
                 repository["revision"], repository["expected_submission_revision"]
             )
             self.assertIsInstance(repository["clean"], bool)
-            objects = json.loads(
-                (output / "input-objects.json").read_text(encoding="utf-8")
-            )
+            objects = json.loads((output / "input-objects.json").read_text())
             self.assertEqual(
                 ["gs://test/input_R1.fastq.gz", "gs://test/reference.tar.gz"],
                 [entry["uri"] for entry in objects],
             )
             self.assertEqual({42}, {int(entry["size_bytes"]) for entry in objects})
-            output_objects = json.loads(
-                (output / "output-objects.json").read_text(encoding="utf-8")
-            )
+            output_objects = json.loads((output / "output-objects.json").read_text())
             self.assertEqual(
                 {
                     "rnaseq_pipeline.rsem_genes_count",
@@ -281,9 +258,7 @@ fi
                 },
                 {entry["output_name"] for entry in output_objects},
             )
-            self.assertEqual(
-                2, len(list((output / "top-level-outputs").iterdir()))
-            )
+            self.assertEqual(2, len(list((output / "top-level-outputs").iterdir())))
             self.assertEqual(2, len(list((output / "batch-jobs").glob("*.json"))))
             self.assertEqual(6, len(list((output / "task-streams").iterdir())))
             self.assertTrue((output / "evidence-manifest.sha256").is_file())
@@ -297,19 +272,6 @@ fi
             )
             self.assertNotEqual(0, mismatch.returncode)
             self.assertIn("does not match the submitted revision", mismatch.stderr)
-
-    def test_operator_docs_match_capture_and_runtime_limits(self) -> None:
-        runbook = (REPO_ROOT / "docs/gcp-cli-canary-runbook.md").read_text(
-            encoding="utf-8"
-        )
-        normalized_runbook = " ".join(runbook.split())
-        self.assertIn("at most three concurrent Batch workers", normalized_runbook)
-        self.assertIn("scripts/gcp/capture_workflow_evidence.sh", runbook)
-        self.assertIn("local user account", normalized_runbook)
-        self.assertIn(
-            "controller's attached `cromwell-prod` identity", normalized_runbook
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

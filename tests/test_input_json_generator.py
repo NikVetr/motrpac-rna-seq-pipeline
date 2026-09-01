@@ -57,6 +57,24 @@ class InputJsonGeneratorTests(unittest.TestCase):
         )
 
     @staticmethod
+    def document_arguments(*, include_index: bool = False) -> tuple:
+        return (
+            "human",
+            "gencode_v39",
+            "registry.example/rnaseq",
+            "cohort",
+            ["gs://example/sample_R1.fastq.gz"],
+            ["gs://example/sample_R2.fastq.gz"],
+            ["gs://example/sample_I1.fastq.gz"] if include_index else None,
+            ["sample"],
+        )
+
+    def make_document(self, *, include_index: bool = False, **options) -> dict:
+        return generator.make_json_dict(
+            *self.document_arguments(include_index=include_index), **options
+        )
+
+    @staticmethod
     def fake_gcsfs(filesystem: FakeGcsFileSystem) -> types.ModuleType:
         module = types.ModuleType("gcsfs")
 
@@ -97,10 +115,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "FASTQ URIs must be unique"):
             generator.make_json_dict(
-                "human",
-                "gencode_v39",
-                "registry.example/rnaseq",
-                "cohort",
+                *self.document_arguments()[:4],
                 ["gs://example/sample.fastq.gz"],
                 ["gs://example/sample.fastq.gz"],
                 None,
@@ -110,16 +125,9 @@ class InputJsonGeneratorTests(unittest.TestCase):
             generator.build_batches(["bucket/not safe_R1.fastq.gz"], 1)
 
     def test_document_requires_aligned_nonempty_arrays(self) -> None:
-        document = generator.make_json_dict(
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort.csv",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
+        arguments = list(self.document_arguments())
+        arguments[3] = "cohort.csv"
+        document = generator.make_json_dict(*arguments)
         self.assertIsNone(document["rnaseq_pipeline.fastq_index"])
         self.assertEqual("cohort", document["rnaseq_pipeline.output_report_name"])
         with self.assertRaisesRegex(ValueError, "arrays must be nonempty and aligned"):
@@ -128,93 +136,32 @@ class InputJsonGeneratorTests(unittest.TestCase):
             )
 
     def test_star_disk_type_is_opt_in_and_validated(self) -> None:
-        arguments = (
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
-        default_document = generator.make_json_dict(*arguments)
+        default_document = self.make_document()
         self.assertNotIn("rnaseq_pipeline.star_disk_type", default_document)
 
-        ssd_document = generator.make_json_dict(*arguments, star_disk_type="SSD")
+        ssd_document = self.make_document(star_disk_type="SSD")
         self.assertEqual("SSD", ssd_document["rnaseq_pipeline.star_disk_type"])
 
         with self.assertRaisesRegex(ValueError, "must be HDD or SSD"):
-            generator.make_json_dict(*arguments, star_disk_type="LOCAL")
+            self.make_document(star_disk_type="LOCAL")
 
     def test_umi_molecule_expression_policy_requires_i1(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a matched I1"):
-            generator.make_json_dict(
-                "human",
-                "gencode_v39",
-                "registry.example/rnaseq",
-                "cohort",
-                ["gs://example/sample_R1.fastq.gz"],
-                ["gs://example/sample_R2.fastq.gz"],
-                None,
-                ["sample"],
-                use_umi_molecule_expression=True,
-            )
+            self.make_document(use_umi_molecule_expression=True)
 
-        document = generator.make_json_dict(
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            ["gs://example/sample_I1.fastq.gz"],
-            ["sample"],
-            use_umi_molecule_expression=True,
+        document = self.make_document(
+            include_index=True, use_umi_molecule_expression=True
         )
         self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
 
-        legacy_document = generator.make_json_dict(
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            ["gs://example/sample_I1.fastq.gz"],
-            ["sample"],
-            use_umi_molecule_expression=False,
+        legacy_document = self.make_document(
+            include_index=True, use_umi_molecule_expression=False
         )
-        self.assertFalse(
-            legacy_document["rnaseq_pipeline.use_umi_molecule_expression"]
-        )
-
-        default_document = generator.make_json_dict(
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
-        self.assertFalse(
-            default_document["rnaseq_pipeline.use_umi_molecule_expression"]
-        )
+        self.assertFalse(legacy_document["rnaseq_pipeline.use_umi_molecule_expression"])
+        self.assertFalse(self.make_document()["rnaseq_pipeline.use_umi_molecule_expression"])
 
     def test_qc_toggles_are_default_on_and_only_disabled_values_are_emitted(self) -> None:
-        arguments = (
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
-        default_document = generator.make_json_dict(*arguments)
+        default_document = self.make_document()
         toggle_keys = {
             f"rnaseq_pipeline.{name}"
             for name in (
@@ -227,75 +174,39 @@ class InputJsonGeneratorTests(unittest.TestCase):
         }
         self.assertTrue(toggle_keys.isdisjoint(default_document))
 
-        selective_document = generator.make_json_dict(
-            *arguments,
+        selective_document = self.make_document(
             run_pretrim_fastqc=False,
             run_contamination_qc=False,
             run_umi_qc=False,
         )
-        self.assertFalse(selective_document["rnaseq_pipeline.run_pretrim_fastqc"])
-        self.assertFalse(selective_document["rnaseq_pipeline.run_contamination_qc"])
-        self.assertFalse(selective_document["rnaseq_pipeline.run_umi_qc"])
-        self.assertNotIn("rnaseq_pipeline.run_posttrim_fastqc", selective_document)
-        self.assertNotIn("rnaseq_pipeline.run_alignment_qc", selective_document)
+        for name in ("run_pretrim_fastqc", "run_contamination_qc", "run_umi_qc"):
+            self.assertFalse(selective_document["rnaseq_pipeline." + name])
+        for name in ("run_posttrim_fastqc", "run_alignment_qc"):
+            self.assertNotIn("rnaseq_pipeline." + name, selective_document)
 
     def test_contamination_qc_fusion_and_sampling_are_opt_in(self) -> None:
-        arguments = (
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
-        default_document = generator.make_json_dict(*arguments)
-        self.assertNotIn(
-            "rnaseq_pipeline.combine_contamination_qc", default_document
-        )
-        self.assertNotIn("rnaseq_pipeline.contamination_qc_pairs", default_document)
+        default_document = self.make_document()
+        for key in ("combine_contamination_qc", "contamination_qc_pairs"):
+            self.assertNotIn("rnaseq_pipeline." + key, default_document)
 
-        combined_document = generator.make_json_dict(
-            *arguments, combine_contamination_qc=True
-        )
-        self.assertTrue(
-            combined_document["rnaseq_pipeline.combine_contamination_qc"]
-        )
+        combined_document = self.make_document(combine_contamination_qc=True)
+        self.assertTrue(combined_document["rnaseq_pipeline.combine_contamination_qc"])
         self.assertNotIn("rnaseq_pipeline.contamination_qc_pairs", combined_document)
 
-        sampled_document = generator.make_json_dict(
-            *arguments, contamination_qc_pairs=1_000_000
-        )
-        self.assertEqual(
-            1_000_000,
-            sampled_document["rnaseq_pipeline.contamination_qc_pairs"],
-        )
-        self.assertNotIn(
-            "rnaseq_pipeline.combine_contamination_qc", sampled_document
-        )
+        sampled_document = self.make_document(contamination_qc_pairs=1_000_000)
+        self.assertEqual(1_000_000, sampled_document["rnaseq_pipeline.contamination_qc_pairs"])
+        self.assertNotIn("rnaseq_pipeline.combine_contamination_qc", sampled_document)
 
         with self.assertRaisesRegex(ValueError, "nonnegative integer"):
-            generator.make_json_dict(*arguments, contamination_qc_pairs=-1)
+            self.make_document(contamination_qc_pairs=-1)
         with self.assertRaisesRegex(ValueError, "requires run_contamination_qc"):
-            generator.make_json_dict(
-                *arguments,
+            self.make_document(
                 run_contamination_qc=False,
                 combine_contamination_qc=True,
             )
 
-    def test_checked_runtime_profiles_are_complete_and_only_change_resources(self) -> None:
-        arguments = (
-            "human",
-            "gencode_v39",
-            "registry.example/rnaseq",
-            "cohort",
-            ["gs://example/sample_R1.fastq.gz"],
-            ["gs://example/sample_R2.fastq.gz"],
-            None,
-            ["sample"],
-        )
-        default_document = generator.make_json_dict(*arguments)
+    def test_checked_runtime_profiles_match_workflow_and_only_change_resources(self) -> None:
+        default_document = self.make_document()
 
         for filename in (
             "runtime-human-v47-small-v1.json",
@@ -306,9 +217,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
                 REPO_ROOT / "config" / "backends" / "gcp" / filename
             )
             self.assertEqual(generator.RUNTIME_RESOURCE_KEYS, set(overrides))
-            profiled_document = generator.make_json_dict(
-                *arguments, runtime_overrides=overrides
-            )
+            profiled_document = self.make_document(runtime_overrides=overrides)
             self.assertEqual(
                 overrides,
                 {
@@ -329,9 +238,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(default_document, generator.make_json_dict(*arguments))
-
-    def test_high_runtime_profile_only_raises_star_disk(self) -> None:
+        self.assertEqual(default_document, self.make_document())
         profile_dir = REPO_ROOT / "config" / "backends" / "gcp"
         lean = generator.load_runtime_profile(
             profile_dir / "runtime-human-v47-full-lean-v1.json"
@@ -347,8 +254,6 @@ class InputJsonGeneratorTests(unittest.TestCase):
         for cpu_key in (key for key in lean if key.endswith("_ncpu")):
             ram_key = cpu_key.removesuffix("_ncpu") + "_ramGB"
             self.assertLessEqual(lean[ram_key], 8 * lean[cpu_key])
-
-    def test_runtime_resource_keys_match_workflow_inputs(self) -> None:
         workflow = (REPO_ROOT / "wdl/rnaseq_pipeline_scatter.wdl").read_text()
         declared = {
             "rnaseq_pipeline." + name
@@ -390,13 +295,20 @@ class InputJsonGeneratorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, message):
                 generator.load_runtime_profile(path)
 
-    def test_invalid_runtime_profile_fails_before_gcs_access(self) -> None:
+    def test_invalid_profiles_and_existing_outputs_fail_before_gcs_access(self) -> None:
         path = self.temp / "invalid-runtime.json"
         path.write_text("{}", encoding="utf-8")
         arguments = self.arguments()
         arguments.runtime_profile = str(path)
         with self.assertRaisesRegex(ValueError, "schema_version"):
             generator.main(arguments)
+
+        (self.temp / "set2_rnaseq.json").write_text("{}", encoding="utf-8")
+        filesystem = FakeGcsFileSystem([], set())
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            with self.assertRaisesRegex(ValueError, "already contains"):
+                generator.main(self.arguments())
+        self.assertFalse(hasattr(filesystem, "pattern"))
 
     def test_main_emits_explicit_runtime_profile_and_star_disk_type(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"
@@ -436,14 +348,6 @@ class InputJsonGeneratorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "required mate/index objects are missing"):
                 generator.main(self.arguments())
         self.assertFalse((self.temp / "set1_rnaseq.json").exists())
-
-    def test_existing_generated_output_fails_before_listing(self) -> None:
-        (self.temp / "set2_rnaseq.json").write_text("{}", encoding="utf-8")
-        filesystem = FakeGcsFileSystem([], set())
-        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
-            with self.assertRaisesRegex(ValueError, "already contains"):
-                generator.main(self.arguments())
-        self.assertFalse(hasattr(filesystem, "pattern"))
 
     def test_organism_and_reference_are_required_together(self) -> None:
         result = subprocess.run(
