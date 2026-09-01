@@ -28,6 +28,17 @@ resource monitoring, immutable evidence capture, and attempt-aware cost
 summarization. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-Tests under `tests/` cover input validation, release/runtime profiles, WDL I/O
-contracts, native QC parsing, contamination sampling, directional UMI grouping,
-molecule-expression construction, and the GCP monitoring/cost contracts.
+The focused 59-test suite covers input validation, release/runtime profiles,
+WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
+grouping, molecule-expression construction, and the GCP monitoring/cost
+contracts. The production execution tree also passes MiniWDL and WOMtool 91
+validation under OpenJDK 21.
+
+The default human-v47 graph passes a complete local 100k-pair integration
+canary using the published image identifiers and source-matched local helper
+containers. It emits all 12 expected top-level outputs; all eight conventional
+and molecule-level matrices contain 78,932 unique, finite, nonnegative genes
+and are byte-identical to the retained accepted canary matrices. UMI and
+transcriptome-projection denominators reconcile, and the QC output contains the
+stable 40-column schema. Local MiniWDL ignores WDL disk requests, so GCP disk
+selection and current Batch packaging remain separate cloud acceptance gates.
