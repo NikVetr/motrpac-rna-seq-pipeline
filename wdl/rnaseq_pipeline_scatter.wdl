@@ -3,6 +3,7 @@ version 1.0
 import "fastqc/fastqc.wdl" as fastqc
 import "attach_umi/attach_umi.wdl" as attach_umi
 import "cutadapt/cutadapt.wdl" as ca
+import "multiqc/multiqc.wdl" as multiqc
 import "star_align/star.wdl" as star
 import "feature_counts/fc.wdl" as fc
 import "rsem_exp/rsem.wdl" as rsem
@@ -12,6 +13,7 @@ import "mark_duplicates/mark_duplicates.wdl" as markdup
 import "collect_rnaseq_metrics/collect_rnaseq_metrics.wdl" as metrics
 import "umi_dup/umi_dup.wdl" as umi_dup
 import "compute_mapped/mapped.wdl" as mapped
+import "multiqc/multiqc_postalign.wdl" as mqc_postalign
 import "collect_qc_metrics/collect_qc.wdl" as collect_qc
 import "merge_results/merge_results.wdl" as final_merge
 import "merge_results/merge_expression.wdl" as expression_merge
@@ -39,6 +41,10 @@ workflow rnaseq_pipeline {
             posttrim_fastqc: {
                 task_name: "Post-Trim FASTQC",
                 description: "Post-Trim FASTQC to collect metrics related to the library quality such as GC content and duplicated sequences"
+            },
+            mqc: {
+                task_name: "MultiQC",
+                description: "Optionally consolidate CutAdapt and pre- and post-trim FastQC reports for legacy compatibility"
             },
             star_align: {
                 task_name: "STAR",
@@ -96,6 +102,10 @@ workflow rnaseq_pipeline {
                 task_name: "SAMTools Mapped",
                 description: "Compute mapping percentages to different chromosomes and contigs using SAMTools"
             },
+            mqc_pa: {
+                task_name: "MultiQC PostAlign",
+                description: "Optionally consolidate post-alignment QC reports for legacy compatibility"
+            },
             qc_report: {
                 task_name: "RNAseq QC Report",
                 description: "Collect the published QC metrics directly from native task reports"
@@ -130,6 +140,7 @@ workflow rnaseq_pipeline {
         Int contamination_qc_pairs = 0
         Boolean run_alignment_qc = true
         Boolean run_umi_qc = true
+        Boolean run_multiqc = false
 
         # FastQC Parameters
         Int pretrim_fastqc_ncpu
@@ -155,6 +166,12 @@ workflow rnaseq_pipeline {
         Int cutadapt_ramGB
         Int cutadapt_disk
         String cutadapt_docker
+
+        # MultiQC Parameters
+        Int multiqc_ncpu
+        Int multiqc_ramGB
+        Int multiqc_disk
+        String multiqc_docker
 
         # Star Align Parameters
         File star_index
@@ -222,6 +239,11 @@ workflow rnaseq_pipeline {
         Int mapped_disk
         String samtools_docker
 
+        # MultiQC Post Align Parameters
+        Int mqc_postalign_ncpu
+        Int mqc_postalign_ramGB
+        Int mqc_postalign_disk
+
         # Collect QC Parameters
         Int collect_qc_ncpu
         Int collect_qc_ramGB
@@ -253,6 +275,12 @@ workflow rnaseq_pipeline {
     Boolean use_legacy_contamination_qc =
         contamination_qc_inputs_valid && run_contamination_qc &&
         !use_combined_contamination_qc
+    Array[Boolean] multiqc_input_contract =
+        if !run_multiqc ||
+            (run_pretrim_fastqc && run_posttrim_fastqc && run_alignment_qc)
+        then [true] else []
+    Boolean multiqc_inputs_valid = multiqc_input_contract[0]
+    Boolean use_multiqc = multiqc_inputs_valid && run_multiqc
 
     scatter (i in range(length(fastq1))) {
         if (run_pretrim_fastqc) {
@@ -341,6 +369,23 @@ workflow rnaseq_pipeline {
                     disk_space=posttrim_fastqc_disk,
                     preemptible=num_preemptible_attempts,
                     docker=fastqc_docker
+            }
+        }
+
+        if (use_multiqc) {
+            call multiqc.multiQC as mqc {
+                input:
+                    SID=sample_prefix[i],
+                    fastQCReports=[
+                        select_first([pretrim_fastqc.fastQC_report]),
+                        select_first([posttrim_fastqc.fastQC_report])
+                    ],
+                    trim_report=cutadapt_report,
+                    ncpu=multiqc_ncpu,
+                    memory=multiqc_ramGB,
+                    disk_space=multiqc_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=multiqc_docker
             }
         }
 
@@ -496,6 +541,25 @@ workflow rnaseq_pipeline {
             }
         }
 
+        if (use_multiqc) {
+            call mqc_postalign.multiQC_postalign as mqc_pa {
+                input:
+                    SID=sample_prefix[i],
+                    fastQCReport=[select_first([posttrim_fastqc.fastQC_report])],
+                    trim_report=cutadapt_report,
+                    rnametric_report=select_first([rnaqc.rnaseqmetrics]),
+                    md_report=select_first([md.metrics]),
+                    star_report=star_align.logs[0],
+                    rsem_report=rsem_quant.stat_cnt,
+                    fc_report=feature_counts.fc_summary,
+                    ncpu=mqc_postalign_ncpu,
+                    memory=mqc_postalign_ramGB,
+                    disk_space=mqc_postalign_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=multiqc_docker
+            }
+        }
+
         if (use_index_reads && (run_umi_qc || use_umi_molecule_expression)) {
             call umi_dup.UMI_dup as udup {
                 input:
@@ -604,6 +668,8 @@ workflow rnaseq_pipeline {
         File feature_counts_file = merge_results.feature_counts
         File qc_report_file = merge_results.qc_report
         Array[File] contamination_sampling_manifests = select_all(combined_contamination_qc.sampling_manifest)
+        Array[File] multiqc_prealign_reports = select_all(mqc.multiQC_report)
+        Array[File] multiqc_postalign_reports = select_all(mqc_pa.multiQC_report)
         Array[File] umi_metrics = select_all(udup.umi_metrics)
         Array[File] umi_molecule_expression_metrics = flatten(select_all(udup.molecule_expression_metrics))
         File? umi_molecule_rsem_genes_count = merge_umi_expression.rsem_genes_count

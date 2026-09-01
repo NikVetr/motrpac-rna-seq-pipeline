@@ -2,9 +2,10 @@ version 1.0
 
 task multiQC {
     input {
+        String SID
         Array[File] fastQCReports
         File trim_report
-        
+
         Int memory
         Int disk_space
         Int ncpu
@@ -13,36 +14,36 @@ task multiQC {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, creating input directory ---"
-        mkdir reports
+        mkdir -p reports
         cd reports
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Extracting fastQC reports from input tarball ---"
         for FILE in ~{sep=' ' fastQCReports}  ; do
             echo "Extracting $FILE"
-            tar -zxvf $FILE
+            tar -xzf "$FILE"
         done
 
         cd ..
-        ls reports
-        mkdir multiQC_report
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Running multiQC ---"
         multiqc \
           -d \
           -f \
+          --cl-config "no_version_check: true" \
           -o multiQC_prealign_report \
-          reports/* ~{trim_report}
+          reports/* "~{trim_report}"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Creating output tarball ---"
-        tar -czvf multiqc_prealign_report.tar.gz ./multiQC_prealign_report
+        test -s multiQC_prealign_report/multiqc_report.html
+        tar -czf "~{SID}.multiqc_prealign_report.tar.gz" ./multiQC_prealign_report
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished creating output tarball, finished task ---"
     >>>
 
     output {
-        File multiQC_report = 'multiqc_prealign_report.tar.gz'
+        File multiQC_report = "${SID}.multiqc_prealign_report.tar.gz"
     }
 
     runtime {
@@ -54,6 +55,9 @@ task multiQC {
     }
 
     parameter_meta {
+        SID: {
+            label: "Sample ID"
+        }
         fastQCReports: {
             label: "FastQC reports"
         }

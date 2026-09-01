@@ -26,6 +26,7 @@ IMAGE_ROLES = {
     "fastqc_docker",
     "attach_umi_docker",
     "cutadapt_docker",
+    "multiqc_docker",
     "star_docker",
     "feature_counts_docker",
     "rsem_docker",
@@ -47,6 +48,7 @@ RUNTIME_RESOURCE_ROLES = (
     "attach_umi",
     "cutadapt",
     "posttrim_fastqc",
+    "multiqc",
     "star",
     "feature_counts",
     "rsem",
@@ -57,6 +59,7 @@ RUNTIME_RESOURCE_ROLES = (
     "rnaqc",
     "umi_dup",
     "mapped",
+    "mqc_postalign",
     "collect_qc",
     "merge_results",
 )
@@ -356,6 +359,7 @@ def main(command_args: argparse.Namespace):
         "contamination_qc_pairs": getattr(command_args, "contamination_qc_pairs", 0),
         "run_alignment_qc": not getattr(command_args, "skip_alignment_qc", False),
         "run_umi_qc": not getattr(command_args, "skip_umi_qc", False),
+        "run_multiqc": getattr(command_args, "run_multiqc", False),
     }
     if use_umi_molecule_expression and not command_args.index:
         raise ValueError(
@@ -471,6 +475,7 @@ def make_json_dict(
     contamination_qc_pairs=0,
     run_alignment_qc=True,
     run_umi_qc=True,
+    run_multiqc=False,
     star_disk_type=None,
 ):
     if r1 is None:
@@ -496,6 +501,12 @@ def make_json_dict(
     ):
         raise ValueError(
             "combined or sampled contamination QC requires run_contamination_qc"
+        )
+    if run_multiqc and not (
+        run_pretrim_fastqc and run_posttrim_fastqc and run_alignment_qc
+    ):
+        raise ValueError(
+            "MultiQC requires pretrim FastQC, posttrim FastQC, and alignment QC"
         )
     if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
         raise ValueError("sample prefixes must be nonempty and unique")
@@ -572,6 +583,10 @@ def make_json_dict(
         "rnaseq_pipeline.posttrim_fastqc_ncpu": 8,
         "rnaseq_pipeline.posttrim_fastqc_ramGB": 36,
         "rnaseq_pipeline.posttrim_fastqc_disk": 100,
+        "rnaseq_pipeline.multiqc_ncpu": 8,
+        "rnaseq_pipeline.multiqc_ramGB": 20,
+        "rnaseq_pipeline.multiqc_disk": 100,
+        "rnaseq_pipeline.multiqc_docker": f"{docker_repo}/multiqc:latest",
         "rnaseq_pipeline.star_ncpu": 12,
         "rnaseq_pipeline.star_ramGB": 120,
         "rnaseq_pipeline.star_disk": 400,
@@ -609,6 +624,9 @@ def make_json_dict(
         "rnaseq_pipeline.mapped_ramGB": 36,
         "rnaseq_pipeline.mapped_disk": 200,
         "rnaseq_pipeline.samtools_docker": f"{docker_repo}/samtools:latest",
+        "rnaseq_pipeline.mqc_postalign_ncpu": 8,
+        "rnaseq_pipeline.mqc_postalign_ramGB": 36,
+        "rnaseq_pipeline.mqc_postalign_disk": 50,
         "rnaseq_pipeline.collect_qc_ncpu": 8,
         "rnaseq_pipeline.collect_qc_ramGB": 16,
         "rnaseq_pipeline.collect_qc_disk": 100,
@@ -635,6 +653,8 @@ def make_json_dict(
         filled_dict["rnaseq_pipeline.combine_contamination_qc"] = True
     if contamination_qc_pairs > 0:
         filled_dict["rnaseq_pipeline.contamination_qc_pairs"] = contamination_qc_pairs
+    if run_multiqc:
+        filled_dict["rnaseq_pipeline.run_multiqc"] = True
     if star_disk_type is not None:
         filled_dict["rnaseq_pipeline.star_disk_type"] = star_disk_type
 
@@ -785,6 +805,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip-umi-qc",
         help="skip directional UMI QC unless molecule expression requires grouping",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--run-multiqc",
+        help="emit legacy pre- and post-alignment MultiQC report archives",
         default=False,
         action="store_true",
     )

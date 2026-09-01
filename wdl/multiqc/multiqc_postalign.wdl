@@ -4,8 +4,9 @@ version 1.0
 
 task multiQC_postalign {
     input {
+        String SID
         Array[File] fastQCReport
-        File? trim_report
+        File trim_report
         File rsem_report
         File star_report
         File fc_report
@@ -20,43 +21,42 @@ task multiQC_postalign {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, creating output directory ---"
         mkdir -p reports
         cd reports/
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Extracting fastQC report files from input tarball ---"
         for FILE in ~{sep=' ' fastQCReport}  ; do
-            tar -zxvf $FILE
+            tar -xzf "$FILE"
         done
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Copying input files to working directory ---"
-        cp ~{trim_report} ./
-        cp ~{rsem_report} ./
-        cp ~{star_report} ./
-        cp ~{fc_report} ./
-        cp ~{md_report} ./
-        cp ~{rnametric_report} ./
+        cp "~{trim_report}" ./
+        cp "~{rsem_report}" ./
+        cp "~{star_report}" ./
+        cp "~{fc_report}" ./
+        cp "~{md_report}" ./
+        cp "~{rnametric_report}" ./
         cd ..
-
-        ls reports
-        mkdir multiQC_report
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Running multiQC ---"
         multiqc \
             -f \
+            --cl-config "no_version_check: true" \
             -o multiQC_postalign_report \
             reports/*
         echo "--- $(date "+[%b %d %H:%M:%S]")Finished running multiQC ---"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Creating output tarball ---"
-        tar -czvf multiqc_postalign_report.tar.gz ./multiQC_postalign_report
+        test -s multiQC_postalign_report/multiqc_report.html
+        tar -czf "~{SID}.multiqc_postalign_report.tar.gz" ./multiQC_postalign_report
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished creating output tarball, finished task ---"
     >>>
 
     output {
-        File multiQC_report = 'multiqc_postalign_report.tar.gz'
+        File multiQC_report = "${SID}.multiqc_postalign_report.tar.gz"
     }
 
     runtime {
@@ -68,6 +68,9 @@ task multiQC_postalign {
     }
 
     parameter_meta {
+        SID: {
+           label: "Sample ID"
+        }
         fastQCReport: {
            label: "FastQC Report Tarball"
         }

@@ -173,6 +173,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             )
         }
         self.assertTrue(toggle_keys.isdisjoint(default_document))
+        self.assertNotIn("rnaseq_pipeline.run_multiqc", default_document)
 
         selective_document = self.make_document(
             run_pretrim_fastqc=False,
@@ -183,6 +184,17 @@ class InputJsonGeneratorTests(unittest.TestCase):
             self.assertFalse(selective_document["rnaseq_pipeline." + name])
         for name in ("run_posttrim_fastqc", "run_alignment_qc"):
             self.assertNotIn("rnaseq_pipeline." + name, selective_document)
+
+        multiqc_document = self.make_document(run_multiqc=True)
+        self.assertTrue(multiqc_document["rnaseq_pipeline.run_multiqc"])
+        for disabled_group in (
+            "run_pretrim_fastqc",
+            "run_posttrim_fastqc",
+            "run_alignment_qc",
+        ):
+            with self.subTest(disabled_group=disabled_group):
+                with self.assertRaisesRegex(ValueError, "MultiQC requires"):
+                    self.make_document(run_multiqc=True, **{disabled_group: False})
 
     def test_contamination_qc_fusion_and_sampling_are_opt_in(self) -> None:
         default_document = self.make_document()

@@ -92,6 +92,7 @@ class ReleaseProfileTests(unittest.TestCase):
             "fastqc_docker": "fastqc",
             "attach_umi_docker": "umi_attach",
             "cutadapt_docker": "cutadapt",
+            "multiqc_docker": "multiqc",
             "star_docker": "star",
             "feature_counts_docker": "feature_counts",
             "rsem_docker": "rsem",

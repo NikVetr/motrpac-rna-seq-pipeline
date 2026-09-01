@@ -22,6 +22,7 @@ usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            [--combine-contamination-qc]
                            [--contamination-qc-pairs CONTAMINATION_QC_PAIRS]
                            [--skip-alignment-qc] [--skip-umi-qc]
+                           [--run-multiqc]
                            [-p PROJECT]
 
 This script is used to generate input json files from the fastq_raw dir on gcp
@@ -82,14 +83,19 @@ optional arguments:
                         summaries
   --skip-umi-qc       skip directional UMI QC unless molecule expression
                         requires grouping
+  --run-multiqc         emit legacy pre- and post-alignment MultiQC report
+                        archives
   -p PROJECT, --project PROJECT
                         Project name on the google cloud platform
 
 ```
 
-The QC options are independent and default to the historical enabled behavior.
-Skipped metrics remain as empty fields in the stable QC matrix. Cutadapt and
-STAR metrics remain available because those core processing tasks always run.
+The metric-producing QC groups are independent and default to the historical
+enabled behavior. Skipped metrics remain as empty fields in the stable QC
+matrix. Cutadapt and STAR metrics remain available because those core
+processing tasks always run. MultiQC is an opt-in reporting sidecar and does
+not feed the QC matrix. The `--run-multiqc` compatibility mode requires both
+FastQC groups and alignment QC.
 
 The generator includes matched I1 FASTQs and directional UMI molecule-expression
 matrices by default. The conventional all-read matrices are always retained.

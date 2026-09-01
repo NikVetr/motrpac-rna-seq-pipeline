@@ -216,6 +216,12 @@ fi
                             "rnaseq_pipeline.umi_metrics": [
                                 "gs://test/sample.umi_metrics.json"
                             ],
+                            "rnaseq_pipeline.multiqc_prealign_reports": [
+                                "gs://test/sample.multiqc_prealign_report.tar.gz"
+                            ],
+                            "rnaseq_pipeline.multiqc_postalign_reports": [
+                                "gs://test/sample.multiqc_postalign_report.tar.gz"
+                            ],
                         },
                         "calls": {"rnaseq_pipeline.star_align": attempts},
                     }
@@ -237,7 +243,7 @@ fi
             self.assertEqual(workflow_id, status["workflow_id"])
             self.assertEqual(2, status["attempt_count"])
             self.assertEqual(2, status["submitted_gcs_object_count"])
-            self.assertEqual(2, status["top_level_output_object_count"])
+            self.assertEqual(4, status["top_level_output_object_count"])
             self.assertEqual(0, status["missing_artifact_count"])
             self.assertTrue(status["complete"])
             repository = json.loads((output / "repository.json").read_text())
@@ -257,10 +263,12 @@ fi
                 {
                     "rnaseq_pipeline.rsem_genes_count",
                     "rnaseq_pipeline.umi_metrics",
+                    "rnaseq_pipeline.multiqc_prealign_reports",
+                    "rnaseq_pipeline.multiqc_postalign_reports",
                 },
                 {entry["output_name"] for entry in output_objects},
             )
-            self.assertEqual(2, len(list((output / "top-level-outputs").iterdir())))
+            self.assertEqual(4, len(list((output / "top-level-outputs").iterdir())))
             self.assertEqual(2, len(list((output / "batch-jobs").glob("*.json"))))
             self.assertEqual(6, len(list((output / "task-streams").iterdir())))
             self.assertTrue((output / "evidence-manifest.sha256").is_file())

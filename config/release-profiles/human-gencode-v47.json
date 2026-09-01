@@ -26,6 +26,7 @@
   },
   "images": {
     "fastqc_docker": "quay.io/biocontainers/fastqc@sha256:e194048df39c3145d9b4e0a14f4da20b59d59250465b6f2a9cb698445fd45900",
+    "multiqc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/multiqc@sha256:2de6e7ee8786b42c09c7b4cd8aff20bf86ad6348b678aed08a4a660b2779b99d",
     "attach_umi_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_attach@sha256:3d6b9e770afde737ef90e151cfc35196eabbef62dbe5245c7621e205258fa6b9",
     "cutadapt_docker": "quay.io/biocontainers/cutadapt@sha256:741216fb9a56cdac2a61e93c64f857bc5b3e1f9f2c123cf7ae2c6ea5c97702d8",
     "star_docker": "quay.io/biocontainers/star@sha256:c43295cdbc28a7be7d88296775a29cc65b30296c996d8242ef90c031c8b9739b",

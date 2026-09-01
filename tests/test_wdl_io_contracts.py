@@ -74,7 +74,35 @@ class WdlIoContractTests(unittest.TestCase):
             "wdl/multiqc/multiqc.wdl",
             "wdl/multiqc/multiqc_postalign.wdl",
         ):
-            self.assertNotIn("rm $FILE", source(path))
+            wdl = source(path)
+            self.assertNotIn("rm $FILE", wdl)
+            self.assertIn("set -euo pipefail", wdl)
+            self.assertIn('no_version_check: true', wdl)
+            self.assertIn("test -s", wdl)
+
+    def test_multiqc_is_an_opt_in_legacy_compatibility_output(self):
+        wdl = source("wdl/rnaseq_pipeline_scatter.wdl")
+        self.assertIn('import "multiqc/multiqc.wdl" as multiqc', wdl)
+        self.assertIn(
+            'import "multiqc/multiqc_postalign.wdl" as mqc_postalign', wdl
+        )
+        self.assertIn("Boolean run_multiqc = false", wdl)
+        self.assertIn(
+            "(run_pretrim_fastqc && run_posttrim_fastqc && run_alignment_qc)",
+            wdl,
+        )
+        self.assertIn("if (use_multiqc)", wdl)
+        self.assertIn(
+            "Array[File] multiqc_prealign_reports = select_all(mqc.multiQC_report)",
+            wdl,
+        )
+        self.assertIn(
+            "Array[File] multiqc_postalign_reports = select_all(mqc_pa.multiQC_report)",
+            wdl,
+        )
+        self.assertIn("fastqc_pretrim=pretrim_fastqc.fastQC_report", wdl)
+        self.assertIn("markduplicates_metrics=md.metrics", wdl)
+        self.assertNotIn("multiQCReports=", wdl)
 
     def test_optional_qc_groups_are_default_on_and_conditionally_called(self):
         wdl = source("wdl/rnaseq_pipeline_scatter.wdl")

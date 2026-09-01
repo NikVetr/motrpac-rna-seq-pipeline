@@ -46,7 +46,7 @@ The pipeline generates:
 - Gene expression quantification (counts, TPM, FPKM) from RSEM
 - Gene counts from featureCounts
 - Comprehensive QC metrics for outlier detection and covariate adjustment
-- MultiQC reports for both pre- and post-alignment QC
+- Optional legacy-compatible MultiQC reports for pre- and post-alignment QC
 
 ## Quick Start
 
@@ -218,6 +218,9 @@ remain enabled by default and can be disabled independently with the documented
 `--skip-*` options. `--combine-contamination-qc` runs the three screens on one
 worker; adding `--contamination-qc-pairs N` deterministically samples the same
 post-trim read pairs for all three screens (`N=0` retains full depth).
+The QC table is assembled directly from native tool reports. Pass
+`--run-multiqc` to additionally publish the legacy pre- and post-alignment
+MultiQC archives; this requires both FastQC groups and alignment QC.
 
 For GCP tests, select a complete profile with `--runtime-profile` and select
 STAR scratch explicitly with `--star-disk-type HDD|SSD`. These options augment
@@ -296,10 +299,12 @@ The pipeline generates the following main output files:
 
 The pipeline also generates intermediate outputs for each sample (stored in Cromwell execution directories):
 - FastQC reports (pre- and post-trimming)
-- MultiQC consolidated reports
 - STAR alignment BAM files
 - Trimmed FASTQ files
 - Picard metrics files
+
+When `--run-multiqc` is selected, the pre- and post-alignment consolidated
+report archives are also published as top-level outputs.
 
 ### Retrieving Outputs
 

@@ -190,6 +190,7 @@ mkdir -p /tmp/rnaseq-gcp-100k
   --version gencode_v47 \
   --num_chunks 1 \
   --index \
+  --run-multiqc \
   --combine-contamination-qc \
   --contamination-qc-pairs 100000 \
   --runtime-profile config/backends/gcp/runtime-human-v47-full-lean-v1.json \
@@ -241,7 +242,7 @@ bash scripts/gcp/capture_workflow_evidence.sh \
 jq -e '
   .workflow_status == "Succeeded" and
   .complete == true and
-  .top_level_output_object_count == 12
+  .top_level_output_object_count == 14
 ' /path/to/new-evidence-directory/capture-status.json
 python3 scripts/gcp/summarize_workflow_cost.py \
   /path/to/new-evidence-directory \
@@ -254,21 +255,25 @@ bundle records both its exact revision and cleanliness state.
 The capture fails if any attempt, Batch job, monitoring/stdout/stderr stream,
 or immutable input/output object metadata is missing. It copies only the
 explicitly allowlisted top-level matrices, QC report, contamination manifest,
-and UMI manifests/metrics, with a 256-MiB per-object ceiling; it never walks an
-execution root. `evidence-manifest.sha256` covers every captured file. The cost
-summary validates that manifest and rolls attempts into the fixed eight
-scientific pipeline phases as well as Batch lifecycle phases. `complete` means
-that the listed transport evidence was captured; the separate command above
-requires the successful full-canary 12-object output contract. Apply the
-existing matrix and QC scientific gates before acceptance. Transfer the
-completed directory and cost summary before stopping the controller.
+UMI manifests/metrics, and optional MultiQC archives, with a 256-MiB per-object
+ceiling; it never walks an execution root. `evidence-manifest.sha256` covers
+every captured file. The cost summary validates that manifest and rolls
+attempts into the fixed eight scientific pipeline phases as well as Batch
+lifecycle phases. `complete` means that the listed transport evidence was
+captured; the separate command above
+requires the successful one-sample, MultiQC-enabled 14-object output contract.
+The same workflow emits 12 objects when the two optional MultiQC arrays are
+empty. Apply the existing matrix and QC scientific gates before acceptance.
+Transfer the completed directory and cost summary before stopping the
+controller.
 
 ## Handoff gate
 
 The authorized next scope is one clean, human-v47, on-demand, full-depth canary
 through the operator's normal interface. Before submission, confirm that the
 interface is using this checked GCP Batch backend and monitoring configuration;
-stop if it still targets PAPI or another backend. Name the sample and profile in
+enable `run_multiqc` for this first compatibility canary. Stop if it still
+targets PAPI or another backend. Name the sample and profile in
 the launch record: use the lean profile only within its tested 39.4-million-pair,
 5.79-GB envelope, or explicitly review the high-input candidate. Disable call
 cache/reference disks and allow at most three Batch workers. Do not release the

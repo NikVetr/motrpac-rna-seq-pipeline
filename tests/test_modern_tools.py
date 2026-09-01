@@ -15,7 +15,7 @@ class ModernToolTests(unittest.TestCase):
         self.assertEqual(
             {
                 "bowtie2", "cutadapt", "fastqc", "picard", "rsem",
-                "samtools", "star", "subread", "umi_tools",
+                "multiqc", "samtools", "star", "subread", "umi_tools",
             },
             set(manifest["images"]),
         )

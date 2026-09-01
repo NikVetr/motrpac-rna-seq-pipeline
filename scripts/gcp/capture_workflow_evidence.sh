@@ -179,6 +179,8 @@ do
             ;;
         qc_report_file|contamination_sampling_manifests|umi_metrics)
             ;;
+        multiqc_prealign_reports|multiqc_postalign_reports)
+            ;;
         umi_molecule_expression_metrics|umi_molecule_rsem_genes_count)
             ;;
         umi_molecule_rsem_genes_tpm|umi_molecule_rsem_genes_fpkm|umi_molecule_feature_counts)
