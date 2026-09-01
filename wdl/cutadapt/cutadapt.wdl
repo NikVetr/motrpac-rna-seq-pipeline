@@ -18,7 +18,7 @@ task Cutadapt {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, making output directories ---"
         mkdir -p fastq_trim
@@ -27,6 +27,9 @@ task Cutadapt {
         echo "--- $(date "+[%b %d %H:%M:%S]") Running cutadapt on ~{fastqr1} and ~{fastqr2} ---"
 
         cutadapt \
+        --cores ~{ncpu} \
+        --pair-filter any \
+        --compression-level 1 \
         -a ~{index_adapter} \
         -A ~{univ_adapter} \
         -o fastq_trim/~{SID}_R1.fastq.gz \

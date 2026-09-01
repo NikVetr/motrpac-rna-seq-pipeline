@@ -11,11 +11,49 @@ R2_SUFFIX = "_R2.fastq.gz"
 I1_SUFFIX = "_I1.fastq.gz"
 OUTPUT_REPORT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 GENERATED_JSON_PATTERN = re.compile(r"set[1-9][0-9]*_rnaseq\.json")
+IMMUTABLE_IMAGE_PATTERN = re.compile(r".+@sha256:[0-9a-f]{64}")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+REFERENCE_ROLES = {
+    "star_index",
+    "gtf_file",
+    "rsem_reference",
+    "globin_genome_dir_tar",
+    "rrna_genome_dir_tar",
+    "phix_genome_dir_tar",
+    "ref_flat",
+}
+IMAGE_ROLES = {
+    "fastqc_docker",
+    "attach_umi_docker",
+    "cutadapt_docker",
+    "star_docker",
+    "feature_counts_docker",
+    "rsem_docker",
+    "bowtie_docker",
+    "picard_docker",
+    "umi_dup_docker",
+    "samtools_docker",
+    "collect_qc_docker",
+    "merge_results_docker",
+}
+COMPATIBILITY_ROLES = {
+    "star_index_builder",
+    "star_runtime",
+    "rsem_reference_builder",
+    "rsem_runtime",
+}
+DEFAULT_RELEASE_MANIFESTS = {
+    ("human", "gencode_v47"): REPO_ROOT
+    / "config"
+    / "release-profiles"
+    / "human-gencode-v47.json",
+}
 SUPPORTED_REFERENCES = {
     ("rat", "rn6"),
     ("rat", "rn7"),
     ("rat", "rn8"),
     ("human", "gencode_v39"),
+    ("human", "gencode_v47"),
 }
 
 
@@ -89,6 +127,139 @@ def build_batches(r1_paths, num_chunks, include_undetermined=False, include_inde
     return result
 
 
+def _require_exact_roles(profile, section_name, expected_roles):
+    section = profile.get(section_name)
+    if not isinstance(section, dict):
+        raise ValueError("release manifest {} must be an object".format(section_name))
+    actual_roles = set(section)
+    missing = sorted(expected_roles - actual_roles)
+    unknown = sorted(actual_roles - expected_roles)
+    if missing or unknown:
+        details = []
+        if missing:
+            details.append("missing {}".format(", ".join(missing)))
+        if unknown:
+            details.append("unknown {}".format(", ".join(unknown)))
+        raise ValueError(
+            "release manifest {} keys are invalid: {}".format(
+                section_name, "; ".join(details)
+            )
+        )
+    return section
+
+
+def load_release_manifest(path, organism, version):
+    manifest_path = Path(path)
+    try:
+        with manifest_path.open(encoding="utf-8") as file:
+            profile = json.load(file)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "cannot read release manifest {}: {}".format(manifest_path, exc)
+        ) from exc
+
+    if not isinstance(profile, dict):
+        raise ValueError("release manifest root must be an object")
+    if type(profile.get("schema_version")) is not int or profile["schema_version"] != 1:
+        raise ValueError("release manifest schema_version must equal 1")
+    profile_id = profile.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise ValueError("release manifest profile_id must be a nonempty string")
+    if profile.get("organism") != organism or profile.get("version") != version:
+        raise ValueError(
+            "release manifest {} declares {} {}, expected {} {}".format(
+                profile_id,
+                profile.get("organism"),
+                profile.get("version"),
+                organism,
+                version,
+            )
+        )
+    publication_state = profile.get("publication_state")
+    if not isinstance(publication_state, str) or not publication_state.strip():
+        raise ValueError(
+            "release manifest publication_state must be a nonempty string"
+        )
+
+    references = _require_exact_roles(profile, "references", REFERENCE_ROLES)
+    images = _require_exact_roles(profile, "images", IMAGE_ROLES)
+    compatibility = _require_exact_roles(
+        profile, "compatibility", COMPATIBILITY_ROLES
+    )
+    incomplete = sorted(
+        "{}.{}".format(section_name, role)
+        for section_name, section in (("references", references), ("images", images))
+        for role, value in section.items()
+        if not isinstance(value, str) or not value.strip() or value != value.strip()
+    )
+    if incomplete:
+        if publication_state == "publication_pending":
+            raise ValueError(
+                "release profile {} is publication-pending; populate: {}".format(
+                    profile_id, ", ".join(incomplete)
+                )
+            )
+        raise ValueError(
+            "release profile {} has empty execution values: {}".format(
+                profile_id, ", ".join(incomplete)
+            )
+        )
+
+    invalid_versions = sorted(
+        role
+        for role, value in compatibility.items()
+        if not isinstance(value, str) or not value.strip() or value != value.strip()
+    )
+    if invalid_versions:
+        raise ValueError(
+            "release manifest compatibility values must be nonempty: {}".format(
+                ", ".join(invalid_versions)
+            )
+        )
+    if compatibility["star_index_builder"] != compatibility["star_runtime"]:
+        raise ValueError(
+            "release manifest STAR index-builder/runtime versions are incompatible: "
+            "{} != {}".format(
+                compatibility["star_index_builder"], compatibility["star_runtime"]
+            )
+        )
+    if compatibility["rsem_reference_builder"] != compatibility["rsem_runtime"]:
+        raise ValueError(
+            "release manifest RSEM reference-builder/runtime versions are "
+            "incompatible: {} != {}".format(
+                compatibility["rsem_reference_builder"],
+                compatibility["rsem_runtime"],
+            )
+        )
+
+    mutable_images = sorted(
+        role
+        for role, value in images.items()
+        if not IMMUTABLE_IMAGE_PATTERN.fullmatch(value)
+    )
+    if mutable_images:
+        raise ValueError(
+            "modern release manifest images must use immutable sha256 digests: {}".format(
+                ", ".join(mutable_images)
+            )
+        )
+
+    return {
+        "rnaseq_pipeline.{}".format(role): value
+        for section in (references, images)
+        for role, value in section.items()
+    }
+
+
+def resolve_release_inputs(organism, version, release_manifest=None):
+    manifest_path = release_manifest
+    if manifest_path is None:
+        manifest_path = DEFAULT_RELEASE_MANIFESTS.get((organism, version))
+    if manifest_path is None:
+        return None
+    return load_release_manifest(manifest_path, organism, version)
+
+
 def main(command_args: argparse.Namespace):
     if (command_args.organism, command_args.version) not in SUPPORTED_REFERENCES:
         raise ValueError(
@@ -97,6 +268,11 @@ def main(command_args: argparse.Namespace):
             )
         )
     output_report_stem(command_args.output_report_name)
+    release_inputs = resolve_release_inputs(
+        command_args.organism,
+        command_args.version,
+        getattr(command_args, "release_manifest", None),
+    )
 
     try:
         import gcsfs
@@ -155,6 +331,7 @@ def main(command_args: argparse.Namespace):
                 batch["r2"],
                 batch["i1"],
                 batch["sample_prefix"],
+                release_inputs=release_inputs,
             )
         )
 
@@ -183,6 +360,7 @@ def make_json_dict(
     r2=None,
     i1=None,
     prefix_list=None,
+    release_inputs=None,
 ):
     if r1 is None:
         r1 = []
@@ -201,7 +379,9 @@ def make_json_dict(
         raise ValueError("FASTQ URIs must be unique across R1, R2, and I1 roles")
     output_report_name = output_report_stem(output_report_name)
 
-    if organism == "rat" and version == "rn6":
+    if release_inputs is not None:
+        organism_references = {}
+    elif organism == "rat" and version == "rn6":
         organism_references = {
             "rnaseq_pipeline.star_index": "gs://omicspipelines-public-resources/rnaseq/references/rat/Rnor6_v96_star_index.tar.gz",
             "rnaseq_pipeline.gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/rat/Rattus_norvegicus.Rnor_6.0.96.gtf",
@@ -322,7 +502,7 @@ def make_json_dict(
         "rnaseq_pipeline.merge_results_docker": f"{docker_repo}/merge_results:latest",
     }
 
-    d = {**filled_dict, **organism_references}
+    d = {**filled_dict, **organism_references, **(release_inputs or {})}
 
     return d
 
@@ -371,10 +551,10 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-	"-v",
+        "-v",
         "--version",
         help="genome build version to use for references",
-        choices=["rn6","rn7","rn8","gencode_v39"],
+        choices=["rn6", "rn7", "rn8", "gencode_v39", "gencode_v47"],
         required=True,
     )
     parser.add_argument(
@@ -391,6 +571,11 @@ if __name__ == "__main__":
         help="Docker repository prefix containing the images used in the workflow",
         type=str,
         default="us-docker.pkg.dev/motrpac-portal/rnaseq",
+    )
+    parser.add_argument(
+        "--release-manifest",
+        help="complete release profile overriding reference and Docker workflow inputs",
+        type=str,
     )
     parser.add_argument(
         "-i",

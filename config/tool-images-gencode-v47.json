@@ -1,0 +1,41 @@
+{
+  "profile": "human_gencode_v47",
+  "images": {
+    "bowtie2": {
+      "version": "2.5.5",
+      "uri": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19"
+    },
+    "cutadapt": {
+      "version": "5.2",
+      "uri": "quay.io/biocontainers/cutadapt@sha256:741216fb9a56cdac2a61e93c64f857bc5b3e1f9f2c123cf7ae2c6ea5c97702d8"
+    },
+    "fastqc": {
+      "version": "0.12.1",
+      "uri": "quay.io/biocontainers/fastqc@sha256:e194048df39c3145d9b4e0a14f4da20b59d59250465b6f2a9cb698445fd45900"
+    },
+    "picard": {
+      "version": "3.5.0",
+      "uri": "quay.io/biocontainers/picard@sha256:84923e37c5a43b0984fdb152a89f8ac952878fafc3e6076c534e5e5c82e278be"
+    },
+    "rsem": {
+      "version": "1.3.3",
+      "uri": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420"
+    },
+    "samtools": {
+      "version": "1.24",
+      "uri": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561"
+    },
+    "star": {
+      "version": "2.7.11b",
+      "uri": "quay.io/biocontainers/star@sha256:c43295cdbc28a7be7d88296775a29cc65b30296c996d8242ef90c031c8b9739b"
+    },
+    "subread": {
+      "version": "2.1.1",
+      "uri": "quay.io/biocontainers/subread@sha256:a0f7ea960dd0f55240b330b5c4515388a493e266a7b427d6a59a39164bc14865"
+    },
+    "umi_tools": {
+      "version": "1.1.6",
+      "uri": "quay.io/biocontainers/umi_tools@sha256:94c7cd9a713157affe93d3f1fa60e60d35a6385adc6b419d5f73c68eea8a54e8"
+    }
+  }
+}

@@ -1,8 +1,1 @@
-FROM python:3.7-slim-bullseye
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gawk procps && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
-
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir cutadapt==1.18
+FROM quay.io/biocontainers/cutadapt@sha256:741216fb9a56cdac2a61e93c64f857bc5b3e1f9f2c123cf7ae2c6ea5c97702d8

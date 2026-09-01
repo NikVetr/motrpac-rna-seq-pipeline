@@ -23,7 +23,7 @@ task markduplicates {
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Done with ulimit, running markduplicates ---"
         ln -s /dev/null ~{output_bam}
-        java -Xmx32g -jar /usr/local/bin/picard.jar MarkDuplicates \
+        picard -Xmx32g MarkDuplicates \
             I=~{input_bam} \
             O=~{output_bam} \
             CREATE_INDEX=false \

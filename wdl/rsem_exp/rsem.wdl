@@ -31,7 +31,7 @@ task rsem {
             --no-bam-output \
             --forward-prob 0.5 \
             --seed 12345 \
-            ~{transcriptome_bam}\
+            ~{transcriptome_bam} \
             rsem_reference \
             ~{SID}
         echo "--- $(date "+[%b %d %H:%M:%S]") Done: rsem-calculate-expression --- "

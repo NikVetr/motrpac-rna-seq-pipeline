@@ -22,7 +22,7 @@ class WdlIoContractTests(unittest.TestCase):
     def test_markduplicates_publishes_metrics_only(self):
         wdl = source("wdl/mark_duplicates/mark_duplicates.wdl")
         self.assertIn("ln -s /dev/null ~{output_bam}", wdl)
-        self.assertIn("java -Xmx32g", wdl)
+        self.assertIn("picard -Xmx32g MarkDuplicates", wdl)
         self.assertIn("CREATE_INDEX=false", wdl)
         self.assertIn("File metrics", wdl)
         self.assertNotIn("File bam_file", wdl)
