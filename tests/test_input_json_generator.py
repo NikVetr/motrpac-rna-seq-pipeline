@@ -202,6 +202,51 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertNotIn("rnaseq_pipeline.run_posttrim_fastqc", selective_document)
         self.assertNotIn("rnaseq_pipeline.run_alignment_qc", selective_document)
 
+    def test_contamination_qc_fusion_and_sampling_are_opt_in(self) -> None:
+        arguments = (
+            "human",
+            "gencode_v39",
+            "registry.example/rnaseq",
+            "cohort",
+            ["gs://example/sample_R1.fastq.gz"],
+            ["gs://example/sample_R2.fastq.gz"],
+            None,
+            ["sample"],
+        )
+        default_document = generator.make_json_dict(*arguments)
+        self.assertNotIn(
+            "rnaseq_pipeline.combine_contamination_qc", default_document
+        )
+        self.assertNotIn("rnaseq_pipeline.contamination_qc_pairs", default_document)
+
+        combined_document = generator.make_json_dict(
+            *arguments, combine_contamination_qc=True
+        )
+        self.assertTrue(
+            combined_document["rnaseq_pipeline.combine_contamination_qc"]
+        )
+        self.assertNotIn("rnaseq_pipeline.contamination_qc_pairs", combined_document)
+
+        sampled_document = generator.make_json_dict(
+            *arguments, contamination_qc_pairs=1_000_000
+        )
+        self.assertEqual(
+            1_000_000,
+            sampled_document["rnaseq_pipeline.contamination_qc_pairs"],
+        )
+        self.assertNotIn(
+            "rnaseq_pipeline.combine_contamination_qc", sampled_document
+        )
+
+        with self.assertRaisesRegex(ValueError, "nonnegative integer"):
+            generator.make_json_dict(*arguments, contamination_qc_pairs=-1)
+        with self.assertRaisesRegex(ValueError, "requires run_contamination_qc"):
+            generator.make_json_dict(
+                *arguments,
+                run_contamination_qc=False,
+                combine_contamination_qc=True,
+            )
+
     def test_main_checks_mates_before_writing(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"
         r2 = "gs://bucket/sample_R2.fastq.gz"

@@ -275,6 +275,10 @@ def main(command_args: argparse.Namespace):
         "run_pretrim_fastqc": not getattr(command_args, "skip_pretrim_fastqc", False),
         "run_posttrim_fastqc": not getattr(command_args, "skip_posttrim_fastqc", False),
         "run_contamination_qc": not getattr(command_args, "skip_contamination_qc", False),
+        "combine_contamination_qc": getattr(
+            command_args, "combine_contamination_qc", False
+        ),
+        "contamination_qc_pairs": getattr(command_args, "contamination_qc_pairs", 0),
         "run_alignment_qc": not getattr(command_args, "skip_alignment_qc", False),
         "run_umi_qc": not getattr(command_args, "skip_umi_qc", False),
     }
@@ -381,6 +385,8 @@ def make_json_dict(
     run_pretrim_fastqc=True,
     run_posttrim_fastqc=True,
     run_contamination_qc=True,
+    combine_contamination_qc=False,
+    contamination_qc_pairs=0,
     run_alignment_qc=True,
     run_umi_qc=True,
 ):
@@ -397,6 +403,14 @@ def make_json_dict(
     if use_umi_molecule_expression and not i1:
         raise ValueError(
             "UMI molecule expression requires a matched I1 FASTQ for every sample"
+        )
+    if type(contamination_qc_pairs) is not int or contamination_qc_pairs < 0:
+        raise ValueError("contamination_qc_pairs must be a nonnegative integer")
+    if not run_contamination_qc and (
+        combine_contamination_qc or contamination_qc_pairs != 0
+    ):
+        raise ValueError(
+            "combined or sampled contamination QC requires run_contamination_qc"
         )
     if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
         raise ValueError("sample prefixes must be nonempty and unique")
@@ -531,6 +545,10 @@ def make_json_dict(
     }.items():
         if not enabled:
             filled_dict["rnaseq_pipeline.{}".format(name)] = False
+    if combine_contamination_qc:
+        filled_dict["rnaseq_pipeline.combine_contamination_qc"] = True
+    if contamination_qc_pairs > 0:
+        filled_dict["rnaseq_pipeline.contamination_qc_pairs"] = contamination_qc_pairs
 
     d = {**filled_dict, **organism_references, **(release_inputs or {})}
 
@@ -638,6 +656,21 @@ if __name__ == "__main__":
         help="skip globin, rRNA, and PhiX Bowtie2 screens",
         default=False,
         action="store_true",
+    )
+    parser.add_argument(
+        "--combine-contamination-qc",
+        help="run full-depth globin, rRNA, and PhiX screens serially on one worker",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--contamination-qc-pairs",
+        help=(
+            "deterministically sample this many post-trim pairs for the combined "
+            "screens; 0 retains full depth"
+        ),
+        type=int,
+        default=0,
     )
     parser.add_argument(
         "--skip-alignment-qc",

@@ -78,12 +78,35 @@ class WdlIoContractTests(unittest.TestCase):
             self.assertIn("Boolean {} = true".format(name), wdl)
         self.assertIn("if (run_pretrim_fastqc)", wdl)
         self.assertIn("if (run_posttrim_fastqc)", wdl)
-        self.assertIn("if (run_contamination_qc)", wdl)
+        self.assertIn("if (use_legacy_contamination_qc)", wdl)
+        self.assertIn("if (use_combined_contamination_qc)", wdl)
         self.assertIn("if (run_alignment_qc)", wdl)
         self.assertIn(
             "if (use_index_reads && (run_umi_qc || use_umi_molecule_expression))",
             wdl,
         )
+
+    def test_contamination_fusion_and_sampling_preserve_the_legacy_default(self):
+        workflow = source("wdl/rnaseq_pipeline_scatter.wdl")
+        task = source("wdl/contamination_qc/contamination_qc.wdl")
+        self.assertIn("Boolean combine_contamination_qc = false", workflow)
+        self.assertIn("Int contamination_qc_pairs = 0", workflow)
+        self.assertIn(
+            "if contamination_qc_pairs >= 0 &&",
+            workflow,
+        )
+        self.assertIn("if (use_legacy_contamination_qc)", workflow)
+        self.assertIn(
+            "if (use_combined_contamination_qc)", workflow
+        )
+        self.assertIn(
+            "Array[File] contamination_sampling_manifests", workflow
+        )
+        self.assertIn("sha256-counter-floyd-ordinal-v1", task)
+        self.assertIn('run_screen globin genome/globin', task)
+        self.assertIn('run_screen rRNA genome/rRNA', task)
+        self.assertIn('run_screen phix genome/phix', task)
+        self.assertNotIn("sort --random-sort", task)
 
 
 if __name__ == "__main__":

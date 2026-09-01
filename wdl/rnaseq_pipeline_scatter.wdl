@@ -7,6 +7,7 @@ import "star_align/star.wdl" as star
 import "feature_counts/fc.wdl" as fc
 import "rsem_exp/rsem.wdl" as rsem
 import "bowtie2_align/bowtie2_align.wdl" as bowtie2_align
+import "contamination_qc/contamination_qc.wdl" as contamination_qc
 import "mark_duplicates/mark_duplicates.wdl" as markdup
 import "collect_rnaseq_metrics/collect_rnaseq_metrics.wdl" as metrics
 import "umi_dup/umi_dup.wdl" as umi_dup
@@ -62,6 +63,10 @@ workflow rnaseq_pipeline {
             bowtie2_phix: {
                 task_name: "Bowtie2 PHIX",
                 description: "Map reads to phix using bowtie2 to compute percentage of phix"
+            },
+            combined_contamination_qc: {
+                task_name: "Combined Contamination QC",
+                description: "Optionally sample paired reads, then run globin, rRNA, and PhiX screens serially on one worker"
             },
             md: {
                 task_name: "Mark Duplicates",
@@ -121,6 +126,8 @@ workflow rnaseq_pipeline {
         Boolean run_pretrim_fastqc = true
         Boolean run_posttrim_fastqc = true
         Boolean run_contamination_qc = true
+        Boolean combine_contamination_qc = false
+        Int contamination_qc_pairs = 0
         Boolean run_alignment_qc = true
         Boolean run_umi_qc = true
 
@@ -234,6 +241,17 @@ workflow rnaseq_pipeline {
     Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]
     Boolean use_index_reads =
         umi_expression_inputs_valid && has_fastq_index
+    Array[Boolean] contamination_qc_input_contract =
+        if contamination_qc_pairs >= 0 &&
+            (run_contamination_qc || (!combine_contamination_qc && contamination_qc_pairs == 0))
+        then [true] else []
+    Boolean contamination_qc_inputs_valid = contamination_qc_input_contract[0]
+    Boolean use_combined_contamination_qc =
+        contamination_qc_inputs_valid && run_contamination_qc &&
+        (combine_contamination_qc || contamination_qc_pairs > 0)
+    Boolean use_legacy_contamination_qc =
+        contamination_qc_inputs_valid && run_contamination_qc &&
+        !use_combined_contamination_qc
 
     scatter (i in range(length(fastq1))) {
         if (run_pretrim_fastqc) {
@@ -368,7 +386,7 @@ workflow rnaseq_pipeline {
                 docker=rsem_docker,
         }
 
-        if (run_contamination_qc) {
+        if (use_legacy_contamination_qc) {
             call bowtie2_align.bowtie2_align as bowtie2_globin {
                 input:
                 # Inputs
@@ -412,6 +430,25 @@ workflow rnaseq_pipeline {
                     disk_space=bowtie2_phix_disk,
                     preemptible=num_preemptible_attempts,
                     docker=bowtie_docker,
+            }
+        }
+
+        if (use_combined_contamination_qc) {
+            call contamination_qc.contamination_qc as combined_contamination_qc {
+                input:
+                    SID=sample_prefix[i],
+                    fastqr1=cutadapt_fastq_trimmed_R1,
+                    fastqr2=cutadapt_fastq_trimmed_R2,
+                    cutadapt_report=cutadapt_report,
+                    globin_genome_dir_tar=globin_genome_dir_tar,
+                    rrna_genome_dir_tar=rrna_genome_dir_tar,
+                    phix_genome_dir_tar=phix_genome_dir_tar,
+                    sample_pairs=contamination_qc_pairs,
+                    ncpu=bowtie2_globin_ncpu,
+                    memory=bowtie2_globin_ramGB,
+                    disk_space=bowtie2_globin_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=bowtie_docker
             }
         }
 
@@ -511,9 +548,9 @@ workflow rnaseq_pipeline {
                 posttrim_r1_filename=basename(cutadapt_fastq_trimmed_R1),
                 posttrim_r2_filename=basename(cutadapt_fastq_trimmed_R2),
                 cutadapt_report=cutadapt_report,
-                globin_report=bowtie2_globin.bowtie2_report,
-                phix_report=bowtie2_phix.bowtie2_report,
-                rRNA_report=bowtie2_rrna.bowtie2_report,
+                globin_report=if use_combined_contamination_qc then combined_contamination_qc.globin_report else bowtie2_globin.bowtie2_report,
+                phix_report=if use_combined_contamination_qc then combined_contamination_qc.phix_report else bowtie2_phix.bowtie2_report,
+                rRNA_report=if use_combined_contamination_qc then combined_contamination_qc.rrna_report else bowtie2_rrna.bowtie2_report,
                 mapped_report=chrinfo.report,
                 star_log=star_align.logs[0],
                 markduplicates_metrics=md.metrics,
@@ -564,6 +601,7 @@ workflow rnaseq_pipeline {
         File rsem_genes_fpkm = merge_results.rsem_genes_fpkm
         File feature_counts_file = merge_results.feature_counts
         File qc_report_file = merge_results.qc_report
+        Array[File] contamination_sampling_manifests = select_all(combined_contamination_qc.sampling_manifest)
         Array[File] umi_metrics = select_all(udup.umi_metrics)
         Array[File] umi_molecule_expression_metrics = flatten(select_all(udup.molecule_expression_metrics))
         File? umi_molecule_rsem_genes_count = merge_umi_expression.rsem_genes_count
