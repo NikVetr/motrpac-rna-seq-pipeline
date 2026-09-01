@@ -268,6 +268,13 @@ def main(command_args: argparse.Namespace):
             )
         )
     output_report_stem(command_args.output_report_name)
+    use_umi_molecule_expression = getattr(
+        command_args, "umi_molecule_expression", False
+    )
+    if use_umi_molecule_expression and not command_args.index:
+        raise ValueError(
+            "--umi-deduplicated-expression requires --index and matched I1 FASTQs"
+        )
     release_inputs = resolve_release_inputs(
         command_args.organism,
         command_args.version,
@@ -332,6 +339,7 @@ def main(command_args: argparse.Namespace):
                 batch["i1"],
                 batch["sample_prefix"],
                 release_inputs=release_inputs,
+                use_umi_molecule_expression=use_umi_molecule_expression,
             )
         )
 
@@ -361,6 +369,7 @@ def make_json_dict(
     i1=None,
     prefix_list=None,
     release_inputs=None,
+    use_umi_molecule_expression=False,
 ):
     if r1 is None:
         r1 = []
@@ -372,6 +381,10 @@ def make_json_dict(
         raise ValueError("R1, R2, and sample-prefix arrays must be nonempty and aligned")
     if i1 is not None and len(i1) != len(r1):
         raise ValueError("I1 array must be absent or aligned with R1 and R2")
+    if use_umi_molecule_expression and not i1:
+        raise ValueError(
+            "UMI molecule expression requires a matched I1 FASTQ for every sample"
+        )
     if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
         raise ValueError("sample prefixes must be nonempty and unique")
     fastq_uris = r1 + r2 + (i1 or [])
@@ -501,6 +514,8 @@ def make_json_dict(
         "rnaseq_pipeline.merge_results_disk": 200,
         "rnaseq_pipeline.merge_results_docker": f"{docker_repo}/merge_results:latest",
     }
+    if use_umi_molecule_expression:
+        filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = True
 
     d = {**filled_dict, **organism_references, **(release_inputs or {})}
 
@@ -581,6 +596,13 @@ if __name__ == "__main__":
         "-i",
         "--index",
         help="Adding this flag will add index files to the input JSON",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--umi-deduplicated-expression",
+        dest="umi_molecule_expression",
+        help="add directional UMI molecule RSEM and featureCounts matrices; requires -i",
         default=False,
         action="store_true",
     )

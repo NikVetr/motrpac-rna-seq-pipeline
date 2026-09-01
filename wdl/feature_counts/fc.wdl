@@ -1,7 +1,5 @@
 version 1.0
 
-#Use version v1.6.3 , currently uses v1.6.2 as specified in the MOP , subtle changes in .out file
-
 task feature_counts {
     input {
         String SID
@@ -18,7 +16,16 @@ task feature_counts {
     command <<<
         set -euo pipefail
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, running featurecounts ---"
-        featureCounts -a ~{gtf_file} -o ~{SID}.out -p -M --fraction ~{input_bam}
+        featureCounts \
+            -T ~{ncpu} \
+            -a ~{gtf_file} \
+            -o ~{SID}.out \
+            -p \
+            --countReadPairs \
+            -s 1 \
+            -M \
+            --fraction \
+            ~{input_bam}
 
         echo "$(date "+[%b %d %H:%M:%S]") Finished featurecounts"
         ls -ltr
@@ -53,5 +60,6 @@ task feature_counts {
 
     meta {
         author: "Archana Raja"
+        description: "Forward-stranded paired-fragment gene counting"
     }
 }

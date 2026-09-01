@@ -50,6 +50,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             num_chunks=1,
             docker_repo="registry.example/rnaseq/",
             index=include_index,
+            umi_molecule_expression=False,
             project="local-test-only",
         )
 
@@ -123,6 +124,47 @@ class InputJsonGeneratorTests(unittest.TestCase):
             generator.make_json_dict(
                 "human", "gencode_v39", "registry.example/rnaseq", "cohort"
             )
+
+    def test_umi_molecule_expression_is_explicit_and_requires_i1(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires a matched I1"):
+            generator.make_json_dict(
+                "human",
+                "gencode_v39",
+                "registry.example/rnaseq",
+                "cohort",
+                ["gs://example/sample_R1.fastq.gz"],
+                ["gs://example/sample_R2.fastq.gz"],
+                None,
+                ["sample"],
+                use_umi_molecule_expression=True,
+            )
+
+        document = generator.make_json_dict(
+            "human",
+            "gencode_v39",
+            "registry.example/rnaseq",
+            "cohort",
+            ["gs://example/sample_R1.fastq.gz"],
+            ["gs://example/sample_R2.fastq.gz"],
+            ["gs://example/sample_I1.fastq.gz"],
+            ["sample"],
+            use_umi_molecule_expression=True,
+        )
+        self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
+
+        default_document = generator.make_json_dict(
+            "human",
+            "gencode_v39",
+            "registry.example/rnaseq",
+            "cohort",
+            ["gs://example/sample_R1.fastq.gz"],
+            ["gs://example/sample_R2.fastq.gz"],
+            None,
+            ["sample"],
+        )
+        self.assertNotIn(
+            "rnaseq_pipeline.use_umi_molecule_expression", default_document
+        )
 
     def test_main_checks_mates_before_writing(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"

@@ -29,7 +29,7 @@ task rsem {
             --bam \
             --paired-end \
             --no-bam-output \
-            --forward-prob 0.5 \
+            --forward-prob 1 \
             --seed 12345 \
             ~{transcriptome_bam} \
             rsem_reference \
@@ -69,5 +69,6 @@ task rsem {
 
     meta {
         author: "Archana Raja"
+        description: "Forward-stranded paired-end transcript quantification"
     }
 }

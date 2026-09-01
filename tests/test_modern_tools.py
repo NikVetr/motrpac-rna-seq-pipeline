@@ -50,6 +50,16 @@ class ModernToolTests(unittest.TestCase):
         self.assertIn("picard -Xmx~{memory}g CollectRnaSeqMetrics", metrics)
         self.assertNotIn("picard.jar", markdup + metrics)
 
+    def test_counting_is_forward_stranded_and_fragment_based(self):
+        feature_counts = (REPO_ROOT / "wdl/feature_counts/fc.wdl").read_text()
+        for argument in ("-T ~{ncpu}", "--countReadPairs", "-s 1"):
+            self.assertIn(argument, feature_counts)
+
+        rsem = (REPO_ROOT / "wdl/rsem_exp/rsem.wdl").read_text()
+        self.assertIn("--paired-end", rsem)
+        self.assertIn("--forward-prob 1", rsem)
+        self.assertNotIn("--forward-prob 0.5", rsem)
+
 
 if __name__ == "__main__":
     unittest.main()
