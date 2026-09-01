@@ -57,10 +57,15 @@ Python-equipped image. Local MiniWDL ignores WDL disk requests, and the exact
 150-GiB high-input STAR profile has not yet processed a full large sample. The
 dedicated cloud controller is stopped and no Batch worker remains running.
 
-The MultiQC-enabled local 100k canary completed all 19 calls and emitted 14
-top-level outputs. Pre-alignment reporting detected Cutadapt and four FastQC
-reports; post-alignment reporting detected RSEM, featureCounts, STAR, Cutadapt,
-two FastQC reports, Picard MarkDuplicates, and Picard RNA metrics. Ten existing
-outputs were byte-identical to the prior local canary, and the two UMI JSONs
-differed only in the helper-container URI selected by the local test input. A
-MultiQC-enabled operator/cloud canary remains the next compatibility check.
+The MultiQC-enabled 100k canary completed all 19 calls locally and through
+Cromwell 92/GCP Batch. Cloud workflow
+`841a7f5a-7780-43a8-9cba-0b518e6a5a79` completed every call on its first
+attempt, emitted all 14 top-level outputs, and stayed within the controller plus
+three-worker cap. Both report archives contain a nonempty HTML report and the
+expected module data: pre-alignment reporting detected Cutadapt and four
+FastQC reports; post-alignment reporting detected RSEM, featureCounts, STAR,
+Cutadapt, two FastQC reports, Picard MarkDuplicates, and Picard RNA metrics.
+All eight expression matrices and the QC CSV are byte-identical to the accepted
+cloud canary without MultiQC. The controller is stopped and no Batch worker
+remains running. Registration and output ingestion through the external
+operator GUI/Caper deployment remain a separate handoff check.
