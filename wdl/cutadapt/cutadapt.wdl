@@ -39,17 +39,13 @@ task Cutadapt {
         --too-short-paired-output fastq_trim/tooshort/~{SID}_R2.fastq.gz \
         ~{fastqr1} ~{fastqr2} > "fastq_trim/~{SID}_report.log"
 
-        echo "--- $(date "+[%b %d %H:%M:%S]") Cutadapt done, extracting summary ---"
-        grep "with adapter:" fastq_trim/~{SID}_report.log|awk -F "(" '{print $2}'|sed 's/%//;s/)//'|awk -v id=~{SID} '{sum+=$1}END{print "Sample""\t""pct_adapter_detected""\n"id"\t"sum/2}' >fastq_trim/~{SID}_summary.txt
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Done extracting summary, task complete ---"
+        echo "--- $(date "+[%b %d %H:%M:%S]") Cutadapt done, task complete ---"
     >>>
 
     output {
         File fastq_trimmed_R1 = "fastq_trim/${SID}_R1.fastq.gz"
         File fastq_trimmed_R2 = "fastq_trim/${SID}_R2.fastq.gz"
         File report = "fastq_trim/${SID}_report.log"
-        File summary = "fastq_trim/${SID}_summary.txt"
         File tooShortOutput = "fastq_trim/tooshort/${SID}_R1.fastq.gz"
         File tooShortPairedOutput = "fastq_trim/tooshort/${SID}_R2.fastq.gz"
     }

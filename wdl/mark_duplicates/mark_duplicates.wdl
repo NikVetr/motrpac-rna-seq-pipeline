@@ -23,6 +23,7 @@ task markduplicates {
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Done with ulimit, running markduplicates ---"
         ln -s /dev/null ~{output_bam}
+        # UMI-appended QNAMEs do not match Picard's Illumina coordinate parser.
         picard -Xmx32g MarkDuplicates \
             I=~{input_bam} \
             O=~{output_bam} \
@@ -30,6 +31,7 @@ task markduplicates {
             COMPRESSION_LEVEL=0 \
             VALIDATION_STRINGENCY=SILENT \
             ASSUME_SORT_ORDER=coordinate \
+            READ_NAME_REGEX=null \
             M=~{SID}.marked_dup_metrics.txt \
             REMOVE_DUPLICATES=true
 

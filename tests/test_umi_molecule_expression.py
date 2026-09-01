@@ -175,7 +175,7 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
         )
         molecule_calls = workflow[
             workflow.index("call fc.feature_counts as umi_molecule_feature_counts_task") :
-            workflow.index("call mapped.samtools_mapped as chrinfo")
+            workflow.index("call collect_qc.rnaseqQC as qc_report")
         ]
         self.assertEqual(2, molecule_calls.count("SID=sample_prefix[i]"))
         self.assertNotIn('SID=sample_prefix[i] + ".umi_molecules"', molecule_calls)

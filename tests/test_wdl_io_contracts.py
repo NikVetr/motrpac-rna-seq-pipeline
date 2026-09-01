@@ -24,6 +24,7 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertIn("ln -s /dev/null ~{output_bam}", wdl)
         self.assertIn("picard -Xmx32g MarkDuplicates", wdl)
         self.assertIn("CREATE_INDEX=false", wdl)
+        self.assertIn("READ_NAME_REGEX=null", wdl)
         self.assertIn("File metrics", wdl)
         self.assertNotIn("File bam_file", wdl)
         self.assertNotIn("File bam_index", wdl)
@@ -34,6 +35,10 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertIn("samtools view -F 0x900", wdl)
         self.assertNotIn("samtools view -b", wdl)
         self.assertNotIn("samtools index", wdl)
+        self.assertIn('$1 == "chrX"', wdl)
+        self.assertIn('$1 ~ /^chr[0-9]+$/', wdl)
+        self.assertIn("no mapped primary alignments", wdl)
+        self.assertNotIn("grep ", wdl)
         self.assertIn('File aligned_chrinfo = "${SID}_aligned_chr_info.txt"', wdl)
 
     def test_fastqc_collects_both_parallel_statuses(self):
@@ -50,6 +55,7 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertIn(
             "--outSAMattrRGline ID:~{prefix} SM:~{prefix} PL:ILLUMINA", wdl
         )
+        self.assertNotIn("--chim", wdl)
         self.assertNotIn("samtools index", wdl)
         self.assertNotIn("File bam_index", wdl)
 
@@ -59,6 +65,25 @@ class WdlIoContractTests(unittest.TestCase):
             "wdl/multiqc/multiqc_postalign.wdl",
         ):
             self.assertNotIn("rm $FILE", source(path))
+
+    def test_optional_qc_groups_are_default_on_and_conditionally_called(self):
+        wdl = source("wdl/rnaseq_pipeline_scatter.wdl")
+        for name in (
+            "run_pretrim_fastqc",
+            "run_posttrim_fastqc",
+            "run_contamination_qc",
+            "run_alignment_qc",
+            "run_umi_qc",
+        ):
+            self.assertIn("Boolean {} = true".format(name), wdl)
+        self.assertIn("if (run_pretrim_fastqc)", wdl)
+        self.assertIn("if (run_posttrim_fastqc)", wdl)
+        self.assertIn("if (run_contamination_qc)", wdl)
+        self.assertIn("if (run_alignment_qc)", wdl)
+        self.assertIn(
+            "if (use_index_reads && (run_umi_qc || use_umi_molecule_expression))",
+            wdl,
+        )
 
 
 if __name__ == "__main__":

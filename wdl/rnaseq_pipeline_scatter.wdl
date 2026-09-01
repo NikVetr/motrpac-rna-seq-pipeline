@@ -3,7 +3,6 @@ version 1.0
 import "fastqc/fastqc.wdl" as fastqc
 import "attach_umi/attach_umi.wdl" as attach_umi
 import "cutadapt/cutadapt.wdl" as ca
-import "multiqc/multiqc.wdl" as multiqc
 import "star_align/star.wdl" as star
 import "feature_counts/fc.wdl" as fc
 import "rsem_exp/rsem.wdl" as rsem
@@ -12,7 +11,6 @@ import "mark_duplicates/mark_duplicates.wdl" as markdup
 import "collect_rnaseq_metrics/collect_rnaseq_metrics.wdl" as metrics
 import "umi_dup/umi_dup.wdl" as umi_dup
 import "compute_mapped/mapped.wdl" as mapped
-import "multiqc/multiqc_postalign.wdl" as mqc_postalign
 import "collect_qc_metrics/collect_qc.wdl" as collect_qc
 import "merge_results/merge_results.wdl" as final_merge
 import "merge_results/merge_expression.wdl" as expression_merge
@@ -40,10 +38,6 @@ workflow rnaseq_pipeline {
             posttrim_fastqc: {
                 task_name: "Post-Trim FASTQC",
                 description: "Post-Trim FASTQC to collect metrics related to the library quality such as GC content and duplicated sequences"
-            },
-            mqc: {
-                task_name: "MultiQC",
-                description: "MultiQC consolidates logs from CutAdapt, Pre-Trim and Post-Trim FASTQC steps"
             },
             star_align: {
                 task_name: "STAR",
@@ -97,13 +91,9 @@ workflow rnaseq_pipeline {
                 task_name: "SAMTools Mapped",
                 description: "Compute mapping percentages to different chromosomes and contigs using SAMTools"
             },
-            mqc_pa: {
-                task_name: "MultiQC PostAlign",
-                description: "Generates consolidated QC report using MultiQC by combining STAR and picard tools QC logs"
-            },
             qc_report: {
                 task_name: "RNAseq QC Report",
-                description: "Python script that uses MultiQC reports and other log files to consolidated QC metrics report per sample"
+                description: "Collect the published QC metrics directly from native task reports"
             },
             merge_results: {
                 task_name: "Merge Results",
@@ -126,6 +116,13 @@ workflow rnaseq_pipeline {
         Array[String]+ sample_prefix
         # Change num_preemptible_attempts to 2 or more if you want to use preemptible vm instances
         Int num_preemptible_attempts = 0
+
+        # Optional QC groups; all remain enabled by default for compatibility.
+        Boolean run_pretrim_fastqc = true
+        Boolean run_posttrim_fastqc = true
+        Boolean run_contamination_qc = true
+        Boolean run_alignment_qc = true
+        Boolean run_umi_qc = true
 
         # FastQC Parameters
         Int pretrim_fastqc_ncpu
@@ -151,12 +148,6 @@ workflow rnaseq_pipeline {
         Int cutadapt_ramGB
         Int cutadapt_disk
         String cutadapt_docker
-
-        # MultiQC Parameters
-        Int multiqc_ncpu
-        Int multiqc_ramGB
-        Int multiqc_disk
-        String multiqc_docker
 
         # Star Align Parameters
         File star_index
@@ -223,11 +214,6 @@ workflow rnaseq_pipeline {
         Int mapped_disk
         String samtools_docker
 
-        # MultiQC Post Align Parameters
-        Int mqc_postalign_ncpu
-        Int mqc_postalign_ramGB
-        Int mqc_postalign_disk
-
         # Collect QC Parameters
         Int collect_qc_ncpu
         Int collect_qc_ramGB
@@ -250,18 +236,20 @@ workflow rnaseq_pipeline {
         umi_expression_inputs_valid && has_fastq_index
 
     scatter (i in range(length(fastq1))) {
-        call fastqc.fastQC as pretrim_fastqc {
-            input:
-            # Inputs
-                fastqr1=fastq1[i],
-                fastqr2=fastq2[i],
-                outdir="fastqc_raw",
-            # Runtime Parameters
-                ncpu=pretrim_fastqc_ncpu,
-                memory=pretrim_fastqc_ramGB,
-                disk_space=pretrim_fastqc_disk,
-                preemptible=num_preemptible_attempts,
-                docker=fastqc_docker
+        if (run_pretrim_fastqc) {
+            call fastqc.fastQC as pretrim_fastqc {
+                input:
+                # Inputs
+                    fastqr1=fastq1[i],
+                    fastqr2=fastq2[i],
+                    outdir="fastqc_raw",
+                # Runtime Parameters
+                    ncpu=pretrim_fastqc_ncpu,
+                    memory=pretrim_fastqc_ramGB,
+                    disk_space=pretrim_fastqc_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=fastqc_docker
+            }
         }
 
         if (use_index_reads) {
@@ -320,34 +308,21 @@ workflow rnaseq_pipeline {
         File cutadapt_fastq_trimmed_R1 = if (use_index_reads) then select_first([cutadapt_umi.fastq_trimmed_R1]) else select_first([cutadapt_noumi.fastq_trimmed_R1])
         File cutadapt_fastq_trimmed_R2 = if (use_index_reads) then select_first([cutadapt_umi.fastq_trimmed_R2]) else select_first([cutadapt_noumi.fastq_trimmed_R2])
         File cutadapt_report = if (use_index_reads) then select_first([cutadapt_umi.report]) else select_first([cutadapt_noumi.report])
-        File cutadapt_summary = if (use_index_reads) then select_first([cutadapt_umi.summary]) else select_first([cutadapt_noumi.summary])
 
-        call fastqc.fastQC as posttrim_fastqc {
-            input:
-            # Inputs
-                fastqr1=cutadapt_fastq_trimmed_R1,
-                fastqr2=cutadapt_fastq_trimmed_R2,
-                outdir="fastqc_trim",
-            # Runtime Parameters
-                ncpu=posttrim_fastqc_ncpu,
-                memory=posttrim_fastqc_ramGB,
-                disk_space=posttrim_fastqc_disk,
-                preemptible=num_preemptible_attempts,
-                docker=fastqc_docker
-        }
-
-        call multiqc.multiQC as mqc {
-            input:
-            # Inputs
-                fastQCReports=[pretrim_fastqc.fastQC_report,posttrim_fastqc.fastQC_report],
-                trim_report=cutadapt_report,
-            # Runtime Parameters
-                ncpu=multiqc_ncpu,
-                memory=multiqc_ramGB,
-                disk_space=multiqc_disk,
-                preemptible=num_preemptible_attempts,
-                docker=multiqc_docker,
-
+        if (run_posttrim_fastqc) {
+            call fastqc.fastQC as posttrim_fastqc {
+                input:
+                # Inputs
+                    fastqr1=cutadapt_fastq_trimmed_R1,
+                    fastqr2=cutadapt_fastq_trimmed_R2,
+                    outdir="fastqc_trim",
+                # Runtime Parameters
+                    ncpu=posttrim_fastqc_ncpu,
+                    memory=posttrim_fastqc_ramGB,
+                    disk_space=posttrim_fastqc_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=fastqc_docker
+            }
         }
 
         call star.star as star_align {
@@ -393,82 +368,96 @@ workflow rnaseq_pipeline {
                 docker=rsem_docker,
         }
 
-        call bowtie2_align.bowtie2_align as bowtie2_globin {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                fastqr1=cutadapt_fastq_trimmed_R1,
-                fastqr2=cutadapt_fastq_trimmed_R2,
-                genome_dir_tar=globin_genome_dir_tar,
-            # Runtime Parameters
-                ncpu=bowtie2_globin_ncpu,
-                memory=bowtie2_globin_ramGB,
-                disk_space=bowtie2_globin_disk,
-                preemptible=num_preemptible_attempts,
-                docker=bowtie_docker,
+        if (run_contamination_qc) {
+            call bowtie2_align.bowtie2_align as bowtie2_globin {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    fastqr1=cutadapt_fastq_trimmed_R1,
+                    fastqr2=cutadapt_fastq_trimmed_R2,
+                    genome_dir_tar=globin_genome_dir_tar,
+                # Runtime Parameters
+                    ncpu=bowtie2_globin_ncpu,
+                    memory=bowtie2_globin_ramGB,
+                    disk_space=bowtie2_globin_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=bowtie_docker,
+            }
 
+            call bowtie2_align.bowtie2_align as bowtie2_rrna {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    fastqr1=cutadapt_fastq_trimmed_R1,
+                    fastqr2=cutadapt_fastq_trimmed_R2,
+                    genome_dir_tar=rrna_genome_dir_tar,
+                # Runtime Parameters
+                    ncpu=bowtie2_rrna_ncpu,
+                    memory=bowtie2_rrna_ramGB,
+                    disk_space=bowtie2_rrna_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=bowtie_docker,
+            }
+
+            call bowtie2_align.bowtie2_align as bowtie2_phix {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    fastqr1=cutadapt_fastq_trimmed_R1,
+                    fastqr2=cutadapt_fastq_trimmed_R2,
+                    genome_dir_tar=phix_genome_dir_tar,
+                # Runtime Parameters
+                    ncpu=bowtie2_phix_ncpu,
+                    memory=bowtie2_phix_ramGB,
+                    disk_space=bowtie2_phix_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=bowtie_docker,
+            }
         }
 
-        call bowtie2_align.bowtie2_align as bowtie2_rrna {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                fastqr1=cutadapt_fastq_trimmed_R1,
-                fastqr2=cutadapt_fastq_trimmed_R2,
-                genome_dir_tar=rrna_genome_dir_tar,
-            # Runtime Parameters
-                ncpu=bowtie2_rrna_ncpu,
-                memory=bowtie2_rrna_ramGB,
-                disk_space=bowtie2_rrna_disk,
-                preemptible=num_preemptible_attempts,
-                docker=bowtie_docker,
+        if (run_alignment_qc) {
+            call markdup.markduplicates as md {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    input_bam=star_align.bam_file,
+                # Runtime Parameters
+                    ncpu=markdup_ncpu,
+                    memory=markdup_ramGB,
+                    disk_space=markdup_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=picard_docker
+            }
 
+            call metrics.collectrnaseqmetrics as rnaqc {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    input_bam=star_align.bam_file,
+                    ref_flat=ref_flat,
+                # Runtime Parameters
+                    ncpu=rnaqc_ncpu,
+                    memory=rnaqc_ramGB,
+                    disk_space=rnaqc_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=picard_docker
+            }
+
+            call mapped.samtools_mapped as chrinfo {
+                input:
+                # Inputs
+                    SID=sample_prefix[i],
+                    input_bam=star_align.bam_file,
+                # Runtime Parameters
+                    ncpu=mapped_ncpu,
+                    memory=mapped_ramGB,
+                    disk_space=mapped_disk,
+                    preemptible=num_preemptible_attempts,
+                    docker=samtools_docker
+            }
         }
 
-        call bowtie2_align.bowtie2_align as bowtie2_phix {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                fastqr1=cutadapt_fastq_trimmed_R1,
-                fastqr2=cutadapt_fastq_trimmed_R2,
-                genome_dir_tar=phix_genome_dir_tar,
-            # Runtime Parameters
-                ncpu=bowtie2_phix_ncpu,
-                memory=bowtie2_phix_ramGB,
-                disk_space=bowtie2_phix_disk,
-                preemptible=num_preemptible_attempts,
-                docker=bowtie_docker,
-
-        }
-
-        call markdup.markduplicates as md {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                input_bam=star_align.bam_file,
-            # Runtime Parameters
-                ncpu=markdup_ncpu,
-                memory=markdup_ramGB,
-                disk_space=markdup_disk,
-                preemptible=num_preemptible_attempts,
-                docker=picard_docker
-        }
-
-        call metrics.collectrnaseqmetrics as rnaqc {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                input_bam=star_align.bam_file,
-                ref_flat=ref_flat,
-            # Runtime Parameters
-                ncpu=rnaqc_ncpu,
-                memory=rnaqc_ramGB,
-                disk_space=rnaqc_disk,
-                preemptible=num_preemptible_attempts,
-                docker=picard_docker
-        }
-
-        if (use_index_reads) {
+        if (use_index_reads && (run_umi_qc || use_umi_molecule_expression)) {
             call umi_dup.UMI_dup as udup {
                 input:
                 # Inputs
@@ -511,48 +500,24 @@ workflow rnaseq_pipeline {
             }
         }
 
-        call mapped.samtools_mapped as chrinfo {
-            input:
-            # Inputs
-                SID=sample_prefix[i],
-                input_bam=star_align.bam_file,
-            # Runtime Parameters
-                ncpu=mapped_ncpu,
-                memory=mapped_ramGB,
-                disk_space=mapped_disk,
-                preemptible=num_preemptible_attempts,
-                docker=samtools_docker
-        }
-
-        call mqc_postalign.multiQC_postalign as mqc_pa {
-            input:
-            # Inputs
-                fastQCReport=[posttrim_fastqc.fastQC_report],
-                trim_report=cutadapt_report,
-                rnametric_report=rnaqc.rnaseqmetrics,
-                md_report=md.metrics,
-                star_report=star_align.logs[0],
-                rsem_report=rsem_quant.stat_cnt,
-                fc_report=feature_counts.fc_summary,
-            # Runtime Parameters
-                ncpu=mqc_postalign_ncpu,
-                memory=mqc_postalign_ramGB,
-                disk_space=mqc_postalign_disk,
-                preemptible=num_preemptible_attempts,
-                docker=multiqc_docker
-        }
-
         call collect_qc.rnaseqQC as qc_report {
             input:
             # Inputs
                 SID=sample_prefix[i],
-                multiQCReports=[mqc.multiQC_report,mqc_pa.multiQC_report],
+                fastqc_pretrim=pretrim_fastqc.fastQC_report,
+                fastqc_posttrim=posttrim_fastqc.fastQC_report,
+                pretrim_r1_filename=basename(fastq1[i]),
+                pretrim_r2_filename=basename(fastq2[i]),
+                posttrim_r1_filename=basename(cutadapt_fastq_trimmed_R1),
+                posttrim_r2_filename=basename(cutadapt_fastq_trimmed_R2),
+                cutadapt_report=cutadapt_report,
                 globin_report=bowtie2_globin.bowtie2_report,
                 phix_report=bowtie2_phix.bowtie2_report,
                 rRNA_report=bowtie2_rrna.bowtie2_report,
-                trim_summary=cutadapt_summary,
                 mapped_report=chrinfo.report,
                 star_log=star_align.logs[0],
+                markduplicates_metrics=md.metrics,
+                rnaseq_metrics=rnaqc.rnaseqmetrics,
                 umi_report=udup.umi_report,
             # Runtime Parameters
                 ncpu=collect_qc_ncpu,

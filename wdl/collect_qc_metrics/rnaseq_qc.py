@@ -1,279 +1,468 @@
-"""
-Script to collect rna-seq qc metrics from different summary and report files from the rnaseq
-pipeline
+"""Collect the published per-sample QC row directly from native task reports."""
 
-Usage : python rnaseq_qc.py --multiqc_prealign multiQC_prealign_report --multiqc_postalign
-multiQC_postalign_report 8019468197_summary.txt 8019468197_mapped_report.txt
-8019468197_rRNA_report.txt 8019468197_globin_report.txt 8019468197_phix_report.txt
-8019468197_umi_report.txt 8019468197.Log.final.out
-
-Author : Archana Raja
-"""
 import argparse
-import os
+import csv
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+import io
+from pathlib import Path
 import re
-from functools import reduce
-
-import pandas as pd
-
-
-def make_args():
-    parser = argparse.ArgumentParser(description="Script to collect RNA-seq QC metrics")
-    parser.add_argument("--sample", help="Sample prefix")
-    parser.add_argument("--multiqc_prealign", help="path to MultiQC prealign directory")
-    parser.add_argument("--multiqc_postalign", help="path to MultiQC postalign directory")
-    parser.add_argument("--mapped_report", help="Alignment report")
-    parser.add_argument("--cutadapt_report", help="Cutadapt report file")
-    parser.add_argument("--rRNA_report", help="rRNA alignment report")
-    parser.add_argument("--globin_report", help="globin alignment report")
-    parser.add_argument("--phix_report", help="phix alignment report")
-    parser.add_argument("--star_log", help="STAR log file")
-    parser.add_argument("--umi_report", help="UMI duplication report", required=False)
-    return parser.parse_args()
+import tarfile
+import zipfile
 
 
-def main():
-    args = make_args()
+BASE_COLUMNS = [
+    "sample",
+    "reads_raw",
+    "pct_adapter_detected",
+    "pct_trimmed",
+    "pct_trimmed_bases",
+    "reads",
+    "pct_GC",
+    "pct_dup_sequence",
+    "pct_rRNA",
+    "pct_globin",
+    "pct_phix",
+    "pct_picard_dup",
+]
+STAR_COLUMNS = [
+    "avg_input_read_length",
+    "uniquely_mapped",
+    "pct_uniquely_mapped",
+    "avg_mapped_read_length",
+    "num_splices",
+    "num_annotated_splices",
+    "num_GTAG_splices",
+    "num_GCAG_splices",
+    "num_ATAC_splices",
+    "num_noncanonical_splices",
+    "pct_multimapped",
+    "pct_multimapped_toomany",
+    "pct_unmapped_mismatches",
+    "pct_unmapped_tooshort",
+    "pct_unmapped_other",
+    "pct_chimeric",
+]
+MAPPED_COLUMNS = ["pct_chrX", "pct_chrY", "pct_chrM", "pct_chrAuto", "pct_contig"]
+RNA_COLUMNS = [
+    "pct_coding",
+    "pct_utr",
+    "pct_intronic",
+    "pct_intergenic",
+    "pct_mrna",
+    "median_5_3_bias",
+]
 
-    dirname = "multiQC_prealign_report"
-    filename = "multiqc_data/multiqc_general_stats.txt"
-    pa_dirname = "multiQC_postalign_report"
-    star_report = "multiqc_data/multiqc_star.txt"
-    mqc_gen_report = "multiqc_data/multiqc_general_stats.txt"
-    rna_metrics_report = "multiqc_data/multiqc_picard_RnaSeqMetrics.txt"
-    print("Success reading input reports")
 
-    mqc_raw = os.path.join(dirname, filename)
-    mqc_star = os.path.join(pa_dirname, star_report)
-    mqc_gen = os.path.join(pa_dirname, mqc_gen_report)
-    mqc_rna_metrics = os.path.join(pa_dirname, rna_metrics_report)
-    print("Success creating paths")
+def read_text(path):
+    text = path.read_text(encoding="utf-8")
+    if not text:
+        raise ValueError("input report is empty: {}".format(path))
+    return text
 
-    df_raw = pd.read_csv(mqc_raw, sep="\t", header=0)
-    df_star = pd.read_csv(mqc_star, sep="\t", header=0)
-    df_pa = pd.read_csv(mqc_gen, sep="\t", header=0)
-    df_star_log = pd.read_csv(args.star_log, index_col=0, sep="\t")
-    df_rna_metrics = pd.read_csv(mqc_rna_metrics, sep="\t", header=0)
-    df_cutadapt = pd.read_csv(args.cutadapt_report, sep="\t", header=0)
 
-    if args.umi_report:
-        df_umi = pd.read_csv(args.umi_report, sep="\t", header=0)
-    else:
-        df_umi = None
+def number(value, label, percent=False):
+    text = str(value).strip().replace(",", "")
+    if text.endswith("%"):
+        text = text[:-1]
+    try:
+        result = Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError("{} is not numeric: {!r}".format(label, value)) from exc
+    if not result.is_finite() or result < 0:
+        raise ValueError("{} must be finite and nonnegative".format(label))
+    if percent and result > 100:
+        raise ValueError("{} is outside 0-100".format(label))
+    return result
 
-    df_globin = pd.read_csv(args.globin_report, sep="\t", header=0)
-    df_r_rna = pd.read_csv(args.rRNA_report, sep="\t", header=0)
-    df_phix = pd.read_csv(args.phix_report, sep="\t", header=0)
-    df_mapped = pd.read_csv(args.mapped_report, sep="\t", header=0)
 
-    df_globin["pct_globin"] = df_globin["pct_globin"].str.replace("%", "")
-    df_r_rna["pct_rRNA"] = df_r_rna["pct_rRNA"].str.replace("%", "")
-    df_phix["pct_phix"] = df_phix["pct_phix"].str.replace("%", "")
-    print("Success creating data frames")
+def integer(value, label):
+    result = number(value, label)
+    if result != result.to_integral_value():
+        raise ValueError("{} is not an integer".format(label))
+    return int(result)
 
-    # %trimmed_bases
-    percent_trimmed_bases = df_raw["Cutadapt_mqc-generalstats-cutadapt-percent_trimmed"][0].round(3)
 
-    # %Adapter detected
-    pct_adapter_detected = df_cutadapt["pct_adapter_detected"][0]
+def rendered(value, places=None):
+    if not isinstance(value, Decimal):
+        value = Decimal(value)
+    if places is not None:
+        value = value.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_EVEN)
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text if text and text != "-0" else "0"
 
-    # get mean raw read count
-    reads_raw = (
-        df_raw["FastQC_mqc-generalstats-fastqc-total_sequences"][1]
-        + df_raw["FastQC_mqc-generalstats-fastqc-total_sequences"][2]
-    ) / 2
 
-    # Below expression extracts the sample_name by splitting the first value in the
-    # Sample column by _R1.fastq.gz or _R2.fastq.gz
-    sample_name = re.split("_R[1,2]", (df_raw["Sample"][0]))[0]
+def single_match(pattern, text, label):
+    matches = re.findall(pattern, text, flags=re.MULTILINE)
+    if len(matches) != 1:
+        raise ValueError("expected one {} value; found {}".format(label, len(matches)))
+    return matches[0]
 
-    # get read counts after trimming (reads)
-    reads_trim = (
-        df_raw["FastQC_mqc-generalstats-fastqc-total_sequences"][3]
-        + df_raw["FastQC_mqc-generalstats-fastqc-total_sequences"][4]
-    ) / 2
 
-    # get GC content of the trimmed reads (%GC)
-    gc = (
-        df_raw["FastQC_mqc-generalstats-fastqc-percent_gc"][3]
-        + df_raw["FastQC_mqc-generalstats-fastqc-percent_gc"][4]
-    ) / 2
-
-    # %dup_sequence
-    dup_seq = (
-        (
-            df_raw["FastQC_mqc-generalstats-fastqc-percent_duplicates"][3]
-            + df_raw["FastQC_mqc-generalstats-fastqc-percent_duplicates"][4]
-        )
-        / 2
-    ).round(3)
-
-    # %trimmed
-    perc_trimmed = (((reads_raw - reads_trim) / reads_raw) * 100).round(3)
-
-    # %rRNA
-    perc_r_rna = df_r_rna["pct_rRNA"][0]
-
-    # %globin
-    perc_globin = df_globin["pct_globin"][0]
-
-    # %phix
-    perc_phix = df_phix["pct_phix"][0]
-
-    # %picard_dup
-    perc_picard_dup = (
-        (df_pa["Picard_mqc-generalstats-picard-PERCENT_DUPLICATION"][0]) * 100
-    ).round(3)
-
-    if df_umi is not None:
-        # UMI dup percent
-        pct_umi_dup = df_umi["pct_umi_dup"][0]
-
-    # % chimeric reads
-    d = df_star_log.to_dict()
-    perc_chimeric_reads = d[list(d.keys())[0]][
-        "                            % of chimeric reads |"
-    ].strip("%")
-
-    data1 = {
-        "Sample": [sample_name],
-        "reads_raw": [reads_raw],
-        "pct_adapter_detected": [pct_adapter_detected],
-        "pct_trimmed": [perc_trimmed],
-        "pct_trimmed_bases": [percent_trimmed_bases],
-        "reads": [reads_trim],
-        "pct_GC": [gc],
-        "pct_dup_sequence": [dup_seq],
-        "pct_rRNA": [perc_r_rna],
-        "pct_globin": [perc_globin],
-        "pct_phix": [perc_phix],
-        "pct_picard_dup": [perc_picard_dup],
+def parse_fastqc_data(data, source):
+    text = data.decode("utf-8")
+    fields = {}
+    for line in text.splitlines():
+        if line.startswith(("Filename\t", "Total Sequences\t", "%GC\t")):
+            key, value = line.split("\t", 1)
+            if key in fields:
+                raise ValueError("duplicate FastQC {} in {}".format(key, source))
+            fields[key] = value
+    for key in ("Filename", "Total Sequences", "%GC"):
+        if key not in fields:
+            raise ValueError("FastQC {} lacks {}".format(source, key))
+    deduplicated = number(
+        single_match(
+            r"^#Total Deduplicated Percentage\t([^\t]+)$",
+            text,
+            "FastQC deduplicated percentage",
+        ),
+        "FastQC deduplicated percentage",
+        percent=True,
+    )
+    return {
+        "filename": fields["Filename"],
+        "reads": integer(fields["Total Sequences"], "FastQC total sequences"),
+        "gc": number(fields["%GC"], "FastQC GC", percent=True),
+        "duplicates": Decimal(100) - deduplicated,
     }
 
-    if df_umi is not None:
-        data1["pct_umi_dup"] = [pct_umi_dup]
 
-    df1 = pd.DataFrame(data1)
-    df1["Sample"] = df1.Sample.astype("str")
-    print("df_prealign")
-    print(df1)
-    print("Success")
+def parse_fastqc_archive(path, expected_filenames):
+    reports = {}
+    with tarfile.open(str(path), "r:gz") as archive:
+        members = [
+            member
+            for member in archive.getmembers()
+            if member.isfile() and member.name.endswith("_fastqc.zip")
+        ]
+        if len(members) != 2:
+            raise ValueError("{} must contain two FastQC ZIP reports".format(path))
+        for member in members:
+            extracted = archive.extractfile(member)
+            if extracted is None:
+                raise ValueError("could not read {} from {}".format(member.name, path))
+            with zipfile.ZipFile(io.BytesIO(extracted.read())) as zipped:
+                candidates = [
+                    name for name in zipped.namelist() if name.endswith("/fastqc_data.txt")
+                ]
+                if len(candidates) != 1:
+                    raise ValueError("{} lacks one fastqc_data.txt".format(member.name))
+                report = parse_fastqc_data(zipped.read(candidates[0]), member.name)
+            filename = report["filename"]
+            if filename in reports:
+                raise ValueError("duplicate FastQC filename: {}".format(filename))
+            reports[filename] = report
+    if set(reports) != set(expected_filenames):
+        raise ValueError(
+            "FastQC filenames {} differ from expected {}".format(
+                sorted(reports), sorted(expected_filenames)
+            )
+        )
+    return reports
 
-    df_star = df_star.drop(
-        [
-            "insertion_length",
-            "deletion_length",
-            "deletion_rate",
-            "mismatch_rate",
-            "multimapped_toomany",
-            "unmapped_mismatches",
-            "unmapped_other",
-            "insertion_rate",
-            "multimapped",
-            "unmapped_tooshort",
-            "total_reads",
-        ],
-        axis=1,
+
+def parse_cutadapt(path):
+    text = read_text(path)
+    patterns = {
+        "pairs_in": r"^Total read pairs processed:\s+([0-9,]+)\s*$",
+        "r1_adapter_pct": r"^\s*Read 1 with adapter:\s+[0-9,]+\s+\(([0-9.]+)%\)\s*$",
+        "r2_adapter_pct": r"^\s*Read 2 with adapter:\s+[0-9,]+\s+\(([0-9.]+)%\)\s*$",
+        "pairs_out": r"^Pairs written \(passing filters\):\s+([0-9,]+)\s+\([^\n]+\)\s*$",
+        "bases_in": r"^Total basepairs processed:\s+([0-9,]+)\s+bp\s*$",
+        "bases_out": r"^Total written \(filtered\):\s+([0-9,]+)\s+bp(?:\s+\([^\n]+\))?\s*$",
+    }
+    result = {}
+    for key, pattern in patterns.items():
+        raw = single_match(pattern, text, "Cutadapt {}".format(key))
+        result[key] = (
+            number(raw, "Cutadapt {}".format(key), percent=True)
+            if key.endswith("_pct")
+            else integer(raw, "Cutadapt {}".format(key))
+        )
+    if result["pairs_out"] > result["pairs_in"] or result["bases_out"] > result["bases_in"]:
+        raise ValueError("Cutadapt output counts exceed input counts")
+    return result
+
+
+def single_row(path, delimiter="\t"):
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        rows = list(reader)
+    if reader.fieldnames is None or len(rows) != 1 or None in rows[0]:
+        raise ValueError("{} must contain one complete data row".format(path))
+    if len(reader.fieldnames) != len(set(reader.fieldnames)):
+        raise ValueError("{} has duplicate columns".format(path))
+    if any(rows[0].get(name) in (None, "") for name in reader.fieldnames):
+        raise ValueError("{} has missing values".format(path))
+    return rows[0]
+
+
+def sample_percentage(path, sample, metric):
+    row = single_row(path)
+    if row.get("Sample") != sample or metric not in row:
+        raise ValueError("{} does not identify {} with {}".format(path, sample, metric))
+    number(row[metric], metric, percent=True)
+    return row[metric].strip().rstrip("%")
+
+
+def parse_star(path):
+    values = {}
+    for line in read_text(path).splitlines():
+        if "|" not in line:
+            continue
+        key, value = (part.strip() for part in line.split("|", 1))
+        if not key or key in values:
+            raise ValueError("STAR log has an empty or duplicate field")
+        values[key] = value
+    return values
+
+
+def required(mapping, key, source):
+    if mapping.get(key, "") == "":
+        raise ValueError("{} lacks {}".format(source, key))
+    return mapping[key]
+
+
+def parse_picard(path, metrics_class):
+    lines = read_text(path).splitlines()
+    marker = "## METRICS CLASS\t{}".format(metrics_class)
+    positions = [index for index, line in enumerate(lines) if line == marker]
+    if len(positions) != 1:
+        raise ValueError("{} lacks one {} section".format(path, metrics_class))
+    records = []
+    for line in lines[positions[0] + 1 :]:
+        if not line:
+            if records:
+                break
+            continue
+        if line.startswith("#"):
+            if records:
+                break
+            continue
+        records.append(line)
+    if len(records) != 2:
+        raise ValueError("{} must contain one {} row".format(path, metrics_class))
+    header, values = records[0].split("\t"), records[1].split("\t")
+    if len(header) != len(set(header)) or len(values) != len(header):
+        raise ValueError("malformed Picard metrics: {}".format(path))
+    return dict(zip(header, values))
+
+
+def fraction_percent(metrics, key, source):
+    value = number(required(metrics, key, source), "{} {}".format(source, key))
+    if value > 1:
+        raise ValueError("{} {} is outside 0-1".format(source, key))
+    return value * 100
+
+
+def collect(args):
+    cutadapt = parse_cutadapt(args.cutadapt_report)
+    reads_raw, reads = cutadapt["pairs_in"], cutadapt["pairs_out"]
+    if reads_raw == 0:
+        raise ValueError("raw read-pair count is zero")
+    if cutadapt["bases_in"] == 0:
+        raise ValueError("Cutadapt input base count is zero")
+
+    pre_reports = None
+    if args.fastqc_pretrim is not None:
+        pre = parse_fastqc_archive(
+            args.fastqc_pretrim, (args.pretrim_r1_filename, args.pretrim_r2_filename)
+        )
+        pre_reports = [pre[args.pretrim_r1_filename], pre[args.pretrim_r2_filename]]
+        if pre_reports[0]["reads"] != pre_reports[1]["reads"]:
+            raise ValueError("pre-trim FastQC mate counts disagree")
+        if pre_reports[0]["reads"] != reads_raw:
+            raise ValueError("Cutadapt and pre-trim FastQC read counts disagree")
+
+    post_reports = None
+    if args.fastqc_posttrim is not None:
+        post = parse_fastqc_archive(
+            args.fastqc_posttrim,
+            (args.posttrim_r1_filename, args.posttrim_r2_filename),
+        )
+        post_reports = [post[args.posttrim_r1_filename], post[args.posttrim_r2_filename]]
+        if post_reports[0]["reads"] != post_reports[1]["reads"]:
+            raise ValueError("post-trim FastQC mate counts disagree")
+        if post_reports[0]["reads"] != reads:
+            raise ValueError("Cutadapt and post-trim FastQC read counts disagree")
+
+    star = parse_star(args.star_log)
+    if integer(required(star, "Number of input reads", "STAR"), "STAR input reads") != reads:
+        raise ValueError("STAR and Cutadapt read counts disagree")
+    markdup = (
+        parse_picard(args.markduplicates_metrics, "picard.sam.DuplicationMetrics")
+        if args.markduplicates_metrics is not None
+        else None
     )
-    df_star = df_star.reindex(
-        [
-            "Sample",
-            "avg_input_read_length",
-            "uniquely_mapped",
-            "uniquely_mapped_percent",
-            "avg_mapped_read_length",
-            "num_splices",
-            "num_annotated_splices",
-            "num_GTAG_splices",
-            "num_GCAG_splices",
-            "num_ATAC_splices",
-            "num_noncanonical_splices",
-            "multimapped_percent",
-            "multimapped_toomany_percent",
-            "unmapped_mismatches_percent",
-            "unmapped_tooshort_percent",
-            "unmapped_other_percent",
-        ],
-        axis=1,
+    rna = (
+        parse_picard(args.rnaseq_metrics, "picard.analysis.RnaSeqMetrics")
+        if args.rnaseq_metrics is not None
+        else None
     )
-    df_star.rename(
-        columns={
-            "Sample": "sample",
-            "uniquely_mapped_percent": "pct_uniquely_mapped",
-            "multimapped_percent": "pct_multimapped",
-            "multimapped_toomany_percent": "pct_multimapped_toomany",
-            "unmapped_mismatches_percent": "pct_unmapped_mismatches",
-            "unmapped_tooshort_percent": "pct_unmapped_tooshort",
-            "unmapped_other_percent": "pct_unmapped_other",
-        },
-        inplace=True,
+    mapped = single_row(args.mapped_report) if args.mapped_report is not None else None
+    if mapped is not None and mapped.get("Sample") != args.sample:
+        raise ValueError("mapped report sample differs from authoritative sample")
+
+    row = {
+        "sample": args.sample,
+        "reads_raw": str(reads_raw),
+        "pct_adapter_detected": rendered(
+            (cutadapt["r1_adapter_pct"] + cutadapt["r2_adapter_pct"]) / 2, 3
+        ),
+        "pct_trimmed": rendered(Decimal(reads_raw - reads) / Decimal(reads_raw) * 100, 3),
+        "pct_trimmed_bases": rendered(
+            Decimal(cutadapt["bases_in"] - cutadapt["bases_out"])
+            / Decimal(cutadapt["bases_in"])
+            * 100,
+            3,
+        ),
+        "reads": str(reads),
+        "pct_GC": (
+            rendered((post_reports[0]["gc"] + post_reports[1]["gc"]) / 2, 3)
+            if post_reports is not None
+            else ""
+        ),
+        "pct_dup_sequence": (
+            rendered(
+                (post_reports[0]["duplicates"] + post_reports[1]["duplicates"]) / 2,
+                3,
+            )
+            if post_reports is not None
+            else ""
+        ),
+        "pct_rRNA": (
+            sample_percentage(args.rrna_report, args.sample, "pct_rRNA")
+            if args.rrna_report is not None
+            else ""
+        ),
+        "pct_globin": (
+            sample_percentage(args.globin_report, args.sample, "pct_globin")
+            if args.globin_report is not None
+            else ""
+        ),
+        "pct_phix": (
+            sample_percentage(args.phix_report, args.sample, "pct_phix")
+            if args.phix_report is not None
+            else ""
+        ),
+        "pct_picard_dup": (
+            rendered(
+                fraction_percent(
+                    markdup,
+                    "PERCENT_DUPLICATION",
+                    str(args.markduplicates_metrics),
+                ),
+                3,
+            )
+            if markdup is not None
+            else ""
+        ),
+    }
+    row["pct_umi_dup"] = (
+        sample_percentage(args.umi_report, args.sample, "pct_umi_dup")
+        if args.umi_report is not None
+        else ""
     )
 
-    # Adding pct_chimeric column to the star data frame
-    df_star = df_star.assign(pct_chimeric=[perc_chimeric_reads])
-    print(df_star)
+    star_fields = {
+        "avg_input_read_length": ("Average input read length", False, False),
+        "uniquely_mapped": ("Uniquely mapped reads number", False, True),
+        "pct_uniquely_mapped": ("Uniquely mapped reads %", True, False),
+        "avg_mapped_read_length": ("Average mapped length", False, False),
+        "num_splices": ("Number of splices: Total", False, True),
+        "num_annotated_splices": ("Number of splices: Annotated (sjdb)", False, True),
+        "num_GTAG_splices": ("Number of splices: GT/AG", False, True),
+        "num_GCAG_splices": ("Number of splices: GC/AG", False, True),
+        "num_ATAC_splices": ("Number of splices: AT/AC", False, True),
+        "num_noncanonical_splices": ("Number of splices: Non-canonical", False, True),
+        "pct_multimapped": ("% of reads mapped to multiple loci", True, False),
+        "pct_multimapped_toomany": ("% of reads mapped to too many loci", True, False),
+        "pct_unmapped_mismatches": ("% of reads unmapped: too many mismatches", True, False),
+        "pct_unmapped_tooshort": ("% of reads unmapped: too short", True, False),
+        "pct_unmapped_other": ("% of reads unmapped: other", True, False),
+    }
+    for output_name, (source_name, percent, integral) in star_fields.items():
+        raw = required(star, source_name, "STAR")
+        if integral:
+            integer(raw, "STAR {}".format(source_name))
+        else:
+            number(raw, "STAR {}".format(source_name), percent=percent)
+        row[output_name] = raw.rstrip("%")
+    # STAR chimeric detection is disabled, so its reported zero is unavailable data.
+    row["pct_chimeric"] = ""
 
-    # Modifying rnaseqmetrics data frame column names
-    df_rna_metrics = df_rna_metrics.loc[
-        :,
-        [
-            "Sample",
-            "PCT_CODING_BASES",
-            "PCT_MRNA_BASES",
-            "PCT_INTRONIC_BASES",
-            "MEDIAN_5PRIME_TO_3PRIME_BIAS",
-            "PCT_INTERGENIC_BASES",
-            "PCT_UTR_BASES",
-        ],
-    ]
-    df_rna_metrics = df_rna_metrics.reindex(
-        [
-            "Sample",
-            "PCT_CODING_BASES",
-            "PCT_UTR_BASES",
-            "PCT_INTRONIC_BASES",
-            "PCT_INTERGENIC_BASES",
-            "PCT_MRNA_BASES",
-            "MEDIAN_5PRIME_TO_3PRIME_BIAS",
-        ],
-        axis=1,
+    mapped_places = {"pct_chrX": 3, "pct_chrY": 5, "pct_chrM": 3, "pct_chrAuto": 3, "pct_contig": 3}
+    for name, places in mapped_places.items():
+        row[name] = (
+            rendered(number(required(mapped, name, "mapped"), name, percent=True), places)
+            if mapped is not None
+            else ""
+        )
+
+    rna_fields = {
+        "pct_coding": "PCT_CODING_BASES",
+        "pct_utr": "PCT_UTR_BASES",
+        "pct_intronic": "PCT_INTRONIC_BASES",
+        "pct_intergenic": "PCT_INTERGENIC_BASES",
+        "pct_mrna": "PCT_MRNA_BASES",
+    }
+    for output_name, source_name in rna_fields.items():
+        row[output_name] = (
+            rendered(fraction_percent(rna, source_name, str(args.rnaseq_metrics)), 3)
+            if rna is not None
+            else ""
+        )
+    row["median_5_3_bias"] = (
+        rendered(
+            number(
+                required(rna, "MEDIAN_5PRIME_TO_3PRIME_BIAS", "RNA metrics"),
+                "median bias",
+            ),
+            3,
+        )
+        if rna is not None
+        else ""
     )
-    df_rna_metrics.columns = [x.strip().replace("_BASES", "") for x in df_rna_metrics.columns]
-    df_rna_metrics.rename(columns={"MEDIAN_5PRIME_TO_3PRIME_BIAS": "median_5_3_bias"}, inplace=True)
-    df_rna_metrics.columns = df_rna_metrics.columns.str.lower()
-    print(df_rna_metrics)
 
-    df_mapped.rename(columns={"Sample": "sample"}, inplace=True)
-    df1.rename(columns={"Sample": "sample"}, inplace=True)
+    columns = BASE_COLUMNS + ["pct_umi_dup"] + STAR_COLUMNS + MAPPED_COLUMNS + RNA_COLUMNS
+    if list(row) != columns:
+        raise AssertionError("QC fields do not match the published column contract")
+    return columns, row
 
-    df1 = df1.round(3)
-    df_star = df_star.round(3)
-    df_rna_metrics = df_rna_metrics.round(3)
-    print(df_rna_metrics)
-    df_mapped = df_mapped.round(
-        {"pct_chrX": 3, "pct_chrY": 5, "pct_chrM": 3, "pct_chrAuto": 3, "pct_contig": 3}
-    )
-    # Merging data frames
-    dfs = [df1, df_star, df_mapped, df_rna_metrics]
 
-    def rename_sample_df(df: pd.DataFrame):
-        df["sample"] = df["sample"].astype(str)
-        df["sample"] = df["sample"].apply(lambda x: re.sub(r"(_R[1,2])$", "", x))
-        return df
+def make_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sample", required=True)
+    parser.add_argument("--fastqc-pretrim", type=Path)
+    parser.add_argument("--fastqc-posttrim", type=Path)
+    parser.add_argument("--pretrim-r1-filename", required=True)
+    parser.add_argument("--pretrim-r2-filename", required=True)
+    parser.add_argument("--posttrim-r1-filename", required=True)
+    parser.add_argument("--posttrim-r2-filename", required=True)
+    parser.add_argument("--cutadapt-report", type=Path, required=True)
+    parser.add_argument("--mapped-report", type=Path)
+    parser.add_argument("--rrna-report", type=Path)
+    parser.add_argument("--globin-report", type=Path)
+    parser.add_argument("--phix-report", type=Path)
+    parser.add_argument("--star-log", type=Path, required=True)
+    parser.add_argument("--markduplicates-metrics", type=Path)
+    parser.add_argument("--rnaseq-metrics", type=Path)
+    parser.add_argument("--umi-report", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    return parser
 
-    new_dfs = map(lambda x: rename_sample_df(x), dfs)
-    df_final = reduce(lambda left, right: pd.merge(left, right, on="sample"), new_dfs)
 
-    print(df_final["sample"].dtype)
-    print("Merging successful")
-    print(df_final)
-    print(df_final["sample"][0])
-
-    name = f"{args.sample.strip()}_qc_info.csv"
-
-    # Writing qc_report to a csv file
-    df_final.to_csv(name, sep=",", index=False)
+def main(argv=None):
+    args = make_parser().parse_args(argv)
+    columns, row = collect(args)
+    with args.output.open("x", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
+        writer.writeheader()
+        writer.writerow(row)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

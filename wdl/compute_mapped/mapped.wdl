@@ -74,15 +74,32 @@ task samtools_mapped {
         ' > ~{SID}_aligned_chr_info.txt
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Extracting reports, info ---"
-        Total=$(awk '{sum+=$3}END{print sum}' ~{SID}_aligned_chr_info.txt)
-        grep "chrX" ~{SID}_aligned_chr_info.txt|awk -v tot="$Total"  -v name=~{SID} '{print "Sample""\t""pct_chrX""\n"name"\t"($3/tot)*100}' >chrX.txt
-        grep "chrY" ~{SID}_aligned_chr_info.txt|awk -v tot="$Total" '{print "pct_chrY""\n"($3/tot)*100}' >chrY.txt
-        grep "chrM" ~{SID}_aligned_chr_info.txt|awk -v tot="$Total" '{print "pct_chrM""\n"($3/tot)*100}' >chrM.txt
-        grep "chr" ~{SID}_aligned_chr_info.txt|grep -v "chrX\|chrY\|chrM" |awk -v tot="$Total" '{sum+=$3}END{print "pct_chrAuto""\n"(sum/tot)*100}' >chrAuto.txt
-        grep -v "chr\|^*" ~{SID}_aligned_chr_info.txt|awk -v tot="$Total" '{sum+=$3}END{print "pct_contig""\n"(sum/tot)*100}' >contig.txt
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Consolidating intermediate files ---"
-        paste chrX.txt chrY.txt chrM.txt chrAuto.txt contig.txt >"~{SID}_mapped_report.txt"
+        awk -v name=~{SID} '
+            BEGIN { FS = OFS = "\t" }
+            $1 != "*" {
+                count = $3 + 0
+                total += count
+                if ($1 == "chrX") {
+                    chr_x += count
+                } else if ($1 == "chrY") {
+                    chr_y += count
+                } else if ($1 == "chrM") {
+                    chr_m += count
+                } else if ($1 ~ /^chr[0-9]+$/) {
+                    chr_auto += count
+                } else {
+                    contig += count
+                }
+            }
+            END {
+                if (total == 0) {
+                    print "no mapped primary alignments" > "/dev/stderr"
+                    exit 2
+                }
+                print "Sample", "pct_chrX", "pct_chrY", "pct_chrM", "pct_chrAuto", "pct_contig"
+                print name, chr_x / total * 100, chr_y / total * 100, chr_m / total * 100, chr_auto / total * 100, contig / total * 100
+            }
+        ' ~{SID}_aligned_chr_info.txt > "~{SID}_mapped_report.txt"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Task complete ---"
     >>>

@@ -6,6 +6,27 @@ from pathlib import Path
 
 
 SUFFIX = "_qc_info.csv"
+OPTIONAL_QC_COLUMNS = {
+    "pct_GC",
+    "pct_dup_sequence",
+    "pct_rRNA",
+    "pct_globin",
+    "pct_phix",
+    "pct_picard_dup",
+    "pct_umi_dup",
+    "pct_chimeric",
+    "pct_chrX",
+    "pct_chrY",
+    "pct_chrM",
+    "pct_chrAuto",
+    "pct_contig",
+    "pct_coding",
+    "pct_utr",
+    "pct_intronic",
+    "pct_intergenic",
+    "pct_mrna",
+    "median_5_3_bias",
+}
 
 
 def sample_order(path):
@@ -44,7 +65,9 @@ def read_row(path):
     if len(reader.fieldnames) != len(set(reader.fieldnames)) or "sample" not in reader.fieldnames:
         raise ValueError("QC report has invalid columns: {}".format(path))
     if None in rows[0] or any(
-        rows[0].get(name) in (None, "") for name in reader.fieldnames
+        rows[0].get(name) in (None, "")
+        for name in reader.fieldnames
+        if name not in OPTIONAL_QC_COLUMNS
     ):
         raise ValueError("QC report has missing values: {}".format(path))
     return reader.fieldnames, rows[0]

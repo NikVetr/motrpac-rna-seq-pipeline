@@ -2,48 +2,54 @@ version 1.0
 
 task rnaseqQC {
     input {
-        Array[File] multiQCReports
+        String SID
+        File? fastqc_pretrim
+        File? fastqc_posttrim
+        String pretrim_r1_filename
+        String pretrim_r2_filename
+        String posttrim_r1_filename
+        String posttrim_r2_filename
+        File cutadapt_report
+        File? mapped_report
+        File? rRNA_report
+        File? globin_report
+        File? phix_report
+        File star_log
+        File? markduplicates_metrics
+        File? rnaseq_metrics
+        File? umi_report
+
         Int memory
         Int disk_space
         Int ncpu
         Int preemptible
         String docker
-
-        File trim_summary
-        File mapped_report
-        File rRNA_report
-        File globin_report
-        File phix_report
-        File star_log
-        File? umi_report
-        String SID
     }
 
     command <<<
-        set -eou pipefail
-        echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, unzipping files ---"
-        for FILE in ~{sep=' ' multiQCReports}  ; do
-            echo "--- $(date "+[%b %d %H:%M:%S]") Unzipping $FILE ---"
-            tar -zxvf $FILE
-            rm $FILE
-        done
+        set -euo pipefail
+        echo "--- $(date "+[%b %d %H:%M:%S]") Collecting native RNA-seq QC reports ---"
 
-        echo "--- $(date "+[%b %d %H:%M:%S]") Running rnaseq_qc.py script ---"
         python3 /usr/local/src/rnaseq_qc.py \
-            --sample ~{SID} \
-            --multiqc_prealign multiQC_prealign_report \
-            --multiqc_postalign multiQC_postalign_report \
-            --cutadapt_report ~{trim_summary} \
-            --mapped_report ~{mapped_report} \
-            --rRNA_report ~{rRNA_report} \
-            --globin_report ~{globin_report} \
-            --phix_report ~{phix_report} \
-            --star_log ~{star_log} \
-            ~{"--umi_report " + umi_report}
+            --sample "~{SID}" \
+            ~{"--fastqc-pretrim \"" + fastqc_pretrim + "\""} \
+            ~{"--fastqc-posttrim \"" + fastqc_posttrim + "\""} \
+            --pretrim-r1-filename "~{pretrim_r1_filename}" \
+            --pretrim-r2-filename "~{pretrim_r2_filename}" \
+            --posttrim-r1-filename "~{posttrim_r1_filename}" \
+            --posttrim-r2-filename "~{posttrim_r2_filename}" \
+            --cutadapt-report "~{cutadapt_report}" \
+            ~{"--mapped-report \"" + mapped_report + "\""} \
+            ~{"--rrna-report \"" + rRNA_report + "\""} \
+            ~{"--globin-report \"" + globin_report + "\""} \
+            ~{"--phix-report \"" + phix_report + "\""} \
+            --star-log "~{star_log}" \
+            ~{"--markduplicates-metrics \"" + markduplicates_metrics + "\""} \
+            ~{"--rnaseq-metrics \"" + rnaseq_metrics + "\""} \
+            ~{"--umi-report \"" + umi_report + "\""} \
+            --output "~{SID}_qc_info.csv"
 
-        touch ~{SID}_qc_info.csv
-
-        echo "--- $(date "+[%b %d %H:%M:%S]") Finished running script, task complete ---"
+        echo "--- $(date "+[%b %d %H:%M:%S]") Finished native RNA-seq QC collection ---"
     >>>
 
     output {
@@ -62,26 +68,19 @@ task rnaseqQC {
         SID: {
             type: "id"
         }
-        trim_summary: {
-           label: "CutAdapt Trim Summary Report File"
+        fastqc_pretrim: {
+            label: "Pre-trim FastQC archive"
         }
-        mapped_report: {
-           label: "Mapped Reads Report"
-        }
-        rRNA_report: {
-           label: "Bowtie2 rRNA Sequence Mapping Report"
-        }
-        globin_report: {
-           label: "Bowtie2 Globin Sequence Mapping Report"
-        }
-        phix_report: {
-           label: "Bowtie2 Phix Sequence Mapping Report"
+        fastqc_posttrim: {
+            label: "Post-trim FastQC archive"
         }
         umi_report: {
-           label: "UMI Duplicate Rate Detection Report"
+            label: "Optional UMI duplicate-rate report"
         }
-        star_log: {
-           label: "STAR Align Log"
-        }
+    }
+
+    meta {
+        author: "Archana Raja"
+        description: "Collect published QC fields directly from native task reports"
     }
 }

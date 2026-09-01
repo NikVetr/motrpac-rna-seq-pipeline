@@ -166,6 +166,42 @@ class InputJsonGeneratorTests(unittest.TestCase):
             "rnaseq_pipeline.use_umi_molecule_expression", default_document
         )
 
+    def test_qc_toggles_are_default_on_and_only_disabled_values_are_emitted(self) -> None:
+        arguments = (
+            "human",
+            "gencode_v39",
+            "registry.example/rnaseq",
+            "cohort",
+            ["gs://example/sample_R1.fastq.gz"],
+            ["gs://example/sample_R2.fastq.gz"],
+            None,
+            ["sample"],
+        )
+        default_document = generator.make_json_dict(*arguments)
+        toggle_keys = {
+            f"rnaseq_pipeline.{name}"
+            for name in (
+                "run_pretrim_fastqc",
+                "run_posttrim_fastqc",
+                "run_contamination_qc",
+                "run_alignment_qc",
+                "run_umi_qc",
+            )
+        }
+        self.assertTrue(toggle_keys.isdisjoint(default_document))
+
+        selective_document = generator.make_json_dict(
+            *arguments,
+            run_pretrim_fastqc=False,
+            run_contamination_qc=False,
+            run_umi_qc=False,
+        )
+        self.assertFalse(selective_document["rnaseq_pipeline.run_pretrim_fastqc"])
+        self.assertFalse(selective_document["rnaseq_pipeline.run_contamination_qc"])
+        self.assertFalse(selective_document["rnaseq_pipeline.run_umi_qc"])
+        self.assertNotIn("rnaseq_pipeline.run_posttrim_fastqc", selective_document)
+        self.assertNotIn("rnaseq_pipeline.run_alignment_qc", selective_document)
+
     def test_main_checks_mates_before_writing(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"
         r2 = "gs://bucket/sample_R2.fastq.gz"

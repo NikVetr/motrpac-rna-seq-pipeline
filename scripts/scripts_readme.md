@@ -8,9 +8,17 @@ Generates the input configuration file required to run the rna-seq pipeline.
 - Install required packages by running `pip3 install -r scripts/requirements.txt`
 
 ```
-usage: make_json_rnaseq.py [-h] [-g GCP_PATH] [-o OUTPUT_PATH]
-                           [-r OUTPUT_REPORT_NAME] [-u] [-a {rat,human}]
-                           [-n NUM_CHUNKS] [-d DOCKER_REPO] [-p PROJECT]
+usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
+                           -r OUTPUT_REPORT_NAME [-u] -a {rat,human}
+                           -v {rn6,rn7,rn8,gencode_v39,gencode_v47}
+                           -n NUM_CHUNKS [-d DOCKER_REPO]
+                           [--release-manifest RELEASE_MANIFEST] [-i]
+                           [--umi-deduplicated-expression]
+                           [--skip-pretrim-fastqc]
+                           [--skip-posttrim-fastqc]
+                           [--skip-contamination-qc]
+                           [--skip-alignment-qc] [--skip-umi-qc]
+                           [-p PROJECT]
 
 This script is used to generate input json files from the fastq_raw dir on gcp
 for running rna-seq pipeline on GCP
@@ -31,24 +39,51 @@ optional arguments:
                         prefix "Undetermined_" will be removed
   -a {rat,human}, --organism {rat,human}
                         organism name, e.g. rat or human
+  -v VERSION, --version VERSION
+                        genome build or annotation release
   -n NUM_CHUNKS, --num_chunks NUM_CHUNKS
                         number of chunks to split the input files, should
                         always be <= number of input files
   -d DOCKER_REPO, --docker_repo DOCKER_REPO
                         Docker repository prefix containing the images used in
                         the workflow
+  --release-manifest RELEASE_MANIFEST
+                        complete release profile overriding reference and
+                        Docker workflow inputs
+  -i, --index           add matched I1 FASTQs for UMI processing
+  --umi-deduplicated-expression
+                        add directional UMI molecule RSEM and featureCounts
+                        matrices; requires -i
+  --skip-pretrim-fastqc
+                        skip raw-read FastQC
+  --skip-posttrim-fastqc
+                        skip trimmed-read FastQC
+  --skip-contamination-qc
+                        skip globin, rRNA, and PhiX Bowtie2 screens
+  --skip-alignment-qc
+                        skip Picard duplicate/RNA metrics and chromosome
+                        summaries
+  --skip-umi-qc       skip directional UMI QC unless molecule expression
+                        requires grouping
   -p PROJECT, --project PROJECT
                         Project name on the google cloud platform
 
 ```
 
-Example
+The QC options are independent and default to the historical enabled behavior.
+Skipped metrics remain as empty fields in the stable QC matrix. Cutadapt and
+STAR metrics remain available because those core processing tasks always run.
+
+UMI molecule-expression example after the updated helper image is available:
 
 ```
-python3 make_json_rnaseq.py -g gs://motrpac/rna-seq/test \
--o `pwd`/input_json \
+python3 scripts/make_json_rnaseq.py -g gs://motrpac/rna-seq/test \
+-o ./input_json \
 -r rna-seq-test \
--a rat \
+-a human \
+-v gencode_v39 \
 -n 1 \
--d gcr.io/motrpac-portal/motrpac-rna-seq-pipeline
+-d us-docker.pkg.dev/motrpac-portal/rnaseq \
+-i \
+--umi-deduplicated-expression
 ```

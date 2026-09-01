@@ -56,7 +56,8 @@ class MergeResultsTests(unittest.TestCase):
                 writer.writerow(["gene.two", "tx2", "2", "1", values[0], "1.2", "2.3"])
                 writer.writerow(["gene.one", "tx1", "2", "1", values[1], "3.4", "4.5"])
             (self.qc / (sample + "_qc_info.csv")).write_text(
-                "sample,reads,pct_GC\n{},{},52.5\n".format(sample, values[0]),
+                "sample,reads,pct_GC,pct_umi_dup,pct_chimeric\n"
+                "{},{},52.5,,\n".format(sample, values[0]),
                 encoding="utf-8",
             )
 
@@ -109,6 +110,7 @@ class MergeResultsTests(unittest.TestCase):
         with (self.root / "cohort.csv").open(encoding="utf-8", newline="") as handle:
             qc_rows = list(csv.DictReader(handle))
         self.assertEqual(self.samples, [row["sample"] for row in qc_rows])
+        self.assertTrue(all(row["pct_chimeric"] == "" for row in qc_rows))
 
     def test_sample_set_mismatch_fails_loudly(self):
         self.write_fixtures()
@@ -121,6 +123,41 @@ class MergeResultsTests(unittest.TestCase):
             str(self.order),
         )
         self.assertNotEqual(0, result.returncode)
+
+    def test_optional_qc_blanks_merge_but_core_blanks_fail(self):
+        self.write_fixtures()
+        for sample in self.samples:
+            path = self.qc / (sample + "_qc_info.csv")
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(",52.5,,\n", ",,,\n"),
+                encoding="utf-8",
+            )
+        result = self.run_script(
+            "consolidate_qc_report.py",
+            "--qc-dir",
+            str(self.qc),
+            "--sample-order",
+            str(self.order),
+            "--output-name",
+            "optional_blanks.csv",
+        )
+        self.assertEqual(0, result.returncode, result.stderr.decode())
+
+        path = self.qc / "sample.beta_qc_info.csv"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("sample.beta,21,", "sample.beta,,"),
+            encoding="utf-8",
+        )
+        failed = self.run_script(
+            "consolidate_qc_report.py",
+            "--qc-dir",
+            str(self.qc),
+            "--sample-order",
+            str(self.order),
+            "--output-name",
+            "core_blank.csv",
+        )
+        self.assertNotEqual(0, failed.returncode)
 
 
 if __name__ == "__main__":

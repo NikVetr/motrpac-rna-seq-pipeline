@@ -271,6 +271,13 @@ def main(command_args: argparse.Namespace):
     use_umi_molecule_expression = getattr(
         command_args, "umi_molecule_expression", False
     )
+    qc_settings = {
+        "run_pretrim_fastqc": not getattr(command_args, "skip_pretrim_fastqc", False),
+        "run_posttrim_fastqc": not getattr(command_args, "skip_posttrim_fastqc", False),
+        "run_contamination_qc": not getattr(command_args, "skip_contamination_qc", False),
+        "run_alignment_qc": not getattr(command_args, "skip_alignment_qc", False),
+        "run_umi_qc": not getattr(command_args, "skip_umi_qc", False),
+    }
     if use_umi_molecule_expression and not command_args.index:
         raise ValueError(
             "--umi-deduplicated-expression requires --index and matched I1 FASTQs"
@@ -340,6 +347,7 @@ def main(command_args: argparse.Namespace):
                 batch["sample_prefix"],
                 release_inputs=release_inputs,
                 use_umi_molecule_expression=use_umi_molecule_expression,
+                **qc_settings,
             )
         )
 
@@ -370,6 +378,11 @@ def make_json_dict(
     prefix_list=None,
     release_inputs=None,
     use_umi_molecule_expression=False,
+    run_pretrim_fastqc=True,
+    run_posttrim_fastqc=True,
+    run_contamination_qc=True,
+    run_alignment_qc=True,
+    run_umi_qc=True,
 ):
     if r1 is None:
         r1 = []
@@ -460,10 +473,6 @@ def make_json_dict(
         "rnaseq_pipeline.posttrim_fastqc_ncpu": 8,
         "rnaseq_pipeline.posttrim_fastqc_ramGB": 36,
         "rnaseq_pipeline.posttrim_fastqc_disk": 100,
-        "rnaseq_pipeline.multiqc_ncpu": 8,
-        "rnaseq_pipeline.multiqc_ramGB": 20,
-        "rnaseq_pipeline.multiqc_disk": 100,
-        "rnaseq_pipeline.multiqc_docker": f"{docker_repo}/multiqc:latest",
         "rnaseq_pipeline.star_ncpu": 12,
         "rnaseq_pipeline.star_ramGB": 120,
         "rnaseq_pipeline.star_disk": 400,
@@ -501,9 +510,6 @@ def make_json_dict(
         "rnaseq_pipeline.mapped_ramGB": 36,
         "rnaseq_pipeline.mapped_disk": 200,
         "rnaseq_pipeline.samtools_docker": f"{docker_repo}/samtools:latest",
-        "rnaseq_pipeline.mqc_postalign_ncpu": 8,
-        "rnaseq_pipeline.mqc_postalign_ramGB": 36,
-        "rnaseq_pipeline.mqc_postalign_disk": 50,
         "rnaseq_pipeline.collect_qc_ncpu": 8,
         "rnaseq_pipeline.collect_qc_ramGB": 16,
         "rnaseq_pipeline.collect_qc_disk": 100,
@@ -516,6 +522,15 @@ def make_json_dict(
     }
     if use_umi_molecule_expression:
         filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = True
+    for name, enabled in {
+        "run_pretrim_fastqc": run_pretrim_fastqc,
+        "run_posttrim_fastqc": run_posttrim_fastqc,
+        "run_contamination_qc": run_contamination_qc,
+        "run_alignment_qc": run_alignment_qc,
+        "run_umi_qc": run_umi_qc,
+    }.items():
+        if not enabled:
+            filled_dict["rnaseq_pipeline.{}".format(name)] = False
 
     d = {**filled_dict, **organism_references, **(release_inputs or {})}
 
@@ -603,6 +618,36 @@ if __name__ == "__main__":
         "--umi-deduplicated-expression",
         dest="umi_molecule_expression",
         help="add directional UMI molecule RSEM and featureCounts matrices; requires -i",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--skip-pretrim-fastqc",
+        help="skip raw-read FastQC; the QC matrix retains explicit empty fields",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--skip-posttrim-fastqc",
+        help="skip trimmed-read FastQC and leave its QC fields empty",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--skip-contamination-qc",
+        help="skip globin, rRNA, and PhiX Bowtie2 screens",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--skip-alignment-qc",
+        help="skip Picard duplicate/RNA metrics and chromosome summaries",
+        default=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--skip-umi-qc",
+        help="skip directional UMI QC unless molecule expression requires grouping",
         default=False,
         action="store_true",
     )
