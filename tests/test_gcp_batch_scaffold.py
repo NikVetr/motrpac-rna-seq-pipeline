@@ -26,6 +26,9 @@ class GcpBatchScaffoldTests(unittest.TestCase):
             "MOTRPAC_GCP_BATCH_ROOT",
             "MOTRPAC_GCP_BATCH_LOCATION",
             "MOTRPAC_GCP_COMPUTE_SERVICE_ACCOUNT",
+            "cloud-sdk-image-url = \"gcr.io/google.com/cloudsdktool/"
+            "google-cloud-cli@sha256:42e14bcb246ca97a41ac0d1aabc654e38246d31da34596387685f411111c0f49\"",
+            "cloud-sdk-image-size-gb = 1",
             "abort-jobs-on-terminate = true",
             "max-concurrent-workflows = 1",
             "max-workflow-launch-count = 1",
