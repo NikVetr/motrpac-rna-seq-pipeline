@@ -34,11 +34,22 @@ grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91
 validation under OpenJDK 21.
 
-The default human-v47 graph passes a complete local 100k-pair integration
-canary using the published image identifiers and source-matched local helper
-containers. It emits all 12 expected top-level outputs; all eight conventional
-and molecule-level matrices contain 78,932 unique, finite, nonnegative genes
-and are byte-identical to the retained accepted canary matrices. UMI and
-transcriptome-projection denominators reconcile, and the QC output contains the
-stable 40-column schema. Local MiniWDL ignores WDL disk requests, so GCP disk
-selection and current Batch packaging remain separate cloud acceptance gates.
+End-to-end acceptance covers the intended human-v47 default graph, including
+all 17 calls. The retained v39 and rat configurations, no-I1 policy, QC
+switches, and legacy all-read-only mode have focused contract coverage, but
+every cross-product of those alternate settings has not been run as a separate
+integration workflow. The dormant MultiQC path and the exact high-input
+resource vector also remain outside end-to-end acceptance.
+
+The default human-v47 graph passes complete 100k-pair integration canaries both
+locally and through Cromwell 92/GCP Batch. The exact on-demand cloud execution
+completed all 17 calls on their first attempt, emitted all 12 expected
+top-level outputs, stayed within the controller-plus-three-worker cap, and had
+a modeled worker cost of $0.15889. All eight conventional and molecule-level
+matrices contain 78,932 unique, finite, nonnegative genes and are byte-identical
+between local and cloud. The QC CSV, UMI metrics, and contamination manifest
+are also byte-identical; only a temporary compressed-BAM byte-size provenance
+field differs. Cromwell's Cloud SDK helper is pinned to an immutable official
+Python-equipped image. Local MiniWDL ignores WDL disk requests, and the exact
+150-GiB high-input STAR profile has not yet processed a full large sample. The
+dedicated cloud controller is stopped and no Batch worker remains running.
