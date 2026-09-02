@@ -9,7 +9,8 @@ import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/gcp/summarize_workflow_cost.py"
-RATES = REPO_ROOT / "config/backends/gcp/gcp-rates-americas-20260830.json"
+N1_RATES = REPO_ROOT / "config/backends/gcp/gcp-rates-n1-americas-20260830.json"
+N2_RATES = REPO_ROOT / "config/backends/gcp/gcp-rates-americas-20260830.json"
 
 
 class GcpCostSummaryTests(unittest.TestCase):
@@ -17,7 +18,9 @@ class GcpCostSummaryTests(unittest.TestCase):
     def write_json(path: Path, value) -> None:
         path.write_text(json.dumps(value), encoding="utf-8")
 
-    def make_evidence(self, root: Path) -> Path:
+    def make_evidence(
+        self, root: Path, machine_type: str = "custom-2-8192"
+    ) -> Path:
         evidence = root / "evidence"
         (evidence / "batch-jobs").mkdir(parents=True)
         (evidence / "task-streams").mkdir()
@@ -53,7 +56,7 @@ class GcpCostSummaryTests(unittest.TestCase):
                     "deviceName": "local-disk",
                     "newDisk": {"sizeGb": "120", "type": "pd-ssd"},
                 }],
-                "machineType": "n2-custom-2-8192",
+                "machineType": machine_type,
                 "provisioningModel": market,
             }
             status_instance = {
@@ -185,9 +188,69 @@ class GcpCostSummaryTests(unittest.TestCase):
                 summary["totals"]["modeled_worker_cost_usd"]["failed_work"],
             )
             self.assertEqual(
-                hashlib.sha256(RATES.read_bytes()).hexdigest(),
+                "N1 custom",
+                summary["pricing"]["machine_family"],
+            )
+            self.assertIn("actual N1 custom", summary["cost_scope"]["basis"])
+            self.assertEqual(
+                hashlib.sha256(N1_RATES.read_bytes()).hexdigest(),
                 summary["pricing"]["rate_manifest_sha256"],
             )
+
+    def test_supports_explicit_n2_rates(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            evidence = self.make_evidence(root, "n2-custom-2-8192")
+            output = root / "summary.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(evidence),
+                    "--rates",
+                    str(N2_RATES),
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary = json.loads(output.read_text(encoding="utf-8"))
+
+            self.assertEqual("N2 custom", summary["pricing"]["machine_family"])
+            self.assertIn("actual N2 custom", summary["cost_scope"]["basis"])
+            self.assertTrue(
+                all(
+                    attempt["machine_type"] == "n2-custom-2-8192"
+                    for attempt in summary["attempts"]
+                )
+            )
+
+    def test_machine_family_must_match_rate_manifest(self) -> None:
+        cases = (
+            ("N2 with default N1 rates", "n2-custom-2-8192", None, "N1 custom"),
+            ("N1 with N2 rates", "custom-2-8192", N2_RATES, "N2 custom"),
+            ("unsupported N2D", "n2d-custom-2-8192", None, "N1 custom"),
+            ("unpriced extended memory", "custom-2-16384-ext", None, "N1 custom"),
+        )
+        for name, machine_type, rates, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                evidence = self.make_evidence(Path(temporary), machine_type)
+                command = [sys.executable, str(SCRIPT), str(evidence)]
+                if rates is not None:
+                    command.extend(["--rates", str(rates)])
+                result = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(
+                    f"machine type does not match {expected} rate manifest",
+                    result.stderr,
+                )
 
     def test_tampered_evidence_fails_loudly(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

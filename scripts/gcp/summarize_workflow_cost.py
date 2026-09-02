@@ -16,8 +16,13 @@ import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_RATES = REPO_ROOT / "config/backends/gcp/gcp-rates-americas-20260830.json"
-CUSTOM_N2 = re.compile(r"^n2-custom-(\d+)-(\d+)(?:-ext)?$")
+DEFAULT_RATES = (
+    REPO_ROOT / "config/backends/gcp/gcp-rates-n1-americas-20260830.json"
+)
+CUSTOM_MACHINE_TYPES = {
+    "N1 custom": re.compile(r"^custom-(\d+)-(\d+)$"),
+    "N2 custom": re.compile(r"^n2-custom-(\d+)-(\d+)$"),
+}
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 ZERO = Decimal(0)
 HOUR = Decimal(3600)
@@ -145,7 +150,7 @@ def load_rates(path: Path) -> tuple[dict, dict[str, dict[str, Decimal]], dict[st
     if (
         rates.get("schema_version") != 1
         or rates.get("currency") != "USD"
-        or rates.get("machine_family") != "N2 custom"
+        or rates.get("machine_family") not in CUSTOM_MACHINE_TYPES
         or not SHA256.fullmatch(str(source.get("snapshot_sha256", "")))
     ):
         fail("unsupported or unprovenanced GCP rate manifest")
@@ -247,6 +252,7 @@ def summarize_attempt(
     call: str,
     attempt: dict,
     jobs: dict[str, dict],
+    machine_family: str,
     compute_rates: dict[str, dict[str, Decimal]],
     disk_rates: dict[str, Decimal],
 ) -> dict:
@@ -278,9 +284,11 @@ def summarize_attempt(
         job.get("allocationPolicy", {}).get("instances"), "Batch instance policy"
     ).get("policy", {})
     machine = actual.get("machineType")
-    match = CUSTOM_N2.fullmatch(str(machine))
-    if not match or machine != policy.get("machineType"):
-        fail(f"{job_id}: unsupported or inconsistent machine type")
+    match = CUSTOM_MACHINE_TYPES[machine_family].fullmatch(str(machine))
+    if not match:
+        fail(f"{job_id}: machine type does not match {machine_family} rate manifest")
+    if machine != policy.get("machineType"):
+        fail(f"{job_id}: inconsistent actual and requested machine type")
     vcpu = int(match.group(1))
     memory_gib = Decimal(match.group(2)) / Decimal(1024)
     market = actual.get("provisioningModel")
@@ -462,7 +470,13 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
         ):
             attempts.append(
                 summarize_attempt(
-                    evidence, call, attempt, jobs, compute_rates, disk_rates
+                    evidence,
+                    call,
+                    attempt,
+                    jobs,
+                    rates["machine_family"],
+                    compute_rates,
+                    disk_rates,
                 )
             )
     if (
@@ -554,8 +568,8 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
         "attempts": attempts,
         "cost_scope": {
             "basis": (
-                "Actual Batch runDuration, actual N2 custom shape/disks, and "
-                "frozen public list rates."
+                f"Actual Batch runDuration, actual {rates['machine_family']} "
+                "shape/disks, and frozen public list rates."
             ),
             "failed_spot_work_included": True,
             "excluded": [

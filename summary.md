@@ -28,10 +28,13 @@ Complete runtime profiles provide explicit CPU, memory, disk size, and STAR
 disk-class settings for bounded GCP canaries. The GCP support layer includes a
 concurrency guard, read-only preflight, pinned Cromwell Batch configuration,
 resource monitoring, immutable evidence capture, and attempt-aware cost
-summarization. Generated evidence and rendered benchmark reports are analysis
-artifacts and are not part of the production repository.
+summarization. With no `cpuPlatform` override, Cromwell provisions N1 custom
+workers; cost summaries therefore default to a frozen N1 manifest and require
+an explicit family-matched manifest for N2 evidence. Generated evidence and
+rendered benchmark reports are analysis artifacts and are not part of the
+production repository.
 
-The focused 60-test suite covers input validation, release/runtime profiles,
+The focused 62-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91
