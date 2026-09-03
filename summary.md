@@ -53,6 +53,15 @@ cross-product has not been run as a separate integration workflow. The current
 per-sample disk-tier and canonical-output policies require one bounded
 multi-sample production-interface pilot before cohort release.
 
+The current canonical-output graph completed a 100k-pair local canary in 16
+calls with MultiQC enabled. It did not schedule conventional all-read
+featureCounts, RSEM, or gather calls; every optional `all_read_*` output was
+empty. The canonical featureCounts and RSEM count matrices were byte-identical
+to the directional-UMI matrices from the preceding accepted local canary. The
+Cutadapt task reported exactly 99,979 surviving pairs to the STAR sizing
+expression. Local MiniWDL does not provision WDL disks, so the multi-sample GCP
+pilot remains the execution test for the selected cloud disk tiers.
+
 The preceding dual-expression human-v47 graph passes complete 100k-pair
 integration canaries both locally and through Cromwell 92/GCP Batch. The exact
 on-demand cloud execution completed all 17 calls on their first attempt,
