@@ -237,7 +237,9 @@ The manifest selects only those samples from the single GCS prefix passed to
 `--gcp_path`. One JSON contains the full pilot, and each scattered STAR call
 receives its own post-Cutadapt disk tier. After acceptance, reuse the same
 manifest with `--exclude-sample-list` to generate a nonoverlapping remainder.
-Do not combine the two selection flags.
+Write the remainder JSONs to a fresh output directory; the generator refuses to
+mix a new generation with existing `set*_rnaseq.json` files. Do not combine the
+two selection flags.
 
 For the on-demand procedure in this runbook, before submission compare every
 controlled-input generation with the asset
