@@ -22,6 +22,12 @@ three-job concurrency limit. Any unrelated VM started later is conservatively
 counted as new. Batch workers are also identified by Google's `batch-node` and
 `batch-job-id` labels and its `goog-batch-worker` marker.
 
+The supplied backend accepts at most 10 samples in a scatter and 200 task calls
+in its single active workflow. Those are graph-size safeguards, not concurrency
+settings. The separate three-job limit remains the hard worker ceiling; the
+larger graph limits let a 5--10-sample pilot finish instead of rejecting it at
+the original one-sample canary caps.
+
 ## 2. Create the inert controller
 
 Run this command yourself in a second local terminal. It creates one standard,
@@ -138,7 +144,7 @@ gcloud compute instances stop rnaseq-modernization-controller \
   --zone=us-west1-a
 ```
 
-## 6. Select published assets and an explicit runtime profile
+## 6. Select published assets and a runtime floor
 
 The published asset catalog is
 `config/backends/gcp/benchmark-assets-v1.json`. It records the monitoring
@@ -146,35 +152,54 @@ script and the deterministic 100k and 5M paired-input sets with their sizes,
 SHA-256 values, and GCS object generations. The v47 release profile now points
 to checksum-addressed references and digest-addressed images.
 
-Runtime sizing is deliberately explicit; the generator does not infer a
-profile from a filename or compressed byte count:
+Runtime profiles set fixed CPU and memory requests and a minimum STAR scratch
+allocation:
 
-| Profile | Reviewed envelope | STAR CPU/RAM/disk GB/type | RSEM CPU/RAM/disk GB |
+| Profile | Intended use | STAR CPU/RAM/minimum disk GB/type | RSEM CPU/RAM/disk GB |
 | --- | --- | --- | --- |
 | `runtime-human-v47-small-v1.json` | One sample, at most 5M pairs | 10 / 64 / 90 / HDD | 10 / 16 / 30 |
-| `runtime-human-v47-full-lean-v1.json` | Accepted v47 canary and full-sample benchmark envelope | 12 / 72 / 120 / SSD | 10 / 40 / 60 |
-| `runtime-human-v47-high-candidate-v1.json` | Manual candidate derived from one 54.4M-pair, 7.92-GB adipose canary | 12 / 72 / 150 / SSD | 10 / 40 / 60 |
+| `runtime-human-v47-full-lean-v1.json` | Full-depth human v47 samples | 12 / 72 / 120 / SSD | 10 / 40 / 60 |
+| `runtime-human-v47-high-candidate-v1.json` | Conservative fixed 150-GB minimum | 12 / 72 / 150 / SSD | 10 / 40 / 60 |
 
-These are buffered starting points from local and cloud profiling evidence,
-not final cohort-wide recommendations. The lean profile and 120 GB SSD passed
-both the 5M canary and the tested 39.4-million-pair full sample. The generator
-continues to select HDD when `--star-disk-type` is omitted, preserving historical
-behavior; benchmark inputs must pass `--star-disk-type SSD` explicitly. STAR
-retains substantial memory for its fixed index footprint, and Picard
-MarkDuplicates retains 36 GB in the lean profile. Heterogeneous production
-samples are still needed before fitting a size-dependent provisioning rule.
-The high-input candidate retains every lean CPU and memory value and raises
-only STAR scratch. Its 150-GB size is inferred from a 110.63-GiB sampled peak
-on the adipose canary and is projected to leave about 35 GiB free. The exact
-candidate still requires one production-interface canary before broader use.
+After Cutadapt, the workflow reads the exact number of surviving pairs for each
+sample and raises that sample's STAR disk independently:
+
+| Post-trim read pairs | STAR scratch GB |
+| ---: | ---: |
+| at most 5 million | 90 |
+| at most 40 million | 120 |
+| at most 65 million | 150 |
+| at most 90 million | 180 |
+| at most 110 million | 200 |
+| at most 155 million | 250 |
+| at most 200 million | 300 |
+| more than 200 million | 400 |
+
+The effective allocation is the larger of this tier and the profile's
+`star_disk` value. Thus one input JSON may contain heterogeneous samples; the
+operator does not need to generate a separate JSON for each disk tier. The
+120-GB tier is retained for samples of at most 40 million post-trim pairs. Its
+direct storage saving relative to 150 GB is only about $0.005 for a 41-minute
+STAR call at the reviewed `us-west1` SSD rate, so it is useful but not a major
+cost lever.
+
+The lean profile and 120-GB SSD passed the tested 39.4-million-pair full sample
+and the operator-interface canary. A separate 150-GB profile passed the
+48.1-million-pair CLI canary. The tiers add conservative headroom above the
+observed relationship and return to the historical 400-GB allocation above
+200 million pairs. CPU and memory remain fixed because the v47 index establishes
+a large input-independent floor and the current evidence does not support a
+more complicated policy. The generator continues to select HDD when
+`--star-disk-type` is omitted, preserving historical behavior; production v47
+inputs should pass `--star-disk-type SSD`.
 
 The project's `default` VPC uses custom subnet creation. The Batch backend
 therefore pins the `default` network and resolves its `default` subnet in each
-task's worker region; omitting that subnet prevents worker creation. The Batch
-API location does not select the worker region. With no `zones` override, the
-Cromwell default remains `us-central1-b`, matching historical production jobs.
-Workers retain external IP addresses for the public Quay images in this first
-benchmark.
+task's worker region; omitting that subnet prevents worker creation. For the
+next pilot, set both the GCP Batch job location and worker-zone preference to
+`us-west1`; current GCP Batch location rules require the allowed worker zones
+to be in the job's region. Workers retain external IP addresses for the public
+Quay images in this benchmark phase.
 
 ## 7. Generate reviewed canary inputs without submitting them
 
@@ -200,8 +225,19 @@ mkdir -p /tmp/rnaseq-gcp-100k
 
 Use the same command for 5M after changing `100k` to `5m` in both paths,
 changing the report name, and setting `--contamination-qc-pairs 1000000`.
-The full muscle input uses its recorded raw-data prefix and the same lean
-profile and SSD selection.
+For a bounded multi-sample pilot, create a local manifest containing the exact
+FASTQ prefixes, one per line, and add:
+
+```bash
+  --sample-list /path/to/pilot-samples.txt \
+  --num_chunks 1
+```
+
+The manifest selects only those samples from the single GCS prefix passed to
+`--gcp_path`. One JSON contains the full pilot, and each scattered STAR call
+receives its own post-Cutadapt disk tier. After acceptance, reuse the same
+manifest with `--exclude-sample-list` to generate a nonoverlapping remainder.
+Do not combine the two selection flags.
 
 For the on-demand procedure in this runbook, before submission compare every
 controlled-input generation with the asset
@@ -242,7 +278,7 @@ bash scripts/gcp/capture_workflow_evidence.sh \
 jq -e '
   .workflow_status == "Succeeded" and
   .complete == true and
-  .top_level_output_object_count == 14
+  .missing_artifact_count == 0
 ' /path/to/new-evidence-directory/capture-status.json
 python3 scripts/gcp/summarize_workflow_cost.py \
   /path/to/new-evidence-directory \
@@ -260,28 +296,32 @@ ceiling; it never walks an execution root. `evidence-manifest.sha256` covers
 every captured file. The cost summary validates that manifest and rolls
 attempts into the fixed eight scientific pipeline phases as well as Batch
 lifecycle phases. `complete` means that the listed transport evidence was
-captured; the separate command above
-requires the successful one-sample, MultiQC-enabled 14-object output contract.
-The same workflow emits 12 objects when the two optional MultiQC arrays are
-empty. Apply the existing matrix and QC scientific gates before acceptance.
+captured. A multi-sample workflow has a variable output-object count because
+per-sample QC and provenance arrays grow with the scatter. Apply the existing
+matrix and QC scientific gates before acceptance.
 Transfer the completed directory and cost summary before stopping the
 controller.
 
 ## Handoff gate
 
-The authorized next scope is one clean, human-v47, on-demand, full-depth canary
-through the operator's normal interface. Before submission, confirm that the
-interface is using this checked GCP Batch backend and monitoring configuration;
-enable `run_multiqc` for this first compatibility canary. Stop if it still
-targets PAPI or another backend. Name the sample and profile in
-the launch record: use the lean profile only within its tested 39.4-million-pair,
-5.79-GB envelope, or explicitly review the high-input candidate. Disable call
-cache/reference disks and allow at most three Batch workers. Do not release the
-remaining cohort until its outputs, evidence bundle, cost summary, telemetry,
-and worker cleanup have been reviewed.
+The authorized next scope is one clean, human-v47, on-demand pilot of 5--10
+pre-/3.5-hour muscle samples through the operator's normal interface. Select
+paired timepoints spanning the available compressed-input sizes from one
+confirmed GCS prefix, record them in an exact sample manifest, and use the lean
+profile with SSD scratch. Before submission, confirm that the interface uses
+the checked GCP Batch backend and monitoring configuration in `us-west1`; stop
+if it targets PAPI or another backend. Enable MultiQC, disable call
+cache/reference disks, retain the reviewed worker-concurrency limit, and pass
+`--combine-contamination-qc --contamination-qc-pairs 1000000`. Sampled
+contamination QC remains a pilot setting until its estimates have been checked
+against the corresponding historical full-depth results. Do not release the
+remaining cohort until canonical UMI outputs, the default absence of all-read
+outputs, dynamic disk tiers, evidence capture, cost summary, telemetry, and
+worker cleanup have been reviewed. Reuse the pilot manifest as an exclusion
+list for the subsequent cohort input.
 
 General release remains blocked on:
 
-- verification of the real Caper/GUI backend, output ingestion, and monitoring;
+- multi-sample verification of canonical-output ingestion and dynamic sizing;
 - accepted modern image/reference profiles for v39 and rat; and
 - a production Spot-only/market-policy implementation and bounded retry test.

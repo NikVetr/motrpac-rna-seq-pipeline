@@ -3,7 +3,7 @@
 set -uo pipefail
 
 project="${1:-motrpac-portal}"
-batch_location="${2:-us-central1}"
+batch_location="${2:-us-west1}"
 controller_name="${3:-omicspipelines-get}"
 controller_zone="${4:-us-west1-a}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

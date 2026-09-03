@@ -31,8 +31,8 @@ class GcpBatchScaffoldTests(unittest.TestCase):
             "abort-jobs-on-terminate = true",
             "max-concurrent-workflows = 1",
             "max-workflow-launch-count = 1",
-            "max-scatter-width-per-scatter = 1",
-            "total-max-jobs-per-root-workflow = 25",
+            "max-scatter-width-per-scatter = 10",
+            "total-max-jobs-per-root-workflow = 200",
             "concurrent-job-limit = 3",
             "maximum-polling-interval = 60",
             "batch-timeout = 4 hours",
@@ -73,6 +73,10 @@ class GcpBatchScaffoldTests(unittest.TestCase):
         self.assertFalse(options["read_from_cache"])
         self.assertFalse(options["write_to_cache"])
         self.assertFalse(options["use_reference_disks"])
+        self.assertEqual(
+            "us-west1-a us-west1-b us-west1-c",
+            options["default_runtime_attributes"]["zones"],
+        )
         self.assertEqual(
             "gs://omicspipelines-public-resources/rnaseq/monitoring/"
             "sha256-9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f/"
