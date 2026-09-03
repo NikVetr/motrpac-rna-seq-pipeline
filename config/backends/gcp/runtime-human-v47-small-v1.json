@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v47_small_v1",
-  "description": "Explicit benchmark starting profile for one human GENCODE v47 sample with at most 5 million read pairs; selection is manual and the input envelope is not enforced by the generator.",
+  "description": "Explicit benchmark profile for one human GENCODE v47 sample with at most 5 million read pairs. Its 90-GB STAR value is the workflow's minimum scratch allocation.",
   "overrides": {
     "rnaseq_pipeline.pretrim_fastqc_ncpu": 2,
     "rnaseq_pipeline.pretrim_fastqc_ramGB": 4,

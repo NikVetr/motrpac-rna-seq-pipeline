@@ -11,11 +11,15 @@ Generates the input configuration file required to run the rna-seq pipeline.
 usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            -r OUTPUT_REPORT_NAME [-u] -a {rat,human}
                            -v {rn6,rn7,rn8,gencode_v39,gencode_v47}
-                           -n NUM_CHUNKS [-d DOCKER_REPO]
+                           -n NUM_CHUNKS
+                           [--sample-list SAMPLE_LIST |
+                            --exclude-sample-list EXCLUDE_SAMPLE_LIST]
+                           [-d DOCKER_REPO]
                            [--release-manifest RELEASE_MANIFEST]
                            [--runtime-profile RUNTIME_PROFILE]
                            [--star-disk-type {HDD,SSD}] [-i]
                            [--legacy-all-read-expression-only]
+                           [--retain-all-read-expression]
                            [--skip-pretrim-fastqc]
                            [--skip-posttrim-fastqc]
                            [--skip-contamination-qc]
@@ -49,6 +53,11 @@ optional arguments:
   -n NUM_CHUNKS, --num_chunks NUM_CHUNKS
                         number of chunks to split the input files, should
                         always be <= number of input files
+  --sample-list SAMPLE_LIST
+                        process only the exact sample prefixes listed one per
+                        line
+  --exclude-sample-list EXCLUDE_SAMPLE_LIST
+                        exclude the exact sample prefixes listed one per line
   -d DOCKER_REPO, --docker_repo DOCKER_REPO
                         Docker repository prefix containing the images used in
                         the workflow
@@ -56,8 +65,7 @@ optional arguments:
                         complete release profile overriding reference and
                         Docker workflow inputs
   --runtime-profile RUNTIME_PROFILE
-                        complete, explicitly selected CPU, RAM, and disk
-                        override profile
+                        complete CPU, RAM, and disk-floor override profile
   --star-disk-type {HDD,SSD}
                         STAR working-disk class; omit to retain the historical
                         HDD default
@@ -66,6 +74,9 @@ optional arguments:
   --legacy-all-read-expression-only
                         omit directional UMI molecule matrices and retain
                         historical all-read matrices only
+  --retain-all-read-expression
+                        also run and emit non-UMI-deduplicated matrices under
+                        all_read names
   --skip-pretrim-fastqc
                         skip raw-read FastQC
   --skip-posttrim-fastqc
@@ -98,9 +109,22 @@ not feed the QC matrix. The `--run-multiqc` compatibility mode requires both
 FastQC groups and alignment QC.
 
 The generator includes matched I1 FASTQs and directional UMI molecule-expression
-matrices by default. The conventional all-read matrices are always retained.
-Use `--legacy-all-read-expression-only` to omit only the additional molecule
-matrices.
+matrices by default. They use the canonical expression filenames and are the
+only expression branch run by default. Use `--retain-all-read-expression` to
+also emit the non-UMI-deduplicated matrices under `all_read_*` names, or use
+`--legacy-all-read-expression-only` to make the historical all-read matrices
+canonical instead. The two switches cannot be combined.
+
+Runtime profiles set fixed CPU and memory requests plus a minimum STAR scratch
+size. After Cutadapt, the workflow uses each sample's exact surviving pair
+count to raise STAR scratch independently when needed, so one generated JSON
+can contain samples in different disk tiers.
+
+For a bounded pilot, write the exact sample prefixes (the FASTQ basename before
+`_R1.fastq.gz`) one per line and pass `--sample-list`. Reuse that same manifest
+with `--exclude-sample-list` when generating the remaining samples. Selection
+is within the single GCS prefix passed to `--gcp_path`; one JSON may contain all
+selected samples when `--num_chunks 1` is used.
 
 Default molecule-expression example:
 

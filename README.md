@@ -199,6 +199,8 @@ python3 scripts/make_json_rnaseq.py \
   -n 1 \
   -p motrpac-portal \
   -d us-docker.pkg.dev/motrpac-portal/rnaseq \
+  --runtime-profile config/backends/gcp/runtime-human-v47-full-lean-v1.json \
+  --star-disk-type SSD \
   -i
 ```
 
@@ -209,9 +211,14 @@ This will create JSON configuration file(s) (e.g., `set1_rnaseq.json`, `set2_rna
 GENCODE v47 automatically selects the immutable release profile in
 `config/release-profiles/human-gencode-v47.json`; v39 retains the historical
 references and images. Matched I1 reads and directional UMI molecule-expression
-matrices are enabled by default, while the conventional all-read RSEM and
-featureCounts outputs are retained. Pass `--legacy-all-read-expression-only`
-to omit only the molecule-level matrices.
+matrices are enabled by default and use the canonical RSEM and featureCounts
+filenames. Pass `--retain-all-read-expression` to additionally emit the
+non-UMI-deduplicated matrices under `all_read_*` names, or pass
+`--legacy-all-read-expression-only` to run only the historical all-read branch.
+For a bounded pilot, pass an exact one-prefix-per-line manifest with
+`--sample-list`; pass the same file with `--exclude-sample-list` when generating
+the remaining cohort. These options select samples within one `--gcp_path` and
+do not require a separate JSON for each sample.
 
 Pre-trim FastQC, post-trim FastQC, contamination QC, alignment QC, and UMI QC
 remain enabled by default and can be disabled independently with the documented
@@ -223,8 +230,10 @@ The QC table is assembled directly from native tool reports. Pass
 MultiQC archives; this requires both FastQC groups and alignment QC.
 
 For GCP tests, select a complete profile with `--runtime-profile` and select
-STAR scratch explicitly with `--star-disk-type HDD|SSD`. These options augment
-the existing JSON format and Caper submission command; see
+STAR scratch explicitly with `--star-disk-type HDD|SSD`. Within a multi-sample
+workflow, STAR scratch is then raised independently for each sample from its
+exact post-trim pair count; the profile's `star_disk` remains a minimum. These
+options augment the existing JSON format and Caper submission command; see
 [`scripts/scripts_readme.md`](scripts/scripts_readme.md) for the full generator
 interface and [`docs/gcp-cli-canary-runbook.md`](docs/gcp-cli-canary-runbook.md)
 for the bounded benchmark procedure.
@@ -282,6 +291,14 @@ The pipeline generates the following main output files:
 
 2. **featureCounts Gene Quantification**
    - `*_feature_counts.txt` - Gene-level raw counts from featureCounts
+
+With the default directional-UMI policy, these canonical matrices contain
+UMI-deduplicated molecule expression. `--retain-all-read-expression` adds
+secondary `all_read_*` matrices; `--legacy-all-read-expression-only` instead
+makes historical non-UMI-deduplicated expression canonical.
+The declared `umi_expression_metrics` sidecars record directional grouping and
+the distinct genomic-featureCounts and transcriptome-RSEM molecule
+denominators.
 
 ### Quality Control Files
 

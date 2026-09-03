@@ -59,11 +59,31 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertNotIn("samtools index", wdl)
         self.assertNotIn("File bam_index", wdl)
 
-    def test_star_disk_type_is_optional_and_passed_to_the_runtime(self):
+    def test_star_disk_is_read_scaled_with_the_requested_value_as_a_floor(self):
         workflow = source("wdl/rnaseq_pipeline_scatter.wdl")
         task = source("wdl/star_align/star.wdl")
+        cutadapt = source("wdl/cutadapt/cutadapt.wdl")
         self.assertIn('String star_disk_type = "HDD"', workflow)
         self.assertIn("disk_type=star_disk_type", workflow)
+        self.assertIn("Int read_pairs = read_int", cutadapt)
+        for threshold, disk_gb in (
+            (5_000_000, 90),
+            (40_000_000, 120),
+            (65_000_000, 150),
+            (90_000_000, 180),
+            (110_000_000, 200),
+            (155_000_000, 250),
+            (200_000_000, 300),
+        ):
+            self.assertIn(
+                f"cutadapt_read_pairs <= {threshold} then {disk_gb}", workflow
+            )
+        self.assertIn("else 400", workflow)
+        self.assertIn(
+            "if star_disk > inferred_star_scratch_gb then star_disk else inferred_star_scratch_gb",
+            workflow,
+        )
+        self.assertIn("disk_space=effective_star_scratch_gb", workflow)
         self.assertIn("String disk_type", task)
         self.assertIn(
             'disks: "local-disk ${disk_space} ${disk_type}"', task

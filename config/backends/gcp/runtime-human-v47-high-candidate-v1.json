@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v47_high_candidate_v1",
-  "description": "Buffered high-input GENCODE v47 candidate derived from a 54.4-million-pair, 7.92-GB sample; it retains the lean profile CPU and memory values and raises only STAR scratch from 120 to 150 GB. Selection is manual, this exact allocation remains unvalidated, and the one-sample envelope is not enforced by the generator.",
+  "description": "Conservative GENCODE v47 profile retaining the lean CPU and memory values while imposing a 150-GB minimum STAR scratch allocation. The workflow may raise that minimum per sample from the exact post-trim pair count.",
   "overrides": {
     "rnaseq_pipeline.pretrim_fastqc_ncpu": 2,
     "rnaseq_pipeline.pretrim_fastqc_ramGB": 4,

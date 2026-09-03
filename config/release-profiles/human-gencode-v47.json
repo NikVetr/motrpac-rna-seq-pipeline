@@ -7,7 +7,7 @@
   "provenance": {
     "reference_manifest": "../references/human-grch38-gencode-v47.json",
     "tool_manifest": "../tool-images-gencode-v47.json",
-    "helper_source_revision": "6aea47238432ff17d7ce8275994f32324b80cbf7"
+    "helper_source_revision": "0fc452f2d7ae8cb12eb0e85ae7ef0af82e9f88e3"
   },
   "compatibility": {
     "star_index_builder": "2.7.11b",
@@ -34,7 +34,7 @@
     "rsem_docker": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420",
     "bowtie_docker": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19",
     "picard_docker": "quay.io/biocontainers/picard@sha256:84923e37c5a43b0984fdb152a89f8ac952878fafc3e6076c534e5e5c82e278be",
-    "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:bc0f74d36ac35864bbed8da8975f68158c52c71fcfc7be0d27e0daefd092140c",
+    "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:7e467d09f2beb6c2484486dcc671186ac39c359600072a56c089a01e00714ad9",
     "samtools_docker": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561",
     "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:e23e8a0575c4e85a741d8ada188f5559c38927dd1a05be0b5a7e370cdb89213e",
     "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:0f2f2d992a87730612dca9fadfd4ba73307d59f17c0a92fb0aff6edbba629a68"

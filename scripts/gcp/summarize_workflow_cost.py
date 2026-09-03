@@ -51,6 +51,7 @@ PIPELINE_PHASES = {
     "qc_report": "reporting_gather",
     "merge_results": "reporting_gather",
     "merge_umi_expression": "reporting_gather",
+    "merge_all_read_expression": "reporting_gather",
     "mqc_pa": "reporting_gather",
 }
 PIPELINE_PHASE_LABELS = {

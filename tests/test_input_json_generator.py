@@ -52,6 +52,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             docker_repo="registry.example/rnaseq/",
             index=include_index,
             umi_molecule_expression=include_index,
+            retain_all_read_expression=False,
             star_disk_type=None,
             project="local-test-only",
         )
@@ -104,6 +105,48 @@ class InputJsonGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot exceed"):
             generator.build_batches(["bucket/sample_R1.fastq.gz"], 2)
 
+    def test_sample_lists_select_or_exclude_exact_prefixes(self) -> None:
+        r1_paths = [
+            "bucket/sample_a_R1.fastq.gz",
+            "bucket/sample_b_R1.fastq.gz",
+            "bucket/sample_c_R1.fastq.gz",
+        ]
+        sample_list = self.temp / "pilot-samples.txt"
+        sample_list.write_text("sample_c\nsample_a\n", encoding="utf-8")
+        requested = generator.load_sample_list(sample_list)
+
+        self.assertEqual(
+            [r1_paths[2], r1_paths[0]],
+            generator.select_r1_paths(r1_paths, include_samples=requested),
+        )
+        self.assertEqual(
+            [r1_paths[1]],
+            generator.select_r1_paths(r1_paths, exclude_samples=requested),
+        )
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            generator.select_r1_paths(
+                r1_paths,
+                include_samples=requested,
+                exclude_samples=requested,
+            )
+        with self.assertRaisesRegex(ValueError, "absent from GCS input"):
+            generator.select_r1_paths(r1_paths, include_samples=["missing"])
+
+        sample_list.write_text("sample_a\nsample_a\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "duplicate prefixes"):
+            generator.load_sample_list(sample_list)
+        sample_list.write_text("sample a\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "filename-safe"):
+            generator.load_sample_list(sample_list)
+
+        filesystem = FakeGcsFileSystem(r1_paths, set())
+        arguments = self.arguments()
+        arguments.sample_list = ""
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            with self.assertRaisesRegex(ValueError, "cannot read sample list"):
+                generator.main(arguments)
+        self.assertFalse(hasattr(filesystem, "pattern"))
+
     def test_sample_and_uri_identity_are_unique(self) -> None:
         batch = generator.build_batches(
             ["bucket/sample_R1.fastq.gz"], 1, include_index=True
@@ -153,12 +196,24 @@ class InputJsonGeneratorTests(unittest.TestCase):
             include_index=True, use_umi_molecule_expression=True
         )
         self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
+        self.assertFalse(document["rnaseq_pipeline.retain_all_read_expression"])
+
+        retained_document = self.make_document(
+            include_index=True,
+            use_umi_molecule_expression=True,
+            retain_all_read_expression=True,
+        )
+        self.assertTrue(
+            retained_document["rnaseq_pipeline.retain_all_read_expression"]
+        )
 
         legacy_document = self.make_document(
             include_index=True, use_umi_molecule_expression=False
         )
         self.assertFalse(legacy_document["rnaseq_pipeline.use_umi_molecule_expression"])
         self.assertFalse(self.make_document()["rnaseq_pipeline.use_umi_molecule_expression"])
+        with self.assertRaisesRegex(ValueError, "requires UMI molecule expression"):
+            self.make_document(retain_all_read_expression=True)
 
     def test_qc_toggles_are_default_on_and_only_disabled_values_are_emitted(self) -> None:
         default_document = self.make_document()
@@ -340,6 +395,27 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertEqual(40, document["rnaseq_pipeline.markdup_ramGB"])
         self.assertEqual("SSD", document["rnaseq_pipeline.star_disk_type"])
         self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
+        self.assertFalse(document["rnaseq_pipeline.retain_all_read_expression"])
+
+    def test_main_applies_sample_list_before_validating_mates(self) -> None:
+        selected_r1 = "bucket/sample_b_R1.fastq.gz"
+        selected_r2 = "gs://bucket/sample_b_R2.fastq.gz"
+        selected_i1 = "gs://bucket/sample_b_I1.fastq.gz"
+        filesystem = FakeGcsFileSystem(
+            ["bucket/sample_a_R1.fastq.gz", selected_r1],
+            {selected_r2, selected_i1},
+        )
+        sample_list = self.temp / "pilot-samples.txt"
+        sample_list.write_text("sample_b\n", encoding="utf-8")
+        arguments = self.arguments()
+        arguments.sample_list = str(sample_list)
+
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            self.assertEqual(0, generator.main(arguments))
+
+        document = json.loads((self.temp / "set1_rnaseq.json").read_text())
+        self.assertEqual(["sample_b"], document["rnaseq_pipeline.sample_prefix"])
+        self.assertEqual(["gs://" + selected_r1], document["rnaseq_pipeline.fastq1"])
 
     def test_main_checks_mates_before_writing(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"

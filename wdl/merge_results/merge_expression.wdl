@@ -3,6 +3,7 @@ version 1.0
 task merge_expression {
     input {
         Array[String]+ sample_prefix
+        String output_prefix
         Array[File] rsem_files
         Array[File] feature_counts_files
 
@@ -28,17 +29,17 @@ task merge_expression {
             --fc-dir feature_counts_files \
             --sample-order ~{sample_order}
 
-        mv rsem_genes_count.txt umi_molecule_rsem_genes_count.txt
-        mv rsem_genes_tpm.txt umi_molecule_rsem_genes_tpm.txt
-        mv rsem_genes_fpkm.txt umi_molecule_rsem_genes_fpkm.txt
-        mv featureCounts.txt umi_molecule_featureCounts.txt
+        mv rsem_genes_count.txt "~{output_prefix}_rsem_genes_count.txt"
+        mv rsem_genes_tpm.txt "~{output_prefix}_rsem_genes_tpm.txt"
+        mv rsem_genes_fpkm.txt "~{output_prefix}_rsem_genes_fpkm.txt"
+        mv featureCounts.txt "~{output_prefix}_featureCounts.txt"
     >>>
 
     output {
-        File rsem_genes_count = "umi_molecule_rsem_genes_count.txt"
-        File rsem_genes_tpm = "umi_molecule_rsem_genes_tpm.txt"
-        File rsem_genes_fpkm = "umi_molecule_rsem_genes_fpkm.txt"
-        File feature_counts = "umi_molecule_featureCounts.txt"
+        File rsem_genes_count = "${output_prefix}_rsem_genes_count.txt"
+        File rsem_genes_tpm = "${output_prefix}_rsem_genes_tpm.txt"
+        File rsem_genes_fpkm = "${output_prefix}_rsem_genes_fpkm.txt"
+        File feature_counts = "${output_prefix}_featureCounts.txt"
     }
 
     runtime {
@@ -51,6 +52,6 @@ task merge_expression {
 
     meta {
         author: "MoTrPAC Bioinformatics Center"
-        description: "Merge optional directional UMI molecule-expression results"
+        description: "Merge optional secondary expression results"
     }
 }

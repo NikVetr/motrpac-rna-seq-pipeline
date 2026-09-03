@@ -86,7 +86,7 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             "representation": "rx_v1",
         }
         propagation = {
-            "status": "production-shadow",
+            "status": "production-primary",
             "algorithm": "propagate_genomic_umi_representative_qnames_v1",
             "runtime_versions": {"pysam": "0.22.1", "sqlite": "3.47.2"},
             "qnames": {
@@ -121,10 +121,14 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
                     summarize.main()
 
         self.assertEqual(
-            "umi_tools_directional_molecule_expression_shadow_v1",
+            "umi_tools_directional_molecule_expression_v1",
             result["algorithm"],
         )
-        self.assertEqual("production-shadow", result["status"])
+        self.assertEqual("production-primary", result["status"])
+        self.assertEqual(
+            "directional UMI molecule expression",
+            result["interpretation"]["canonical_outputs"],
+        )
         denominators = result["denominators"]
         self.assertEqual(
             4, denominators["selected_representative_qnames_present_in_transcriptome"]
@@ -133,7 +137,7 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             1, denominators["selected_representative_qnames_absent_from_transcriptome"]
         )
 
-    def test_workflow_keeps_all_read_outputs_and_namespaces_molecule_matrices(
+    def test_workflow_makes_molecule_expression_primary_and_all_read_optional(
         self,
     ) -> None:
         workflow = (REPO_ROOT / "wdl/rnaseq_pipeline_scatter.wdl").read_text()
@@ -178,37 +182,49 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
 
         for expected in (
             "Boolean use_umi_molecule_expression = true",
+            "Boolean retain_all_read_expression = false",
+            "Boolean run_all_read_expression =",
+            "if (run_all_read_expression)",
             "umi_report=udup.umi_report",
             "Array[File] umi_metrics = select_all(udup.umi_metrics)",
             "if !use_umi_molecule_expression || has_fastq_index then [true] else []",
             "Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]",
             "transcriptome_align=if use_umi_molecule_expression then "
             "[star_align.transcriptome_bam] else []",
-            "rsem_files=rsem_quant.genes",
-            "feature_counts_files=feature_counts.fc_out",
-            "rsem_files=select_all(umi_molecule_rsem.genes)",
-            "feature_counts_files=select_all(umi_molecule_feature_counts_task.fc_out)",
+            "rsem_files=primary_rsem_genes",
+            "feature_counts_files=primary_feature_counts",
+            "rsem_report=primary_rsem_report",
+            "fc_report=primary_feature_counts_report",
+            "if (use_umi_molecule_expression && retain_all_read_expression)",
+            'output_prefix="all_read"',
+            "rsem_files=select_all(rsem_quant.genes)",
+            "feature_counts_files=select_all(feature_counts.fc_out)",
         ):
             self.assertIn(expected, workflow)
         molecule_calls = workflow[
             workflow.index("call fc.feature_counts as umi_molecule_feature_counts_task") :
-            workflow.index("call collect_qc.rnaseqQC as qc_report")
+            workflow.index("File primary_rsem_genes")
         ]
         self.assertEqual(2, molecule_calls.count("SID=sample_prefix[i]"))
         self.assertNotIn('SID=sample_prefix[i] + ".umi_molecules"', molecule_calls)
         output_block = workflow.rsplit("output {", 1)[1]
         self.assertNotIn("molecule_genomic_bam", output_block)
         self.assertNotIn("molecule_transcriptome_bam", output_block)
+        self.assertIn("Array[File] umi_expression_metrics", output_block)
         for output in (
-            "umi_molecule_rsem_genes_count",
-            "umi_molecule_rsem_genes_tpm",
-            "umi_molecule_rsem_genes_fpkm",
-            "umi_molecule_feature_counts",
+            "all_read_rsem_genes_count",
+            "all_read_rsem_genes_tpm",
+            "all_read_rsem_genes_fpkm",
+            "all_read_feature_counts",
         ):
             self.assertIn(f"File? {output}", output_block)
+        self.assertNotIn("File? umi_molecule_rsem", output_block)
+        self.assertNotIn("File? umi_molecule_feature", output_block)
 
         self.assertIn("/usr/local/src/merge_rsem.py", merge)
         self.assertIn("/usr/local/src/merge_fc.py", merge)
+        self.assertIn("String output_prefix", merge)
+        self.assertNotIn("call expression_merge.merge_expression as merge_umi_expression", workflow)
         self.assertNotIn("consolidate_qc_report.py", merge)
 
 

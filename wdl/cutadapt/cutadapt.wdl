@@ -39,6 +39,19 @@ task Cutadapt {
         --too-short-paired-output fastq_trim/tooshort/~{SID}_R2.fastq.gz \
         ~{fastqr1} ~{fastqr2} > "fastq_trim/~{SID}_report.log"
 
+        awk '
+            /^Pairs written \(passing filters\):/ {
+                count = $5
+                gsub(",", "", count)
+                if (++matches != 1 || count !~ /^[0-9]+$/) exit 2
+                print count
+            }
+            END { if (matches != 1) exit 2 }
+        ' "fastq_trim/~{SID}_report.log" > "fastq_trim/~{SID}_read_pairs.txt" || {
+            echo "Could not read one passing read-pair count from the Cutadapt report" >&2
+            exit 2
+        }
+
         echo "--- $(date "+[%b %d %H:%M:%S]") Cutadapt done, task complete ---"
     >>>
 
@@ -46,6 +59,7 @@ task Cutadapt {
         File fastq_trimmed_R1 = "fastq_trim/${SID}_R1.fastq.gz"
         File fastq_trimmed_R2 = "fastq_trim/${SID}_R2.fastq.gz"
         File report = "fastq_trim/${SID}_report.log"
+        Int read_pairs = read_int("fastq_trim/${SID}_read_pairs.txt")
         File tooShortOutput = "fastq_trim/tooshort/${SID}_R1.fastq.gz"
         File tooShortPairedOutput = "fastq_trim/tooshort/${SID}_R2.fastq.gz"
     }

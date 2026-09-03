@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v47_full_lean_v1",
-  "description": "Buffered GENCODE v47 profile validated on a human sample with 39.4 million read pairs and 5.79 GB of combined compressed FASTQs; with no cpuPlatform override, Cromwell GCP Batch provisions these explicit CPU and RAM requests as N1 custom workers.",
+  "description": "Buffered GENCODE v47 full-depth profile. Its 120-GB STAR value is a minimum that the workflow raises per sample from the exact post-trim pair count; with no cpuPlatform override, Cromwell GCP Batch provisions these explicit CPU and RAM requests as N1 custom workers.",
   "overrides": {
     "rnaseq_pipeline.pretrim_fastqc_ncpu": 2,
     "rnaseq_pipeline.pretrim_fastqc_ramGB": 4,

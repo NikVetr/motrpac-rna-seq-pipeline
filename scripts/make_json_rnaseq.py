@@ -96,6 +96,56 @@ def as_gcs_uri(path):
     return path if path.startswith("gs://") else "gs://" + path
 
 
+def load_sample_list(path):
+    sample_path = Path(path)
+    try:
+        samples = sample_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(
+            "cannot read sample list {}: {}".format(sample_path, exc)
+        ) from exc
+    invalid = [
+        sample for sample in samples if not OUTPUT_REPORT_PATTERN.fullmatch(sample)
+    ]
+    if not samples or invalid:
+        raise ValueError("sample list must contain one filename-safe prefix per line")
+    if len(samples) != len(set(samples)):
+        raise ValueError("sample list contains duplicate prefixes")
+    return samples
+
+
+def select_r1_paths(r1_paths, include_samples=None, exclude_samples=None):
+    if include_samples is not None and exclude_samples is not None:
+        raise ValueError("sample and exclusion lists are mutually exclusive")
+    if include_samples is None and exclude_samples is None:
+        return r1_paths
+
+    by_sample = {}
+    for path in r1_paths:
+        basename = os.path.basename(path)
+        if not basename.endswith(R1_SUFFIX) or basename == R1_SUFFIX:
+            raise ValueError("R1 object has an invalid filename: {}".format(path))
+        sample = basename[: -len(R1_SUFFIX)]
+        if sample in by_sample:
+            raise ValueError("duplicate sample prefix: {}".format(sample))
+        by_sample[sample] = path
+
+    requested = include_samples if include_samples is not None else exclude_samples
+    unknown = sorted(set(requested) - set(by_sample))
+    if unknown:
+        raise ValueError(
+            "sample list prefixes are absent from GCS input: {}".format(
+                ", ".join(unknown)
+            )
+        )
+    requested_set = set(requested)
+    if include_samples is not None:
+        return [by_sample[sample] for sample in include_samples]
+    return [
+        path for sample, path in by_sample.items() if sample not in requested_set
+    ]
+
+
 def split_batches(values, count):
     if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
         raise ValueError("num_chunks must be a positive integer")
@@ -349,6 +399,9 @@ def main(command_args: argparse.Namespace):
     use_umi_molecule_expression = getattr(
         command_args, "umi_molecule_expression", True
     )
+    retain_all_read_expression = getattr(
+        command_args, "retain_all_read_expression", False
+    )
     qc_settings = {
         "run_pretrim_fastqc": not getattr(command_args, "skip_pretrim_fastqc", False),
         "run_posttrim_fastqc": not getattr(command_args, "skip_posttrim_fastqc", False),
@@ -373,6 +426,18 @@ def main(command_args: argparse.Namespace):
     runtime_profile = getattr(command_args, "runtime_profile", None)
     runtime_overrides = (
         load_runtime_profile(runtime_profile) if runtime_profile is not None else None
+    )
+    sample_list_path = getattr(command_args, "sample_list", None)
+    exclude_sample_list_path = getattr(command_args, "exclude_sample_list", None)
+    if sample_list_path is not None and exclude_sample_list_path is not None:
+        raise ValueError("sample and exclusion lists are mutually exclusive")
+    included_samples = (
+        load_sample_list(sample_list_path) if sample_list_path is not None else None
+    )
+    excluded_samples = (
+        load_sample_list(exclude_sample_list_path)
+        if exclude_sample_list_path is not None
+        else None
     )
 
     try:
@@ -401,8 +466,14 @@ def main(command_args: argparse.Namespace):
         raise ValueError("docker_repo must be nonempty")
 
     fs = gcsfs.GCSFileSystem(project=command_args.project)
+    r1_paths = fs.glob(command_args.gcp_path.rstrip("/") + "/*_R1.fastq.gz")
+    r1_paths = select_r1_paths(
+        r1_paths,
+        include_samples=included_samples,
+        exclude_samples=excluded_samples,
+    )
     batches = build_batches(
-        fs.glob(command_args.gcp_path.rstrip("/") + "/*_R1.fastq.gz"),
+        r1_paths,
         command_args.num_chunks,
         include_undetermined=command_args.undetermined,
         include_index=command_args.index,
@@ -436,6 +507,7 @@ def main(command_args: argparse.Namespace):
                 runtime_overrides=runtime_overrides,
                 star_disk_type=getattr(command_args, "star_disk_type", None),
                 use_umi_molecule_expression=use_umi_molecule_expression,
+                retain_all_read_expression=retain_all_read_expression,
                 **qc_settings,
             )
         )
@@ -468,6 +540,7 @@ def make_json_dict(
     release_inputs=None,
     runtime_overrides=None,
     use_umi_molecule_expression=False,
+    retain_all_read_expression=False,
     run_pretrim_fastqc=True,
     run_posttrim_fastqc=True,
     run_contamination_qc=True,
@@ -491,6 +564,10 @@ def make_json_dict(
     if use_umi_molecule_expression and not i1:
         raise ValueError(
             "UMI molecule expression requires a matched I1 FASTQ for every sample"
+        )
+    if retain_all_read_expression and not use_umi_molecule_expression:
+        raise ValueError(
+            "retaining secondary all-read expression requires UMI molecule expression"
         )
     if type(contamination_qc_pairs) is not int or contamination_qc_pairs < 0:
         raise ValueError("contamination_qc_pairs must be a nonnegative integer")
@@ -640,6 +717,9 @@ def make_json_dict(
     filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = (
         use_umi_molecule_expression
     )
+    filled_dict["rnaseq_pipeline.retain_all_read_expression"] = (
+        retain_all_read_expression
+    )
     for name, enabled in {
         "run_pretrim_fastqc": run_pretrim_fastqc,
         "run_posttrim_fastqc": run_posttrim_fastqc,
@@ -726,6 +806,17 @@ if __name__ == "__main__":
         type=int,
         required=True,
     )
+    sample_selection = parser.add_mutually_exclusive_group()
+    sample_selection.add_argument(
+        "--sample-list",
+        help="process only the exact sample prefixes listed one per line",
+        type=str,
+    )
+    sample_selection.add_argument(
+        "--exclude-sample-list",
+        help="exclude the exact sample prefixes listed one per line",
+        type=str,
+    )
     parser.add_argument(
         "-d",
         "--docker_repo",
@@ -740,7 +831,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--runtime-profile",
-        help="complete, explicitly selected CPU, RAM, and disk override profile",
+        help="complete CPU, RAM, and disk-floor override profile",
         type=str,
     )
     parser.add_argument(
@@ -762,6 +853,12 @@ if __name__ == "__main__":
         "all-read matrices only",
         default=True,
         action="store_false",
+    )
+    parser.add_argument(
+        "--retain-all-read-expression",
+        help="also run and emit non-UMI-deduplicated matrices under all_read names",
+        default=False,
+        action="store_true",
     )
     parser.add_argument(
         "--skip-pretrim-fastqc",
