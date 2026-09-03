@@ -398,7 +398,7 @@ def main() -> int:
     metrics = {
         "schema_version": 1,
         "acceptance_class": "scientific-truth",
-        "status": "production-shadow",
+        "status": "production-primary",
         "algorithm": "propagate_genomic_umi_representative_qnames_v1",
         "container": args.container,
         "runtime_versions": {

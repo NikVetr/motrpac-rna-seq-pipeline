@@ -27,7 +27,7 @@ def main() -> int:
         raise ValueError("molecule expression requires directional UMI-tools grouping")
     if umi.get("acceptance_class") != "scientific-truth":
         raise ValueError("unexpected UMI grouping acceptance class")
-    if propagation.get("status") != "production-shadow":
+    if propagation.get("status") != "production-primary":
         raise ValueError("unexpected propagation status")
     qnames = propagation["qnames"]
     selected = qnames["selected_representative_qnames"]
@@ -50,8 +50,8 @@ def main() -> int:
     result = {
         "schema_version": 1,
         "acceptance_class": "scientific-truth",
-        "status": "production-shadow",
-        "algorithm": "umi_tools_directional_molecule_expression_shadow_v1",
+        "status": "production-primary",
+        "algorithm": "umi_tools_directional_molecule_expression_v1",
         "provenance": {
             "umi_algorithm": umi["algorithm"],
             "umi_tools_version": umi["tool_version"],
@@ -84,12 +84,12 @@ def main() -> int:
             ),
         },
         "interpretation": {
-            "conventional_outputs": "unchanged and remain authoritative",
-            "featurecounts_shadow": (
+            "canonical_outputs": "directional UMI molecule expression",
+            "featurecounts": (
                 "one selected genomic UMI representative QNAME, with every "
                 "original genomic alignment retained"
             ),
-            "rsem_shadow": (
+            "rsem": (
                 "the transcript-compatible subset of those same representatives, "
                 "with every STAR transcript alternative retained"
             ),
