@@ -28,6 +28,16 @@ ZERO = Decimal(0)
 HOUR = Decimal(3600)
 GIB = Decimal(1024) ** 3
 KIB_PER_GIB = Decimal(1024) ** 2
+BATCH_INFRASTRUCTURE_FAILURES = {
+    "spot_preemption": re.compile(
+        r"Task state is updated from (?:PENDING|RUNNING) to FAILED .*"
+        r"due to Spot VM preemption with exit code 50001"
+    ),
+    "vm_recreated": re.compile(
+        r"Task state is updated from (?:PENDING|RUNNING) to FAILED .*"
+        r"due to VM is recreated during task execution with exit code 50006"
+    ),
+}
 PIPELINE_PHASES = {
     "pretrim_fastqc": "fastq_qc",
     "posttrim_fastqc": "fastq_qc",
@@ -115,7 +125,7 @@ def elapsed(start: datetime, end: datetime, label: str) -> Decimal:
 def batch_duration(value: object, label: str) -> Decimal:
     if not isinstance(value, str) or not value.endswith("s"):
         fail(f"invalid {label}: {value!r}")
-    return dec(value[:-1], label, positive=True)
+    return dec(value[:-1], label)
 
 
 def verify_evidence(evidence: Path) -> None:
@@ -178,9 +188,24 @@ def only(value: object, label: str) -> dict:
     return value[0]
 
 
-def phase_times(job: dict, terminal: str) -> tuple[Decimal, Decimal]:
+def batch_infrastructure_failure(job: dict) -> str | None:
+    events = job.get("status", {}).get("statusEvents", [])
+    reasons = {
+        reason
+        for reason, pattern in BATCH_INFRASTRUCTURE_FAILURES.items()
+        if any(pattern.search(str(event.get("description", ""))) for event in events)
+    }
+    if len(reasons) > 1:
+        fail(f"{job.get('name')}: ambiguous Batch infrastructure failure")
+    return next(iter(reasons), None)
+
+
+def phase_times(
+    job: dict, terminal: str
+) -> tuple[Decimal, Decimal, bool, str | None]:
     transitions = {}
-    for event in job.get("status", {}).get("statusEvents", []):
+    events = job.get("status", {}).get("statusEvents", [])
+    for event in events:
         match = re.search(
             r"Job state is set from ([A-Z_]+) to ([A-Z_]+)",
             str(event.get("description", "")),
@@ -190,15 +215,30 @@ def phase_times(job: dict, terminal: str) -> tuple[Decimal, Decimal]:
             if key in transitions:
                 fail(f"{job.get('name')}: duplicate Batch transition {key}")
             transitions[key] = timestamp(event.get("eventTime"), str(key))
-    try:
-        scheduled = transitions[("QUEUED", "SCHEDULED")]
-        running = transitions[("SCHEDULED", "RUNNING")]
-        transitions[("RUNNING", terminal)]
-    except KeyError:
+    scheduled = transitions.get(("QUEUED", "SCHEDULED"))
+    running = transitions.get(("SCHEDULED", "RUNNING"))
+    if scheduled is None:
         fail(f"{job.get('name')}: incomplete Batch status transitions")
     created = timestamp(job.get("createTime"), "Batch createTime")
-    return elapsed(created, scheduled, "Batch queue"), elapsed(
-        scheduled, running, "Batch provisioning"
+    if running is not None:
+        if ("RUNNING", terminal) not in transitions:
+            fail(f"{job.get('name')}: incomplete Batch status transitions")
+        return (
+            elapsed(created, scheduled, "Batch queue"),
+            elapsed(scheduled, running, "Batch provisioning"),
+            True,
+            None,
+        )
+
+    failed = transitions.get(("SCHEDULED", "FAILED"))
+    failure = batch_infrastructure_failure(job)
+    if terminal != "FAILED" or failed is None or failure is None:
+        fail(f"{job.get('name')}: unrecognized pre-execution Batch failure")
+    return (
+        elapsed(created, scheduled, "Batch queue"),
+        elapsed(scheduled, failed, "Batch provisioning"),
+        False,
+        f"{failure}_before_execution",
     )
 
 
@@ -248,6 +288,46 @@ def monitor(path: Path) -> dict[str, Decimal | int | None]:
     }
 
 
+def load_unavailable_artifacts(evidence: Path, capture: dict) -> dict[tuple, dict]:
+    path = evidence / "expected-unavailable-artifacts.tsv"
+    expected_count = capture.get("expected_unavailable_artifact_count")
+    if expected_count is None and not path.exists():
+        return {}
+    if (
+        not isinstance(expected_count, int)
+        or isinstance(expected_count, bool)
+        or expected_count < 0
+        or not path.is_file()
+    ):
+        fail("invalid unavailable-artifact capture status")
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        expected_fields = ["kind", "call", "shard", "attempt", "uri", "reason"]
+        if reader.fieldnames != expected_fields:
+            fail(f"unexpected unavailable-artifact header: {path}")
+        records = {}
+        for row in reader:
+            try:
+                shard = int(row["shard"])
+                attempt = int(row["attempt"])
+            except ValueError:
+                fail(f"invalid unavailable-artifact attempt: {row!r}")
+            key = (row["call"], shard, attempt, row["kind"])
+            if (
+                key in records
+                or row["kind"] not in {"monitoring", "stdout", "stderr"}
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+", row["call"])
+                or attempt < 1
+                or not (row["uri"] == "MISSING_URI" or row["uri"].startswith("gs://"))
+                or row["reason"] != "recognized_batch_infrastructure_failure"
+            ):
+                fail(f"invalid unavailable-artifact record: {row!r}")
+            records[key] = row
+    if len(records) != expected_count:
+        fail("unavailable-artifact manifest is inconsistent with capture status")
+    return records
+
+
 def summarize_attempt(
     evidence: Path,
     call: str,
@@ -256,6 +336,7 @@ def summarize_attempt(
     machine_family: str,
     compute_rates: dict[str, dict[str, Decimal]],
     disk_rates: dict[str, Decimal],
+    unavailable: dict[tuple, dict],
 ) -> dict:
     attempt_number = attempt.get("attempt")
     shard = attempt.get("shardIndex")
@@ -274,8 +355,16 @@ def summarize_attempt(
     terminal = status.get("state")
     if terminal not in {"SUCCEEDED", "FAILED"}:
         fail(f"{job_id}: Batch job is not terminal")
-    queue_seconds, provisioning_seconds = phase_times(job, terminal)
+    (
+        queue_seconds,
+        provisioning_seconds,
+        batch_execution_started,
+        pre_execution_failure,
+    ) = phase_times(job, terminal)
     running_seconds = batch_duration(status.get("runDuration"), "Batch runDuration")
+    if batch_execution_started != (running_seconds > 0):
+        fail(f"{job_id}: Batch transitions contradict runDuration")
+    infrastructure_failure = batch_infrastructure_failure(job)
 
     actual = only(
         status.get("taskGroups", {}).get("group0", {}).get("instances"),
@@ -323,8 +412,23 @@ def summarize_attempt(
     monitor_path = evidence / "task-streams" / (
         f"{short_call}.shard-{shard}.attempt-{attempt_number}.monitoring"
     )
-    metrics = monitor(monitor_path)
-    observed = min(metrics["observed_seconds"], running_seconds)
+    monitor_key = (call, shard, attempt_number, "monitoring")
+    if monitor_path.is_file():
+        if monitor_key in unavailable:
+            fail(f"{job_id}: monitoring is both captured and marked unavailable")
+        metrics = monitor(monitor_path)
+    elif (
+        monitor_key in unavailable
+        and terminal == "FAILED"
+        and attempt.get("executionStatus") != "Done"
+        and infrastructure_failure is not None
+    ):
+        metrics = None
+    else:
+        fail(f"{job_id}: missing undeclared monitoring evidence")
+    observed = (
+        min(metrics["observed_seconds"], running_seconds) if metrics else ZERO
+    )
     outside_monitor = running_seconds - observed
     hours = running_seconds / HOUR
     vcpu_cost = Decimal(vcpu) * hours * compute_rates[market]["vcpu"]
@@ -348,6 +452,9 @@ def summarize_attempt(
         "attempt": attempt_number,
         "execution_status": attempt.get("executionStatus"),
         "batch_state": terminal,
+        "batch_execution_started": batch_execution_started,
+        "pre_execution_failure": pre_execution_failure,
+        "batch_infrastructure_failure": infrastructure_failure,
         "failed_work": failed,
         "batch_job": job_id,
         "provisioning_model": market,
@@ -363,10 +470,14 @@ def summarize_attempt(
             "monitor_observed": out(observed),
             "running_outside_monitor_window": out(outside_monitor),
         },
-        "monitoring": {
-            key: out(value) if isinstance(value, Decimal) else value
-            for key, value in metrics.items()
-        },
+        "monitoring": (
+            {
+                key: out(value) if isinstance(value, Decimal) else value
+                for key, value in metrics.items()
+            }
+            if metrics
+            else None
+        ),
         "modeled_worker_cost_usd": {
             "vcpu": out(vcpu_cost),
             "memory": out(memory_cost),
@@ -421,6 +532,7 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
     metadata = load_json(evidence / "metadata.json")
     capture = load_json(evidence / "capture-status.json")
     repository = load_json(evidence / "repository.json")
+    unavailable = load_unavailable_artifacts(evidence, capture)
     workflow_id = metadata.get("id")
     if (
         capture.get("complete") is not True
@@ -478,6 +590,7 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
                     rates["machine_family"],
                     compute_rates,
                     disk_rates,
+                    unavailable,
                 )
             )
     if (
@@ -486,6 +599,24 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
         or len(jobs) != len(attempts)
     ):
         fail("captured attempts and Batch jobs are inconsistent")
+    attempt_index = {
+        (item["call"], item["shard"], item["attempt"]): item for item in attempts
+    }
+    for call, shard, attempt_number, kind in unavailable:
+        item = attempt_index.get((call, shard, attempt_number))
+        if (
+            item is None
+            or item["batch_state"] != "FAILED"
+            or not item["failed_work"]
+            or item["batch_infrastructure_failure"] is None
+        ):
+            fail("unavailable artifact is not associated with a failed Batch attempt")
+        short_call = call.removeprefix("rnaseq_pipeline.")
+        artifact = evidence / "task-streams" / (
+            f"{short_call}.shard-{shard}.attempt-{attempt_number}.{kind}"
+        )
+        if artifact.exists():
+            fail("unavailable artifact was also captured")
 
     totals = defaultdict(lambda: ZERO)
     for attempt in attempts:
@@ -513,6 +644,7 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
     observed_cost = sum(
         item["_raw"]["cost"] * item["_raw"]["observed"] / item["_raw"]["running"]
         for item in attempts
+        if item["_raw"]["running"] > 0
     )
     for attempt in attempts:
         del attempt["_raw"]
@@ -573,6 +705,11 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
                 "shape/disks, and frozen public list rates."
             ),
             "failed_spot_work_included": True,
+            "zero_runtime_policy": (
+                "Recognized pre-execution Batch infrastructure failures are retained "
+                "with the API-reported zero runtime and zero modeled worker cost; all "
+                "other zero runtimes are rejected."
+            ),
             "excluded": [
                 "controller VM, Cloud Storage, logging/monitoring, and network",
                 "taxes, credits, discounts, and the account-level disk free tier",

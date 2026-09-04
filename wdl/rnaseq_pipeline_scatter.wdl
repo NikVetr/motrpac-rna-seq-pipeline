@@ -129,7 +129,7 @@ workflow rnaseq_pipeline {
         Array[File]+ fastq2
         Array[File]? fastq_index
         Array[String]+ sample_prefix
-        # Change num_preemptible_attempts to 2 or more if you want to use preemptible vm instances
+        # Set to 1 for one preemptible attempt before the on-demand fallback
         Int num_preemptible_attempts = 0
 
         # Optional QC groups; all remain enabled by default for compatibility.

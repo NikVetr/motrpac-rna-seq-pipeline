@@ -16,7 +16,7 @@ expected_revision="$3"
 [[ "$expected_revision" =~ ^[0-9a-f]{40}$ ]] ||
     die "expected revision must be a full lowercase Git commit"
 
-for command_name in cp dirname find gcloud git jq mkdir mktemp mv rm sed sha256sum sort wc xargs
+for command_name in cp dirname find gcloud git grep jq mkdir mktemp mv rm sed sha256sum sort wc xargs
 do
     command -v "$command_name" >/dev/null || die "missing command: $command_name"
 done
@@ -245,6 +245,9 @@ jq -er '
 missing="${stage_dir}/missing-artifacts.tsv"
 printf '%s\n' $'kind\tcall\tshard\tattempt\turi_or_job' >"$missing"
 missing_count=0
+unavailable="${stage_dir}/expected-unavailable-artifacts.tsv"
+printf '%s\n' $'kind\tcall\tshard\tattempt\turi\treason' >"$unavailable"
+unavailable_count=0
 
 while IFS=$'\t' read -r call shard attempt execution_status preemptible job_id monitoring stdout stderr
 do
@@ -260,15 +263,31 @@ do
     call_name="${call#rnaseq_pipeline.}"
     stem="${call_name}.shard-${shard}.attempt-${attempt}"
 
+    batch_job="${stage_dir}/batch-jobs/${stem}.json"
+    recognized_infrastructure_failure=false
     if ! gcloud batch jobs describe "$job_name" \
         --project="$project" \
         --location="$location" \
-        --format=json >"${stage_dir}/batch-jobs/${stem}.json"
+        --format=json >"$batch_job"
     then
-        rm -f -- "${stage_dir}/batch-jobs/${stem}.json"
+        rm -f -- "$batch_job"
         printf 'batch_job\t%s\t%s\t%s\t%s\n' \
             "$call" "$shard" "$attempt" "$job_id" >>"$missing"
         missing_count=$((missing_count + 1))
+    elif [[ "$execution_status" == "Failed" || "$execution_status" == "RetryableFailure" ]] &&
+        jq -e '
+            .status.state == "FAILED" and
+            any(
+              .status.statusEvents[]?.description;
+              test(
+                "Task state is updated from (PENDING|RUNNING) to FAILED .*" +
+                "due to (Spot VM preemption with exit code 50001|" +
+                "VM is recreated during task execution with exit code 50006)"
+              )
+            )
+        ' "$batch_job" >/dev/null
+    then
+        recognized_infrastructure_failure=true
     fi
 
     for stream_name in monitoring stdout stderr
@@ -279,18 +298,43 @@ do
             stderr) uri="$stderr" ;;
         esac
         if [[ -z "$uri" ]]; then
-            printf '%s\t%s\t%s\t%s\t%s\n' \
-                "$stream_name" "$call" "$shard" "$attempt" "MISSING_URI" >>"$missing"
-            missing_count=$((missing_count + 1))
+            if [[ "$recognized_infrastructure_failure" == true ]]; then
+                printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                    "$stream_name" "$call" "$shard" "$attempt" "MISSING_URI" \
+                    "recognized_batch_infrastructure_failure" >>"$unavailable"
+                unavailable_count=$((unavailable_count + 1))
+            else
+                printf '%s\t%s\t%s\t%s\t%s\n' \
+                    "$stream_name" "$call" "$shard" "$attempt" "MISSING_URI" >>"$missing"
+                missing_count=$((missing_count + 1))
+            fi
         elif [[ "$uri" != gs://* ]]; then
             die "non-GCS $stream_name URI for $call attempt $attempt: $uri"
-        elif ! gcloud storage cp "$uri" \
-            "${stage_dir}/task-streams/${stem}.${stream_name}" >/dev/null
-        then
+        else
+            copy_error="$(mktemp "${stage_dir}/.stream-copy.XXXXXX")"
+            if gcloud storage cp "$uri" \
+                "${stage_dir}/task-streams/${stem}.${stream_name}" \
+                >/dev/null 2>"$copy_error"
+            then
+                rm -f -- "$copy_error"
+                continue
+            fi
             rm -f -- "${stage_dir}/task-streams/${stem}.${stream_name}"
-            printf '%s\t%s\t%s\t%s\t%s\n' \
-                "$stream_name" "$call" "$shard" "$attempt" "$uri" >>"$missing"
-            missing_count=$((missing_count + 1))
+            if [[ "$recognized_infrastructure_failure" == true ]] &&
+                grep -Eiq '(^|[^0-9])404([^0-9]|$)|matched no objects|no URLs matched|no such object' \
+                    "$copy_error"
+            then
+                printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                    "$stream_name" "$call" "$shard" "$attempt" "$uri" \
+                    "recognized_batch_infrastructure_failure" >>"$unavailable"
+                unavailable_count=$((unavailable_count + 1))
+            else
+                sed 's/^/gcloud: /' "$copy_error" >&2
+                printf '%s\t%s\t%s\t%s\t%s\n' \
+                    "$stream_name" "$call" "$shard" "$attempt" "$uri" >>"$missing"
+                missing_count=$((missing_count + 1))
+            fi
+            rm -f -- "$copy_error"
         fi
     done
 done < <(sed '1d' "$attempts")
@@ -303,7 +347,8 @@ jq -n \
     --argjson attempt_count "$(sed '1d' "$attempts" | wc -l)" \
     --argjson input_object_count "$input_object_count" \
     --argjson output_object_count "$output_object_count" \
-    --argjson missing_artifact_count "$missing_count" '
+    --argjson missing_artifact_count "$missing_count" \
+    --argjson expected_unavailable_artifact_count "$unavailable_count" '
     {
       schema_version: 1,
       workflow_id: $workflow_id,
@@ -314,6 +359,7 @@ jq -n \
       submitted_gcs_object_count: $input_object_count,
       top_level_output_object_count: $output_object_count,
       missing_artifact_count: $missing_artifact_count,
+      expected_unavailable_artifact_count: $expected_unavailable_artifact_count,
       complete: ($missing_artifact_count == 0)
     }
 ' >"${stage_dir}/capture-status.json"

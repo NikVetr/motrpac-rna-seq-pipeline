@@ -171,11 +171,23 @@ class GcpBatchScaffoldTests(unittest.TestCase):
                 """#!/bin/sh
 set -eu
 if [ "$1 $2 $3" = "batch jobs describe" ]; then
-    printf '{"name":"%s"}\\n' "$4"
+    if [ "$4" = "job-test-1" ]; then
+        printf '%s\\n' '{"name":"'"$4"'","status":{"state":"FAILED","statusEvents":[{"description":"Task state is updated from RUNNING to FAILED on zones/us-west1-a/instances/1 due to Spot VM preemption with exit code 50001."}]}}'
+    else
+        printf '{"name":"%s","status":{"state":"SUCCEEDED"}}\\n' "$4"
+    fi
 elif [ "$1 $2 $3" = "storage objects describe" ]; then
     object_name=${4#gs://test/}
     printf '%s\\n' '{"bucket":"test","name":"'"$object_name"'","generation":"123","metageneration":"1","size":"42","md5_hash":"YWJj","crc32c_hash":"ZGVm"}'
 elif [ "$1 $2" = "storage cp" ]; then
+    if [ "$3" = "gs://test/job-test-1/monitoring.log" ]; then
+        if [ "${FAKE_STREAM_COPY_ERROR:-}" = "permission" ]; then
+            printf '%s\\n' 'PERMISSION_DENIED' >&2
+            exit 1
+        fi
+        printf '%s\\n' 'ERROR: object not found: 404' >&2
+        exit 1
+    fi
     printf 'captured %s\\n' "$3" >"$4"
 else
     exit 2
@@ -249,6 +261,7 @@ fi
             self.assertEqual(2, status["submitted_gcs_object_count"])
             self.assertEqual(4, status["top_level_output_object_count"])
             self.assertEqual(0, status["missing_artifact_count"])
+            self.assertEqual(1, status["expected_unavailable_artifact_count"])
             self.assertTrue(status["complete"])
             repository = json.loads((output / "repository.json").read_text())
             self.assertRegex(repository["revision"], r"^[0-9a-f]{40}$")
@@ -274,8 +287,43 @@ fi
             )
             self.assertEqual(4, len(list((output / "top-level-outputs").iterdir())))
             self.assertEqual(2, len(list((output / "batch-jobs").glob("*.json"))))
-            self.assertEqual(6, len(list((output / "task-streams").iterdir())))
+            self.assertEqual(5, len(list((output / "task-streams").iterdir())))
+            unavailable = (
+                output / "expected-unavailable-artifacts.tsv"
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                "monitoring\trnaseq_pipeline.star_align\t0\t1\t"
+                "gs://test/job-test-1/monitoring.log\t"
+                "recognized_batch_infrastructure_failure",
+                unavailable,
+            )
             self.assertTrue((output / "evidence-manifest.sha256").is_file())
+
+            failure_environment = environment.copy()
+            failure_environment["FAKE_STREAM_COPY_ERROR"] = "permission"
+            generic_failure_output = temp / "generic-copy-failure"
+            generic_failure = subprocess.run(
+                [
+                    "bash",
+                    str(script),
+                    str(metadata),
+                    str(generic_failure_output),
+                    revision,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=failure_environment,
+            )
+            self.assertNotEqual(0, generic_failure.returncode)
+            self.assertIn("PERMISSION_DENIED", generic_failure.stderr)
+            generic_status = json.loads(
+                (generic_failure_output / "capture-status.json").read_text()
+            )
+            self.assertEqual(1, generic_status["missing_artifact_count"])
+            self.assertEqual(
+                0, generic_status["expected_unavailable_artifact_count"]
+            )
 
             mismatch = subprocess.run(
                 ["bash", str(script), str(metadata), str(temp / "wrong"), "b" * 40],
