@@ -17,7 +17,8 @@ usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            [-d DOCKER_REPO]
                            [--release-manifest RELEASE_MANIFEST]
                            [--runtime-profile RUNTIME_PROFILE]
-                           [--star-disk-type {HDD,SSD}] [-i]
+                           [--star-disk-type {HDD,SSD}]
+                           [--umi-dup-disk-type {HDD,SSD}] [-i]
                            [--legacy-all-read-expression-only]
                            [--retain-all-read-expression]
                            [--skip-pretrim-fastqc]
@@ -69,6 +70,9 @@ optional arguments:
   --star-disk-type {HDD,SSD}
                         STAR working-disk class; omit to retain the historical
                         HDD default
+  --umi-dup-disk-type {HDD,SSD}
+                        UMI working-disk class; omit to retain the historical
+                        HDD default
   -i, --index           add matched I1 FASTQs for UMI processing (enabled by
                         default)
   --legacy-all-read-expression-only
@@ -115,10 +119,11 @@ also emit the non-UMI-deduplicated matrices under `all_read_*` names, or use
 `--legacy-all-read-expression-only` to make the historical all-read matrices
 canonical instead. The two switches cannot be combined.
 
-Runtime profiles set fixed CPU and memory requests plus a minimum STAR scratch
-size. After Cutadapt, the workflow uses each sample's exact surviving pair
-count to raise STAR scratch independently when needed, so one generated JSON
-can contain samples in different disk tiers.
+Runtime profiles set fixed CPU and memory requests plus minimum STAR and UMI
+scratch sizes. The workflow raises STAR scratch from each sample's exact
+post-trim pair count and UMI scratch from its STAR BAM sizes. Select either
+working-disk class explicitly with `--star-disk-type` and
+`--umi-dup-disk-type`; omitting an option preserves its historical HDD default.
 
 For a bounded pilot, write the exact sample prefixes (the FASTQ basename before
 `_R1.fastq.gz`) one per line and pass `--sample-list`. Reuse that same manifest

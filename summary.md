@@ -25,11 +25,13 @@ mode publishes the legacy pre- and post-alignment MultiQC archives without
 changing the QC table or expression outputs. It uses the immutable production
 MultiQC 1.6 image and requires both FastQC groups and alignment QC.
 
-Complete runtime profiles provide explicit CPU, memory, disk floors, and STAR
-disk-class settings for bounded GCP canaries. Cutadapt exposes the exact
-surviving read-pair count, from which the workflow selects a buffered 90-,
-120-, 150-, 180-, 200-, 250-, 300-, or 400-GB STAR scratch tier independently
-for every sample; the selected profile value remains a minimum. A single input
+Complete runtime profiles provide explicit CPU, memory, disk floors, and
+operator-selected STAR and UMI disk classes for bounded GCP canaries. Cutadapt
+exposes the exact surviving read-pair count, from which the workflow selects a
+buffered 90-, 120-, 150-, 180-, 200-, 250-, 300-, or 400-GB STAR scratch tier
+independently for every sample. UMI scratch is independently raised to twice
+the combined STAR BAM size plus 15 GB. The selected profile values remain
+minimums, including the benchmarked 80-GB full-depth UMI floor. A single input
 JSON therefore supports heterogeneous sample sizes. Exact include/exclude
 sample manifests support bounded pilots followed by nonoverlapping cohort
 runs. The GCP support layer includes a concurrency guard, read-only preflight,
@@ -40,7 +42,7 @@ frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-The focused 64-test suite covers input validation, release/runtime profiles,
+The focused 69-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91

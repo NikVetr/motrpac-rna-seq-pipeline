@@ -152,14 +152,14 @@ script and the deterministic 100k and 5M paired-input sets with their sizes,
 SHA-256 values, and GCS object generations. The v47 release profile now points
 to checksum-addressed references and digest-addressed images.
 
-Runtime profiles set fixed CPU and memory requests and a minimum STAR scratch
-allocation:
+Runtime profiles set fixed CPU and memory requests and minimum STAR and UMI
+scratch allocations:
 
-| Profile | Intended use | STAR CPU/RAM/minimum disk GB/type | RSEM CPU/RAM/disk GB |
-| --- | --- | --- | --- |
-| `runtime-human-v47-small-v1.json` | One sample, at most 5M pairs | 10 / 64 / 90 / HDD | 10 / 16 / 30 |
-| `runtime-human-v47-full-lean-v1.json` | Full-depth human v47 samples | 12 / 72 / 120 / SSD | 10 / 40 / 60 |
-| `runtime-human-v47-high-candidate-v1.json` | Conservative fixed 150-GB minimum | 12 / 72 / 150 / SSD | 10 / 40 / 60 |
+| Profile | Intended use | STAR CPU/RAM/minimum disk GB/type | UMI CPU/RAM/minimum disk GB/type | RSEM CPU/RAM/disk GB |
+| --- | --- | --- | --- | --- |
+| `runtime-human-v47-small-v1.json` | One sample, at most 5M pairs | 10 / 64 / 90 / HDD | 4 / 20 / 30 / HDD | 10 / 16 / 30 |
+| `runtime-human-v47-full-lean-v1.json` | Full-depth human v47 samples | 12 / 72 / 120 / SSD | 4 / 20 / 80 / SSD | 10 / 40 / 60 |
+| `runtime-human-v47-high-candidate-v1.json` | Conservative fixed 150-GB minimum | 12 / 72 / 150 / SSD | 4 / 20 / 80 / SSD | 10 / 40 / 60 |
 
 After Cutadapt, the workflow reads the exact number of surviving pairs for each
 sample and raises that sample's STAR disk independently:
@@ -183,15 +183,22 @@ direct storage saving relative to 150 GB is only about $0.005 for a 41-minute
 STAR call at the reviewed `us-west1` SSD rate, so it is useful but not a major
 cost lever.
 
+UMI scratch is likewise raised independently for every sample to twice the
+combined GiB size of the genomic and transcriptome STAR BAMs plus 15 GB. The
+profile's `umi_dup_disk` remains a minimum; the full-depth profiles therefore
+retain the benchmarked 80-GB floor and grow only when the actual BAM inputs
+require it. Object sizes are read from storage metadata, without scanning or
+localizing the BAMs an extra time.
+
 The lean profile and 120-GB SSD passed the tested 39.4-million-pair full sample
 and the operator-interface canary. A separate 150-GB profile passed the
 48.1-million-pair CLI canary. The tiers add conservative headroom above the
 observed relationship and return to the historical 400-GB allocation above
 200 million pairs. CPU and memory remain fixed because the v47 index establishes
 a large input-independent floor and the current evidence does not support a
-more complicated policy. The generator continues to select HDD when
-`--star-disk-type` is omitted, preserving historical behavior; production v47
-inputs should pass `--star-disk-type SSD`.
+more complicated policy. The generator continues to select HDD when either
+disk-type option is omitted, preserving historical behavior; production v47
+inputs should pass both `--star-disk-type SSD` and `--umi-dup-disk-type SSD`.
 
 The project's `default` VPC uses custom subnet creation. The Batch backend
 therefore pins the `default` network and resolves its `default` subnet in each
@@ -220,6 +227,7 @@ mkdir -p /tmp/rnaseq-gcp-100k
   --contamination-qc-pairs 100000 \
   --runtime-profile config/backends/gcp/runtime-human-v47-full-lean-v1.json \
   --star-disk-type SSD \
+  --umi-dup-disk-type SSD \
   --project motrpac-portal
 ```
 

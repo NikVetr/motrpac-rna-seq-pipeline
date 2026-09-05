@@ -89,6 +89,27 @@ class WdlIoContractTests(unittest.TestCase):
             'disks: "local-disk ${disk_space} ${disk_type}"', task
         )
 
+    def test_umi_disk_is_input_scaled_with_the_requested_value_as_a_floor(self):
+        workflow = source("wdl/rnaseq_pipeline_scatter.wdl")
+        task = source("wdl/umi_dup/umi_dup.wdl")
+        self.assertIn('String umi_dup_disk_type = "HDD"', workflow)
+        self.assertIn('size(star_align.bam_file, "GiB")', workflow)
+        self.assertIn('size(star_align.transcriptome_bam, "GiB")', workflow)
+        self.assertIn(
+            "Int inferred_umi_scratch_gb = ceil(2.0 * umi_input_gib + 15.0)",
+            workflow,
+        )
+        self.assertIn(
+            "if umi_dup_disk > inferred_umi_scratch_gb then umi_dup_disk else inferred_umi_scratch_gb",
+            workflow,
+        )
+        self.assertIn("disk_space=effective_umi_scratch_gb", workflow)
+        self.assertIn("disk_type=umi_dup_disk_type", workflow)
+        self.assertIn('String disk_type = "HDD"', task)
+        self.assertIn(
+            'disks: "local-disk ${disk_space} ${disk_type}"', task
+        )
+
     def test_multiqc_does_not_remove_localized_inputs(self):
         for path in (
             "wdl/multiqc/multiqc.wdl",

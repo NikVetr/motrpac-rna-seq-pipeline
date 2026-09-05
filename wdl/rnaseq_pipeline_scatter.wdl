@@ -230,6 +230,7 @@ workflow rnaseq_pipeline {
         Int umi_dup_ncpu
         Int umi_dup_ramGB
         Int umi_dup_disk
+        String umi_dup_disk_type = "HDD"
         String umi_dup_docker
         Boolean use_umi_molecule_expression = true
         Boolean retain_all_read_expression = false
@@ -564,6 +565,12 @@ workflow rnaseq_pipeline {
         }
 
         if (use_index_reads && (run_umi_qc || use_umi_molecule_expression)) {
+            Float umi_input_gib = size(star_align.bam_file, "GiB") +
+                (if use_umi_molecule_expression then size(star_align.transcriptome_bam, "GiB") else 0.0)
+            Int inferred_umi_scratch_gb = ceil(2.0 * umi_input_gib + 15.0)
+            Int effective_umi_scratch_gb =
+                if umi_dup_disk > inferred_umi_scratch_gb then umi_dup_disk else inferred_umi_scratch_gb
+
             call umi_dup.UMI_dup as udup {
                 input:
                 # Inputs
@@ -574,7 +581,8 @@ workflow rnaseq_pipeline {
                 # Runtime Parameters
                     ncpu=umi_dup_ncpu,
                     memory=umi_dup_ramGB,
-                    disk_space=umi_dup_disk,
+                    disk_space=effective_umi_scratch_gb,
+                    disk_type=umi_dup_disk_type,
                     preemptible=num_preemptible_attempts,
                     docker=umi_dup_docker
             }

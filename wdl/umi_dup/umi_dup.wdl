@@ -9,6 +9,7 @@ task UMI_dup {
         # Runtime Attributes
         Int memory
         Int disk_space
+        String disk_type = "HDD"
         Int ncpu
         Int preemptible
         String docker
@@ -109,7 +110,7 @@ task UMI_dup {
     runtime {
         cpu: ncpu
         memory: "${memory}GB"
-        disks: "local-disk ${disk_space} HDD"
+        disks: "local-disk ${disk_space} ${disk_type}"
         docker: docker
         preemptible: preemptible
     }

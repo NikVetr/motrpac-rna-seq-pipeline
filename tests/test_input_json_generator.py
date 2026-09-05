@@ -54,6 +54,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             umi_molecule_expression=include_index,
             retain_all_read_expression=False,
             star_disk_type=None,
+            umi_dup_disk_type=None,
             project="local-test-only",
         )
 
@@ -178,15 +179,24 @@ class InputJsonGeneratorTests(unittest.TestCase):
                 "human", "gencode_v39", "registry.example/rnaseq", "cohort"
             )
 
-    def test_star_disk_type_is_opt_in_and_validated(self) -> None:
+    def test_work_disk_types_are_opt_in_and_validated(self) -> None:
         default_document = self.make_document()
         self.assertNotIn("rnaseq_pipeline.star_disk_type", default_document)
+        self.assertNotIn("rnaseq_pipeline.umi_dup_disk_type", default_document)
 
-        ssd_document = self.make_document(star_disk_type="SSD")
+        ssd_document = self.make_document(
+            star_disk_type="SSD", umi_dup_disk_type="SSD"
+        )
         self.assertEqual("SSD", ssd_document["rnaseq_pipeline.star_disk_type"])
+        self.assertEqual("SSD", ssd_document["rnaseq_pipeline.umi_dup_disk_type"])
+
+        hdd_document = self.make_document(umi_dup_disk_type="HDD")
+        self.assertEqual("HDD", hdd_document["rnaseq_pipeline.umi_dup_disk_type"])
 
         with self.assertRaisesRegex(ValueError, "must be HDD or SSD"):
             self.make_document(star_disk_type="LOCAL")
+        with self.assertRaisesRegex(ValueError, "must be HDD or SSD"):
+            self.make_document(umi_dup_disk_type="LOCAL")
 
     def test_umi_molecule_expression_policy_requires_i1(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a matched I1"):
@@ -377,7 +387,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
                 generator.main(self.arguments())
         self.assertFalse(hasattr(filesystem, "pattern"))
 
-    def test_main_emits_explicit_runtime_profile_and_star_disk_type(self) -> None:
+    def test_main_emits_explicit_runtime_profile_and_disk_types(self) -> None:
         r1 = "bucket/sample_R1.fastq.gz"
         r2 = "gs://bucket/sample_R2.fastq.gz"
         i1 = "gs://bucket/sample_I1.fastq.gz"
@@ -387,6 +397,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             REPO_ROOT / "config/backends/gcp/runtime-human-v47-small-v1.json"
         )
         arguments.star_disk_type = "SSD"
+        arguments.umi_dup_disk_type = "SSD"
         with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
             self.assertEqual(0, generator.main(arguments))
         document = json.loads((self.temp / "set1_rnaseq.json").read_text())
@@ -394,6 +405,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertEqual(16, document["rnaseq_pipeline.rsem_ramGB"])
         self.assertEqual(40, document["rnaseq_pipeline.markdup_ramGB"])
         self.assertEqual("SSD", document["rnaseq_pipeline.star_disk_type"])
+        self.assertEqual("SSD", document["rnaseq_pipeline.umi_dup_disk_type"])
         self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
         self.assertFalse(document["rnaseq_pipeline.retain_all_read_expression"])
 

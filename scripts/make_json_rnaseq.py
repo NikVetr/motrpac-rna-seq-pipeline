@@ -506,6 +506,7 @@ def main(command_args: argparse.Namespace):
                 release_inputs=release_inputs,
                 runtime_overrides=runtime_overrides,
                 star_disk_type=getattr(command_args, "star_disk_type", None),
+                umi_dup_disk_type=getattr(command_args, "umi_dup_disk_type", None),
                 use_umi_molecule_expression=use_umi_molecule_expression,
                 retain_all_read_expression=retain_all_read_expression,
                 **qc_settings,
@@ -550,6 +551,7 @@ def make_json_dict(
     run_umi_qc=True,
     run_multiqc=False,
     star_disk_type=None,
+    umi_dup_disk_type=None,
 ):
     if r1 is None:
         r1 = []
@@ -573,6 +575,8 @@ def make_json_dict(
         raise ValueError("contamination_qc_pairs must be a nonnegative integer")
     if star_disk_type not in (None, "HDD", "SSD"):
         raise ValueError("star_disk_type must be HDD or SSD")
+    if umi_dup_disk_type not in (None, "HDD", "SSD"):
+        raise ValueError("umi_dup_disk_type must be HDD or SSD")
     if not run_contamination_qc and (
         combine_contamination_qc or contamination_qc_pairs != 0
     ):
@@ -737,6 +741,8 @@ def make_json_dict(
         filled_dict["rnaseq_pipeline.run_multiqc"] = True
     if star_disk_type is not None:
         filled_dict["rnaseq_pipeline.star_disk_type"] = star_disk_type
+    if umi_dup_disk_type is not None:
+        filled_dict["rnaseq_pipeline.umi_dup_disk_type"] = umi_dup_disk_type
 
     d = {
         **filled_dict,
@@ -837,6 +843,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--star-disk-type",
         help="STAR working-disk class; omit to retain the historical HDD default",
+        choices=["HDD", "SSD"],
+    )
+    parser.add_argument(
+        "--umi-dup-disk-type",
+        help="UMI working-disk class; omit to retain the historical HDD default",
         choices=["HDD", "SSD"],
     )
     parser.add_argument(

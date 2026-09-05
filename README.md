@@ -201,6 +201,7 @@ python3 scripts/make_json_rnaseq.py \
   -d us-docker.pkg.dev/motrpac-portal/rnaseq \
   --runtime-profile config/backends/gcp/runtime-human-v47-full-lean-v1.json \
   --star-disk-type SSD \
+  --umi-dup-disk-type SSD \
   -i
 ```
 
@@ -230,10 +231,13 @@ The QC table is assembled directly from native tool reports. Pass
 MultiQC archives; this requires both FastQC groups and alignment QC.
 
 For GCP tests, select a complete profile with `--runtime-profile` and select
-STAR scratch explicitly with `--star-disk-type HDD|SSD`. Within a multi-sample
-workflow, STAR scratch is then raised independently for each sample from its
-exact post-trim pair count; the profile's `star_disk` remains a minimum. These
-options augment the existing JSON format and Caper submission command; see
+STAR and UMI scratch explicitly with `--star-disk-type HDD|SSD` and
+`--umi-dup-disk-type HDD|SSD`. Within a multi-sample workflow, STAR scratch is
+raised independently from each sample's exact post-trim pair count. UMI scratch
+is raised to twice the combined STAR BAM object size plus 15 GB. The profile
+values remain minimums, so the full-depth profile retains the tested 80-GB UMI
+floor.
+These options augment the existing JSON format and Caper submission command; see
 [`scripts/scripts_readme.md`](scripts/scripts_readme.md) for the full generator
 interface and [`docs/gcp-cli-canary-runbook.md`](docs/gcp-cli-canary-runbook.md)
 for the bounded benchmark procedure.
