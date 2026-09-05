@@ -9,7 +9,7 @@ task UMI_dup {
         # Runtime Attributes
         Int memory
         Int disk_space
-        String disk_type = "HDD"
+        String disk_type = "SSD"
         Int ncpu
         Int preemptible
         String docker

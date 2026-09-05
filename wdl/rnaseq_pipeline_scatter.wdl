@@ -230,7 +230,7 @@ workflow rnaseq_pipeline {
         Int umi_dup_ncpu
         Int umi_dup_ramGB
         Int umi_dup_disk
-        String umi_dup_disk_type = "HDD"
+        String umi_dup_disk_type = "SSD"
         String umi_dup_docker
         Boolean use_umi_molecule_expression = true
         Boolean retain_all_read_expression = false

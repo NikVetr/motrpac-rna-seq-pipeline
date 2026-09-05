@@ -15,7 +15,8 @@ Directional UMI grouping and molecule-level RSEM and featureCounts matrices are
 enabled by default when matched I1 reads are present. These matrices use the
 canonical output names. Conventional all-read quantification is skipped unless
 the operator requests secondary `all_read_*` matrices; an explicit legacy
-switch instead makes historical all-read expression canonical.
+switch instead makes historical all-read expression canonical. Combining it
+with `--no-index` omits I1 inputs and UMI QC.
 
 FASTQ QC, contamination screening, alignment QC, and UMI QC are independently
 selectable. Native tool reports feed the stable QC table directly. The three
@@ -31,7 +32,9 @@ exposes the exact surviving read-pair count, from which the workflow selects a
 buffered 90-, 120-, 150-, 180-, 200-, 250-, 300-, or 400-GB STAR scratch tier
 independently for every sample. UMI scratch is independently raised to twice
 the combined STAR BAM size plus 15 GB. The selected profile values remain
-minimums, including the benchmarked 80-GB full-depth UMI floor. A single input
+minimums, including the benchmarked 80-GB full-depth UMI floor. UMI scratch
+defaults to SSD with an explicit HDD override; STAR remains independently
+selectable and defaults to HDD. A single input
 JSON therefore supports heterogeneous sample sizes. Exact include/exclude
 sample manifests support bounded pilots followed by nonoverlapping cohort
 runs. The GCP support layer includes a concurrency guard, read-only preflight,
@@ -42,7 +45,7 @@ frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-The focused 69-test suite covers input validation, release/runtime profiles,
+The focused 70-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91

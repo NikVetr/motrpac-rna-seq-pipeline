@@ -196,9 +196,10 @@ and the operator-interface canary. A separate 150-GB profile passed the
 observed relationship and return to the historical 400-GB allocation above
 200 million pairs. CPU and memory remain fixed because the v47 index establishes
 a large input-independent floor and the current evidence does not support a
-more complicated policy. The generator continues to select HDD when either
-disk-type option is omitted, preserving historical behavior; production v47
-inputs should pass both `--star-disk-type SSD` and `--umi-dup-disk-type SSD`.
+more complicated policy. STAR still defaults to HDD; production v47 inputs
+should pass `--star-disk-type SSD`. UMI defaults to SSD, with an explicit
+`--umi-dup-disk-type HDD` override available for comparisons. Existing JSONs
+that explicitly request UMI HDD must be updated to select SSD.
 
 The project's `default` VPC uses custom subnet creation. The Batch backend
 therefore pins the `default` network and resolves its `default` subnet in each

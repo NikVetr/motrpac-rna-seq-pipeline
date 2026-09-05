@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -448,6 +449,43 @@ class InputJsonGeneratorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "required mate/index objects are missing"):
                 generator.main(self.arguments())
         self.assertFalse((self.temp / "set1_rnaseq.json").exists())
+
+    def test_cli_index_selection_and_umi_disk_default(self) -> None:
+        script = str(REPO_ROOT / "scripts" / "make_json_rnaseq.py")
+        cases = (
+            ([], True, "SSD"),
+            (["--no-index", "--legacy-all-read-expression-only"], False, "SSD"),
+            (["--umi-dup-disk-type", "HDD"], True, "HDD"),
+        )
+        for index, (options, include_index, disk_type) in enumerate(cases):
+            with self.subTest(options=options):
+                destination = self.temp / str(index)
+                destination.mkdir()
+                r2 = "gs://bucket/sample_R2.fastq.gz"
+                i1 = "gs://bucket/sample_I1.fastq.gz"
+                filesystem = FakeGcsFileSystem(
+                    ["bucket/sample_R1.fastq.gz"],
+                    {r2, i1} if include_index else {r2},
+                )
+                argv = [script, "-g", "gs://bucket", "-o", str(destination),
+                        "-r", "cohort", "-a", "human", "-v", "gencode_v47",
+                        "-n", "1"] + options
+                with mock.patch.object(sys, "argv", argv), mock.patch.dict(
+                    sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}
+                ):
+                    with self.assertRaises(SystemExit) as result:
+                        runpy.run_path(script, run_name="__main__")
+                self.assertEqual(0, result.exception.code)
+                document = json.loads((destination / "set1_rnaseq.json").read_text())
+                self.assertEqual([i1] if include_index else None,
+                                 document["rnaseq_pipeline.fastq_index"])
+                self.assertEqual(include_index,
+                                 document["rnaseq_pipeline.use_umi_molecule_expression"])
+                self.assertEqual(disk_type, document["rnaseq_pipeline.umi_dup_disk_type"])
+
+        with mock.patch.object(sys, "argv", argv[:-2] + ["--no-index"]):
+            with self.assertRaisesRegex(ValueError, "requires matched I1 FASTQs"):
+                runpy.run_path(script, run_name="__main__")
 
     def test_organism_and_reference_are_required_together(self) -> None:
         result = subprocess.run(

@@ -92,7 +92,7 @@ class WdlIoContractTests(unittest.TestCase):
     def test_umi_disk_is_input_scaled_with_the_requested_value_as_a_floor(self):
         workflow = source("wdl/rnaseq_pipeline_scatter.wdl")
         task = source("wdl/umi_dup/umi_dup.wdl")
-        self.assertIn('String umi_dup_disk_type = "HDD"', workflow)
+        self.assertIn('String umi_dup_disk_type = "SSD"', workflow)
         self.assertIn('size(star_align.bam_file, "GiB")', workflow)
         self.assertIn('size(star_align.transcriptome_bam, "GiB")', workflow)
         self.assertIn(
@@ -105,7 +105,7 @@ class WdlIoContractTests(unittest.TestCase):
         )
         self.assertIn("disk_space=effective_umi_scratch_gb", workflow)
         self.assertIn("disk_type=umi_dup_disk_type", workflow)
-        self.assertIn('String disk_type = "HDD"', task)
+        self.assertIn('String disk_type = "SSD"', task)
         self.assertIn(
             'disks: "local-disk ${disk_space} ${disk_type}"', task
         )

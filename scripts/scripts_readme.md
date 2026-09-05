@@ -18,7 +18,7 @@ usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            [--release-manifest RELEASE_MANIFEST]
                            [--runtime-profile RUNTIME_PROFILE]
                            [--star-disk-type {HDD,SSD}]
-                           [--umi-dup-disk-type {HDD,SSD}] [-i]
+                           [--umi-dup-disk-type {HDD,SSD}] [-i | --no-index]
                            [--legacy-all-read-expression-only]
                            [--retain-all-read-expression]
                            [--skip-pretrim-fastqc]
@@ -71,10 +71,11 @@ optional arguments:
                         STAR working-disk class; omit to retain the historical
                         HDD default
   --umi-dup-disk-type {HDD,SSD}
-                        UMI working-disk class; omit to retain the historical
-                        HDD default
+                        UMI working-disk class (default: SSD)
   -i, --index           add matched I1 FASTQs for UMI processing (enabled by
                         default)
+  --no-index            omit I1 FASTQs and UMI QC; requires
+                        --legacy-all-read-expression-only
   --legacy-all-read-expression-only
                         omit directional UMI molecule matrices and retain
                         historical all-read matrices only
@@ -117,13 +118,16 @@ matrices by default. They use the canonical expression filenames and are the
 only expression branch run by default. Use `--retain-all-read-expression` to
 also emit the non-UMI-deduplicated matrices under `all_read_*` names, or use
 `--legacy-all-read-expression-only` to make the historical all-read matrices
-canonical instead. The two switches cannot be combined.
+canonical instead. The two switches cannot be combined. To run without I1
+files, combine `--no-index` with `--legacy-all-read-expression-only`; UMI QC
+is then omitted.
 
 Runtime profiles set fixed CPU and memory requests plus minimum STAR and UMI
 scratch sizes. The workflow raises STAR scratch from each sample's exact
 post-trim pair count and UMI scratch from its STAR BAM sizes. Select either
 working-disk class explicitly with `--star-disk-type` and
-`--umi-dup-disk-type`; omitting an option preserves its historical HDD default.
+`--umi-dup-disk-type`; STAR defaults to HDD and UMI defaults to SSD.
+Existing JSONs that explicitly request UMI HDD retain that setting.
 
 For a bounded pilot, write the exact sample prefixes (the FASTQ basename before
 `_R1.fastq.gz`) one per line and pass `--sample-list`. Reuse that same manifest

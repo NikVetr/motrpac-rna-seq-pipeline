@@ -216,6 +216,8 @@ matrices are enabled by default and use the canonical RSEM and featureCounts
 filenames. Pass `--retain-all-read-expression` to additionally emit the
 non-UMI-deduplicated matrices under `all_read_*` names, or pass
 `--legacy-all-read-expression-only` to run only the historical all-read branch.
+To run without I1 files, combine `--no-index` with
+`--legacy-all-read-expression-only`; UMI QC is then omitted.
 For a bounded pilot, pass an exact one-prefix-per-line manifest with
 `--sample-list`; pass the same file with `--exclude-sample-list` when generating
 the remaining cohort. These options select samples within one `--gcp_path` and
@@ -232,7 +234,8 @@ MultiQC archives; this requires both FastQC groups and alignment QC.
 
 For GCP tests, select a complete profile with `--runtime-profile` and select
 STAR and UMI scratch explicitly with `--star-disk-type HDD|SSD` and
-`--umi-dup-disk-type HDD|SSD`. Within a multi-sample workflow, STAR scratch is
+`--umi-dup-disk-type HDD|SSD` (UMI defaults to SSD; STAR defaults to HDD).
+Within a multi-sample workflow, STAR scratch is
 raised independently from each sample's exact post-trim pair count. UMI scratch
 is raised to twice the combined STAR BAM object size plus 15 GB. The profile
 values remain minimums, so the full-depth profile retains the tested 80-GB UMI

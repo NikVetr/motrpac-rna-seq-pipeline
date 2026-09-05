@@ -847,15 +847,23 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--umi-dup-disk-type",
-        help="UMI working-disk class; omit to retain the historical HDD default",
+        help="UMI working-disk class (default: SSD)",
         choices=["HDD", "SSD"],
+        default="SSD",
     )
-    parser.add_argument(
+    index_options = parser.add_mutually_exclusive_group()
+    index_options.add_argument(
         "-i",
         "--index",
         help="add matched I1 FASTQs for UMI processing (enabled by default)",
         default=True,
         action="store_true",
+    )
+    index_options.add_argument(
+        "--no-index",
+        dest="index",
+        help="omit I1 FASTQs and UMI QC; requires --legacy-all-read-expression-only",
+        action="store_false",
     )
     parser.add_argument(
         "--legacy-all-read-expression-only",
