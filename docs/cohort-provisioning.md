@@ -25,9 +25,14 @@ RSEM growth and merge RAM rules are conservative capacity rules calibrated on
 human v47, not universal bounds for other annotations or much larger cohorts.
 The small profile remains a small-run floor; it does not reduce the full-depth
 profile. Do not reduce configured floors from this retrospective analysis.
-The new WDL expressions and link-based merge commands pass local checks;
-their new resource requests still need a bounded GCP canary before a new
-cohort launch. No CPU speedup or cost saving is claimed from average utilization.
+The WDL expressions and link-based merge commands pass local checks and a
+three-call GCP canary (`ef97bfae-cc72-40cf-9d5d-869ea4134c39`). One RSEM rerun
+used 4 vCPUs, 20 GB RAM, and 15 GB scratch; both two-library merges used
+1 vCPU, 4 GB RAM, and 11 GB scratch. All outputs matched their original values
+exactly, with one worker at a time and no retries. The canary used 1.68 worker
+vCPU-hours and $0.0957 frozen-rate modeled worker cost, excluding controller,
+transfer, and retained storage. Large-sample performance and smaller SSDs
+remain unbenchmarked; no CPU speedup is claimed from average utilization.
 
 ## Locality belongs at launch
 

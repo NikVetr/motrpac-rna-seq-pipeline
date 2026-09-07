@@ -67,8 +67,10 @@ validation under OpenJDK 21.
 checks both rendered merge commands against byte-identical fixture outputs.
 The cohort resource review covers all 4,455 successful per-sample calls from
 297 libraries; its full RSEM memory peak is 38.26 GiB, supporting retention of
-the 40-GB floor. New growth rules require a bounded cloud canary; the existing
-cohort evidence does not establish CPU speedups or benefits from smaller SSDs.
+the 40-GB floor. A three-call GCP canary verified RSEM growth to 20-GB RAM and
+15-GB scratch and both two-library merges, with byte-identical outputs, one
+worker at a time, and no retries. The cohort/canary evidence does not establish
+large-sample speedups or benefits from smaller SSDs.
 
 The current human-v47 graph, retained v39 and rat configurations, no-I1 policy,
 QC switches, default molecule-expression policy, optional all-read branch, and
