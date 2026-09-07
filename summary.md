@@ -37,7 +37,13 @@ defaults to SSD with an explicit HDD override; STAR remains independently
 selectable and defaults to HDD. A single input
 JSON therefore supports heterogeneous sample sizes. Exact include/exclude
 sample manifests support bounded pilots followed by nonoverlapping cohort
-runs. The GCP support layer includes a concurrency guard, read-only preflight,
+runs. Both cohort merges request at least three times their total input GiB
+plus 10 GiB, rounded up, preserving the configured disk request as a floor.
+This accommodates localization, task-local copies, and merged outputs. CPU
+and RAM remain explicitly configured. The merged QC table retains the legacy
+pipeline-derived covariate contract; participant, visit, treatment, demographic,
+batch, and RIN metadata must be joined from study records by sample ID.
+The GCP support layer includes a concurrency guard, read-only preflight,
 pinned Cromwell Batch configuration, resource monitoring, immutable evidence
 capture, and attempt-aware cost summarization. With no `cpuPlatform` override,
 Cromwell provisions N1 custom workers; cost summaries therefore default to a

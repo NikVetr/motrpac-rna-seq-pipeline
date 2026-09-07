@@ -15,6 +15,11 @@ task merge_expression {
     }
 
     File sample_order = write_lines(sample_prefix)
+    Float merge_input_gib = size(rsem_files, "GiB") + size(feature_counts_files, "GiB")
+    # Allow for localized inputs, task-local copies, merged outputs, and scratch.
+    Int inferred_merge_scratch_gb = ceil(3.0 * merge_input_gib + 10.0)
+    Int effective_merge_scratch_gb =
+        if disk_space > inferred_merge_scratch_gb then disk_space else inferred_merge_scratch_gb
 
     command <<<
         set -euo pipefail
@@ -45,7 +50,7 @@ task merge_expression {
     runtime {
         cpu: ncpu
         memory: "${memory}GB"
-        disks: "local-disk ${disk_space} HDD"
+        disks: "local-disk ${effective_merge_scratch_gb} HDD"
         docker: docker
         preemptible: preemptible
     }

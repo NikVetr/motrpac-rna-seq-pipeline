@@ -110,6 +110,21 @@ class WdlIoContractTests(unittest.TestCase):
             'disks: "local-disk ${disk_space} ${disk_type}"', task
         )
 
+    def test_merge_disk_scales_for_both_expression_branches(self):
+        for name in ("merge_results", "merge_expression"):
+            with self.subTest(task=name):
+                task = source("wdl/merge_results/{}.wdl".format(name))
+                self.assertIn('size(rsem_files, "GiB")', task)
+                self.assertIn('size(feature_counts_files, "GiB")', task)
+                if name == "merge_results":
+                    self.assertIn('size(qc_report_files, "GiB")', task)
+                self.assertIn("ceil(3.0 * merge_input_gib + 10.0)", task)
+                self.assertIn(
+                    "if disk_space > inferred_merge_scratch_gb then disk_space else inferred_merge_scratch_gb",
+                    task,
+                )
+                self.assertIn('disks: "local-disk ${effective_merge_scratch_gb} HDD"', task)
+
     def test_multiqc_does_not_remove_localized_inputs(self):
         for path in (
             "wdl/multiqc/multiqc.wdl",
