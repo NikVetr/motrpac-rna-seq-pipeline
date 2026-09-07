@@ -338,6 +338,9 @@ Both merge tasks size scratch from their actual inputs: three times the total
 input GiB plus 10 GiB, rounded up, with `merge_results_disk` retained as a floor.
 This covers localization, task-local copies, merged matrices, and headroom as
 cohort size grows. CPU and RAM remain explicitly configured.
+For the 297-library recovery, `merge_results_ramGB` is explicitly set to 16;
+the RSEM merge alone exceeded 4 GiB RSS, so the small-run 4-GB setting is
+insufficient at this cohort size.
 
 The merged QC table supplies pipeline-derived covariates such as `pct_umi_dup`.
 As in legacy master, participant IDs, visits, treatment groups, demographics,

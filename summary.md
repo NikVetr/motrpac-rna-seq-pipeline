@@ -51,7 +51,7 @@ frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-The focused 70-test suite covers input validation, release/runtime profiles,
+The focused 71-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91
@@ -60,9 +60,11 @@ validation under OpenJDK 21.
 The current human-v47 graph, retained v39 and rat configurations, no-I1 policy,
 QC switches, default molecule-expression policy, optional all-read branch, and
 legacy all-read-only mode have focused contract coverage, but every
-cross-product has not been run as a separate integration workflow. The current
-per-sample disk-tier and canonical-output policies require one bounded
-multi-sample production-interface pilot before cohort release.
+cross-product has not been run as a separate integration workflow. The human
+v47 cohort completed all 4,440 per-sample calls. A combined 297-library gather,
+including the separately completed missing sample, succeeded with 68 GB of
+dynamically sized scratch and an explicit 16-GB RAM request. All four matrices
+passed gene/sample and numeric checks; merged QC matched every source row.
 
 The current canonical-output graph completed a 100k-pair local canary in 16
 calls with MultiQC enabled. It did not schedule conventional all-read
@@ -70,8 +72,8 @@ featureCounts, RSEM, or gather calls; every optional `all_read_*` output was
 empty. The canonical featureCounts and RSEM count matrices were byte-identical
 to the directional-UMI matrices from the preceding accepted local canary. The
 Cutadapt task reported exactly 99,979 surviving pairs to the STAR sizing
-expression. Local MiniWDL does not provision WDL disks, so the multi-sample GCP
-pilot remains the execution test for the selected cloud disk tiers.
+expression. Local MiniWDL does not provision WDL disks; cloud runtime evidence
+is required to verify the selected disk tiers.
 
 The preceding dual-expression human-v47 graph passes complete 100k-pair
 integration canaries both locally and through Cromwell 92/GCP Batch. The exact
