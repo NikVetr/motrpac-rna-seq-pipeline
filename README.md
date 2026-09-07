@@ -336,11 +336,14 @@ Final merged outputs are written to the GCS bucket specified during pipeline sub
 
 Both merge tasks size scratch from their actual inputs: three times the total
 input GiB plus 10 GiB, rounded up, with `merge_results_disk` retained as a floor.
-This covers localization, task-local copies, merged matrices, and headroom as
-cohort size grows. CPU and RAM remain explicitly configured.
-For the 297-library recovery, `merge_results_ramGB` is explicitly set to 16;
-the RSEM merge alone exceeded 4 GiB RSS, so the small-run 4-GB setting is
-insufficient at this cohort size.
+This retains the validated disk headroom as cohort size grows. Merge inputs
+are linked rather than copied. Both merges request at least 4 GB RAM per
+75 libraries, rounded up to whole tiers (16 GB for 297 libraries), preserving
+`merge_results_ramGB` as a floor. Molecule RSEM also raises RAM and scratch
+from its input BAM size; CPU counts and STAR/UMI sizing are unchanged.
+See [cohort provisioning and operations](docs/cohort-provisioning.md) for
+the measured limits, regional launch guard, metadata command, and verified
+controller shutdown procedure.
 
 The merged QC table supplies pipeline-derived covariates such as `pct_umi_dup`.
 As in legacy master, participant IDs, visits, treatment groups, demographics,

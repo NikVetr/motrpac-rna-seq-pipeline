@@ -39,10 +39,17 @@ JSON therefore supports heterogeneous sample sizes. Exact include/exclude
 sample manifests support bounded pilots followed by nonoverlapping cohort
 runs. Both cohort merges request at least three times their total input GiB
 plus 10 GiB, rounded up, preserving the configured disk request as a floor.
-This accommodates localization, task-local copies, and merged outputs. CPU
-and RAM remain explicitly configured. The merged QC table retains the legacy
+Merge inputs are symbolic links to localized files; the validated disk margin
+is retained. Merge RAM grows by 4 GB per 75 libraries, rounded up, with the
+configured value as a floor. Molecule RSEM RAM and scratch also grow from
+transcriptome BAM bytes, preserving configured floors. CPU counts are explicit.
+The merged QC table retains the legacy
 pipeline-derived covariate contract; participant, visit, treatment, demographic,
-batch, and RIN metadata must be joined from study records by sample ID.
+batch, and RIN metadata are joined from study records by sample ID using
+`scripts/prepare_sample_metadata.py`, preserving expression-column order and
+unscaled values. A launch guard requires regional execution storage matching
+the Batch region and worker zones, while reporting remote source buckets.
+An explicit controller-stop helper requires complete local evidence first.
 The GCP support layer includes a concurrency guard, read-only preflight,
 pinned Cromwell Batch configuration, resource monitoring, immutable evidence
 capture, and attempt-aware cost summarization. With no `cpuPlatform` override,
@@ -51,11 +58,17 @@ frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-The focused 71-test suite covers input validation, release/runtime profiles,
+The focused 74-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91
 validation under OpenJDK 21.
+`tests/check_wdl_resources.py` additionally evaluates resource expressions and
+checks both rendered merge commands against byte-identical fixture outputs.
+The cohort resource review covers all 4,455 successful per-sample calls from
+297 libraries; its full RSEM memory peak is 38.26 GiB, supporting retention of
+the 40-GB floor. New growth rules require a bounded cloud canary; the existing
+cohort evidence does not establish CPU speedups or benefits from smaller SSDs.
 
 The current human-v47 graph, retained v39 and rat configurations, no-I1 policy,
 QC switches, default molecule-expression policy, optional all-read branch, and

@@ -16,23 +16,33 @@ task merge_results {
     }
 
     File sample_order = write_lines(sample_prefix)
+    # Four GiB per 75 libraries gives the validated 16-GiB request at 297.
+    Int inferred_merge_memory_gb = 4 * ceil(length(sample_prefix) / 75.0)
+    Int effective_merge_memory_gb =
+        if memory > inferred_merge_memory_gb then memory else inferred_merge_memory_gb
     Float merge_input_gib = size(rsem_files, "GiB") + size(feature_counts_files, "GiB") + size(qc_report_files, "GiB")
-    # Allow for localized inputs, task-local copies, merged outputs, and scratch.
+    # Retain the cohort-validated allowance for localization, outputs, and scratch.
     Int inferred_merge_scratch_gb = ceil(3.0 * merge_input_gib + 10.0)
     Int effective_merge_scratch_gb =
         if disk_space > inferred_merge_scratch_gb then disk_space else inferred_merge_scratch_gb
 
     command <<<
         set -eou pipefail
-        echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, copying files ---"
+        echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, linking localized files ---"
 
         mkdir -p rsem_files
         mkdir -p qc_report_files
         mkdir -p feature_counts_files
 
-        cp ~{sep=" " rsem_files} rsem_files/
-        cp ~{sep=" " feature_counts_files} feature_counts_files/
-        cp ~{sep=" " qc_report_files} qc_report_files/
+        while IFS= read -r input; do
+            ln -s -- "$(realpath -- "$input")" rsem_files/
+        done < "~{write_lines(rsem_files)}"
+        while IFS= read -r input; do
+            ln -s -- "$(realpath -- "$input")" feature_counts_files/
+        done < "~{write_lines(feature_counts_files)}"
+        while IFS= read -r input; do
+            ln -s -- "$(realpath -- "$input")" qc_report_files/
+        done < "~{write_lines(qc_report_files)}"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Merging RSEM results ---"
         python3 /usr/local/src/merge_rsem.py \
@@ -78,7 +88,7 @@ task merge_results {
 
     runtime {
         cpu: ncpu
-        memory: "${memory}GB"
+        memory: "${effective_merge_memory_gb}GB"
         disks: "local-disk ${effective_merge_scratch_gb} HDD"
         docker: docker
         preemptible: preemptible

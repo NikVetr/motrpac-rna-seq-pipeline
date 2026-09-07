@@ -588,6 +588,15 @@ workflow rnaseq_pipeline {
             }
 
             if (use_umi_molecule_expression) {
+                # Buffered from 297 v47 libraries; configured resources remain floors.
+                Float molecule_rsem_input_gib = size(udup.molecule_transcriptome_bam[0], "GiB")
+                Int inferred_molecule_rsem_memory = 4 * ceil((16.0 + 2.0 * molecule_rsem_input_gib) / 4.0)
+                Int inferred_molecule_rsem_scratch_gb = ceil(10.0 + 4.0 * molecule_rsem_input_gib)
+                Int effective_molecule_rsem_memory =
+                    if rsem_ramGB > inferred_molecule_rsem_memory then rsem_ramGB else inferred_molecule_rsem_memory
+                Int effective_molecule_rsem_scratch_gb =
+                    if rsem_disk > inferred_molecule_rsem_scratch_gb then rsem_disk else inferred_molecule_rsem_scratch_gb
+
                 call fc.feature_counts as umi_molecule_feature_counts_task {
                     input:
                         SID=sample_prefix[i],
@@ -606,8 +615,8 @@ workflow rnaseq_pipeline {
                         transcriptome_bam=udup.molecule_transcriptome_bam[0],
                         rsem_reference=rsem_reference,
                         ncpu=rsem_ncpu,
-                        memory=rsem_ramGB,
-                        disk_space=rsem_disk,
+                        memory=effective_molecule_rsem_memory,
+                        disk_space=effective_molecule_rsem_scratch_gb,
                         preemptible=num_preemptible_attempts,
                         docker=rsem_docker
                 }
