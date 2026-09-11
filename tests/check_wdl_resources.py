@@ -132,3 +132,15 @@ defaults = {decl.name: decl.expr.eval(WDL.Env.Bindings(), Files("1.0")).value
 assert defaults == {"num_preemptible_attempts": 1, "use_umi_molecule_expression": True,
                     "retain_all_read_expression": False}
 print("STAR v47/v50/rat tier boundaries, explicit floors, Spot and expression defaults PASS")
+
+task = WDL.load(str(repo / "wdl/collect_rnaseq_metrics/collect_rnaseq_metrics.wdl")).tasks[0]
+for enabled in (True, False):
+    for cpu in (1, 2, 4):
+        for ram in (8, 12, 13, 14, 48):
+            env = WDL.values_from_json({"prefer_predefined_n1": enabled, "ncpu": cpu, "memory": ram}, task.available_inputs)
+            selected = task.runtime["gcp"].eval(env, Files("1.0")).json
+            expected = {"predefinedMachineType": "n1-highmem-2"} if enabled and cpu == 2 and ram == 12 else {}
+            assert selected == expected
+            assert task.runtime["cpu"].eval(env, Files("1.0")).value == cpu
+            assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{ram}GB"
+print("Predefined N1 exact-shape selection, opt-out and larger resource requests PASS")

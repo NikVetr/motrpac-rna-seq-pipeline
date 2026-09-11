@@ -8,6 +8,14 @@ The workflow multiplies STAR's post-trim read-pair scratch tiers by 1.30 only
 when `reference_release` is `gencode_v50`, rounding up and respecting larger
 explicit floors. v47 and rat resource rules are unchanged.
 
+The profile enables `rnaseq_pipeline.prefer_predefined_n1`. In us-west2, a
+2-vCPU/12-GB RNA-QC request uses `n1-highmem-2` (2 vCPUs/13 GiB), approximately
+1.2% cheaper in both Spot and on-demand compute than N1 custom. The heap stays
+at 12 GB. Other CPU/RAM requests keep the backend's normal sizing. The locality
+guard rejects other regions and explicit CPU-platform/machine overrides while
+this policy is enabled; disable it when those settings are needed. Use the
+pinned Cromwell 92 backend, which supports conditional `gcp` runtime objects.
+
 These are buffered pilot candidates, not validated resource minima. Four
 completed v50 RSEM calls used 7.38/27.82/31.85/35.71 GiB working memory and
 would request 32/48/52/56 GB. Incomplete UMI tails reached 30.94 GiB working
@@ -63,7 +71,7 @@ verified cache hits. Preserve inputs/options and source revision. An independent
 sample can finish after another fails; a full merge still requires repair of
 the missing sample. Capture failed attempts as well as successes before cleanup.
 
-Keep the N1 custom family for this calibration. A price-only comparison found
+Keep the N1 family and the eligible predefined RNA-QC upgrade for this calibration. A price-only comparison found
 E2 predefined Spot shapes worth a separate small matched test; changing family
 at the same time would confound RAM calibration. Predefined shape selection
 overrides CPU/RAM runtime requests, so never apply one fixed machine type to

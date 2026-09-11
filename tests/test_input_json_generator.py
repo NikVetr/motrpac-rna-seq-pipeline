@@ -300,25 +300,27 @@ class InputJsonGeneratorTests(unittest.TestCase):
             overrides = generator.load_runtime_profile(
                 REPO_ROOT / "config" / "backends" / "gcp" / filename
             )
-            self.assertEqual(generator.RUNTIME_RESOURCE_KEYS, set(overrides))
+            expected_keys = generator.RUNTIME_RESOURCE_KEYS | (
+                {generator.RUNTIME_POLICY_KEY} if "v50" in filename else set())
+            self.assertEqual(expected_keys, set(overrides))
             profiled_document = self.make_document(runtime_overrides=overrides)
             self.assertEqual(
                 overrides,
                 {
                     key: profiled_document[key]
-                    for key in generator.RUNTIME_RESOURCE_KEYS
+                    for key in expected_keys
                 },
             )
             self.assertEqual(
                 {
                     key: value
                     for key, value in default_document.items()
-                    if key not in generator.RUNTIME_RESOURCE_KEYS
+                    if key not in expected_keys
                 },
                 {
                     key: value
                     for key, value in profiled_document.items()
-                    if key not in generator.RUNTIME_RESOURCE_KEYS
+                    if key not in expected_keys
                 },
             )
 
@@ -355,6 +357,10 @@ class InputJsonGeneratorTests(unittest.TestCase):
             "overrides": {key: 1 for key in generator.RUNTIME_RESOURCE_KEYS},
         }
         cases = []
+
+        invalid_policy = json.loads(json.dumps(valid))
+        invalid_policy["overrides"][generator.RUNTIME_POLICY_KEY] = 1
+        cases.append((invalid_policy, "must be a boolean"))
 
         missing = json.loads(json.dumps(valid))
         missing["overrides"].pop(next(iter(generator.RUNTIME_RESOURCE_KEYS)))

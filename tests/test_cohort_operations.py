@@ -88,6 +88,20 @@ class CohortOperationsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 metadata.prepare(matrix, study, qc, root / "duplicate", ["pid"])
 
+    def test_predefined_policy_rejects_other_regions_and_platform_overrides(self):
+        inputs = {"rnaseq_pipeline.prefer_predefined_n1": True}
+        def describe(bucket):
+            return {"location": "US-WEST2", "locationType": "region"}
+        options = {"default_runtime_attributes": {"zones": "us-west2-a"}}
+        locality.check("gs://execution/run", "us-west2", options, inputs, describe)
+        for key, value in (("cpuPlatform", "Intel Cascade Lake"), ("predefinedMachineType", "e2-highmem-2")):
+            conflicting = {"default_runtime_attributes": dict(options["default_runtime_attributes"], **{key: value})}
+            with self.assertRaisesRegex(ValueError, "predefined N1 policy"):
+                locality.check("gs://execution/run", "us-west2", conflicting, inputs, describe)
+        with self.assertRaisesRegex(ValueError, "predefined N1 policy"):
+            locality.check("gs://execution/run", "us-west1",
+                           {"default_runtime_attributes": {"zones": "us-west1-a"}}, inputs, describe)
+
 
 if __name__ == "__main__":
     unittest.main()

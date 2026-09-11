@@ -42,9 +42,11 @@ The existing complete-workflow evidence/cost tools retain their documented
 scope. This collector supports larger and partial workflows without downloading
 their final matrices. Join its attempt identities with actual billed durations
 and market rates when preparing cohort cost summaries.
-For us-west2 N1 jobs, the matching frozen rates are in
+For us-west2 N1 custom and eligible predefined jobs, the matching frozen rates are in
 `config/backends/gcp/gcp-rates-n1-us-west2-20260911.json`; pass this through
 `summarize_workflow_cost.py --rates` rather than using its Americas default.
+The manifest prices `n1-highmem-2` explicitly. Unlisted predefined shapes fail
+instead of being charged at custom rates; actual Batch machine identity is retained.
 
 Start with two full-depth v50 libraries within the intended approximately
 100-library set, check output/profiling collection, then expand while retaining

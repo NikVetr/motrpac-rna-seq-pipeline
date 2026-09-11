@@ -22,6 +22,31 @@
       "memory_sku_id": "5662-928E-19C3"
     }
   },
+  "predefined_machines": {
+    "n1-highmem-2": {
+      "vcpu": 2,
+      "memory_gib": 13,
+      "source": {
+        "retrieved_utc": "2026-09-11T19:15:46.425749+00:00",
+        "url": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+        "snapshot_sha256": "adf2859d3b218bcc6e82b03fe9865664cde5cf9909d8721deadeecd13083e88b"
+      },
+      "compute": {
+        "STANDARD": {
+          "vcpu_hour_usd": "0.03797",
+          "memory_gib_hour_usd": "0.005089",
+          "vcpu_sku_id": "ADC5-CFA0-B149",
+          "memory_sku_id": "3500-0487-459B"
+        },
+        "SPOT": {
+          "vcpu_hour_usd": "0.01675",
+          "memory_gib_hour_usd": "0.002243",
+          "vcpu_sku_id": "F7B3-698A-A352",
+          "memory_sku_id": "9C13-3C3C-28B3"
+        }
+      }
+    }
+  },
   "disk": {
     "hours_per_month": "720",
     "account_free_tier_included": false,

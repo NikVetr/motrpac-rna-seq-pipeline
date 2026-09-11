@@ -134,6 +134,7 @@ workflow rnaseq_pipeline {
         String reference_release = "unspecified"
         # One Spot attempt before on-demand fallback; set to 0 for on-demand only.
         Int num_preemptible_attempts = 1
+        Boolean prefer_predefined_n1 = false
 
         # Optional QC groups; all remain enabled by default for compatibility.
         Boolean run_pretrim_fastqc = true
@@ -561,6 +562,7 @@ workflow rnaseq_pipeline {
                 # Runtime Parameters
                     ncpu=rnaqc_ncpu,
                     memory=rnaqc_ramGB,
+                    prefer_predefined_n1=prefer_predefined_n1,
                     disk_space=rnaqc_disk,
                     preemptible=num_preemptible_attempts,
                     docker=picard_docker

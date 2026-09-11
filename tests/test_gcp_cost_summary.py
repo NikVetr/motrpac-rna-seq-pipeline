@@ -255,6 +255,44 @@ class GcpCostSummaryTests(unittest.TestCase):
                 )
             )
 
+    def test_prices_predefined_and_custom_attempts_in_both_markets(self) -> None:
+        rates = REPO_ROOT / "config/backends/gcp/gcp-rates-n1-us-west2-20260911.json"
+        for predefined_attempt in (1, 2):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                evidence = self.make_evidence(root, "custom-2-12288")
+                path = evidence / "batch-jobs" / f"job-test-{predefined_attempt}.json"
+                job = json.loads(path.read_text())
+                job["status"]["taskGroups"]["group0"]["instances"][0]["machineType"] = "n1-highmem-2"
+                job["allocationPolicy"]["instances"][0]["policy"]["machineType"] = "n1-highmem-2"
+                self.write_json(path, job)
+                self.write_manifest(evidence)
+                output = root / "summary.json"
+                command = [sys.executable, str(SCRIPT), str(evidence), "--rates", str(rates), "--output", str(output)]
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                result = json.loads(output.read_text())
+                self.assertEqual(["n1-highmem-2"], result["pricing"]["predefined_machine_types"])
+                for row in result["attempts"]:
+                    predefined = row["attempt"] == predefined_attempt
+                    ram = 13 if predefined else 12
+                    market = row["provisioning_model"]
+                    cpu_rate, ram_rate = {
+                        (True, "SPOT"): (0.01675, 0.002243),
+                        (True, "STANDARD"): (0.03797, 0.005089),
+                        (False, "SPOT"): (0.01758, 0.002355),
+                        (False, "STANDARD"): (0.0398685, 0.00534345),
+                    }[(predefined, market)]
+                    hours = row["phase_seconds"]["batch_running"] / 3600
+                    self.assertEqual(2, row["provisioned_vcpu"])
+                    self.assertEqual(ram, row["provisioned_memory_gib"])
+                    self.assertAlmostEqual(2 * hours * cpu_rate, row["modeled_worker_cost_usd"]["vcpu"])
+                    self.assertAlmostEqual(ram * hours * ram_rate, row["modeled_worker_cost_usd"]["memory"])
+                # A custom-only manifest must not silently price a predefined VM.
+                command[command.index(str(rates))] = str(N1_RATES)
+                failed = subprocess.run(command, capture_output=True, text=True)
+                self.assertNotEqual(0, failed.returncode)
+                self.assertIn("machine type does not match", failed.stderr)
+
     def test_accepts_declared_zero_runtime_infrastructure_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

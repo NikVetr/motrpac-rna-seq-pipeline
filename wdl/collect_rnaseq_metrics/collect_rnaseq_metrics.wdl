@@ -11,6 +11,7 @@ task collectrnaseqmetrics {
         Int memory
         Int disk_space
         Int ncpu
+        Boolean prefer_predefined_n1 = false
         Int preemptible
         String docker
     }
@@ -42,6 +43,9 @@ task collectrnaseqmetrics {
 
     runtime {
         cpu: ncpu
+        # Same-family upgrade, cheaper in both us-west2 markets; other sizes stay custom.
+        gcp: if prefer_predefined_n1 && ncpu == 2 && memory == 12
+            then object { predefinedMachineType: "n1-highmem-2" } else object {}
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
         docker: docker

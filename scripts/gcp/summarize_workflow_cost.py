@@ -157,7 +157,14 @@ def verify_evidence(evidence: Path) -> None:
         fail("evidence checksum manifest does not match captured files")
 
 
-def load_rates(path: Path) -> tuple[dict, dict[str, dict[str, Decimal]], dict[str, Decimal]]:
+def compute_prices(values: dict) -> dict:
+    return {market: {
+        "vcpu": dec(values.get(market, {}).get("vcpu_hour_usd"), f"{market} vCPU rate", True),
+        "memory": dec(values.get(market, {}).get("memory_gib_hour_usd"), f"{market} memory rate", True),
+    } for market in ("STANDARD", "SPOT")}
+
+
+def load_rates(path: Path) -> tuple[dict, dict, dict[str, Decimal]]:
     rates = load_json(path)
     source = rates.get("source", {})
     if (
@@ -167,12 +174,17 @@ def load_rates(path: Path) -> tuple[dict, dict[str, dict[str, Decimal]], dict[st
         or not SHA256.fullmatch(str(source.get("snapshot_sha256", "")))
     ):
         fail("unsupported or unprovenanced GCP rate manifest")
-    compute = {}
-    for market in ("STANDARD", "SPOT"):
-        values = rates.get("compute", {}).get(market, {})
-        compute[market] = {
-            "vcpu": dec(values.get("vcpu_hour_usd"), f"{market} vCPU rate", True),
-            "memory": dec(values.get("memory_gib_hour_usd"), f"{market} memory rate", True),
+    compute = compute_prices(rates.get("compute", {}))
+    compute["predefined"] = {}
+    for name, shape in rates.get("predefined_machines", {}).items():
+        if not SHA256.fullmatch(str(shape.get("source", {}).get("snapshot_sha256", ""))):
+            fail(f"unprovenanced predefined machine: {name}")
+        if type(shape.get("vcpu")) is not int or shape["vcpu"] <= 0:
+            fail(f"invalid predefined vCPU count: {name}")
+        compute["predefined"][name] = {
+            "vcpu": shape["vcpu"],
+            "memory": dec(shape.get("memory_gib"), "predefined memory", True),
+            "rates": compute_prices(shape.get("compute", {})),
         }
     disk_section = rates.get("disk", {})
     month_hours = dec(disk_section.get("hours_per_month"), "month hours", True)
@@ -349,7 +361,7 @@ def summarize_attempt(
     attempt: dict,
     jobs: dict[str, dict],
     machine_family: str,
-    compute_rates: dict[str, dict[str, Decimal]],
+    compute_rates: dict,
     disk_rates: dict[str, Decimal],
     unavailable: dict[tuple, dict],
 ) -> dict:
@@ -390,12 +402,14 @@ def summarize_attempt(
     ).get("policy", {})
     machine = actual.get("machineType")
     match = CUSTOM_MACHINE_TYPES[machine_family].fullmatch(str(machine))
-    if not match:
+    predefined = compute_rates.get("predefined", {}).get(machine)
+    if not match and not predefined:
         fail(f"{job_id}: machine type does not match {machine_family} rate manifest")
     if machine != policy.get("machineType"):
         fail(f"{job_id}: inconsistent actual and requested machine type")
-    vcpu = int(match.group(1))
-    memory_gib = Decimal(match.group(2)) / Decimal(1024)
+    vcpu = predefined["vcpu"] if predefined else int(match.group(1))
+    memory_gib = predefined["memory"] if predefined else Decimal(match.group(2)) / Decimal(1024)
+    compute_rates = predefined["rates"] if predefined else compute_rates
     market = actual.get("provisioningModel")
     if market not in compute_rates or market != policy.get("provisioningModel"):
         fail(f"{job_id}: unsupported or inconsistent provisioning model")
@@ -687,6 +701,7 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
             "currency": rates["currency"],
             "region_scope": rates["region_scope"],
             "machine_family": rates["machine_family"],
+            "predefined_machine_types": sorted(rates.get("predefined_machines", {})),
             "rate_manifest_sha256": hashlib.sha256(rates_path.read_bytes()).hexdigest(),
             "source": rates["source"],
         },
@@ -717,7 +732,7 @@ def summarize(evidence: Path, rates_path: Path) -> dict:
         "cost_scope": {
             "basis": (
                 f"Actual Batch runDuration, actual {rates['machine_family']} "
-                "shape/disks, and frozen public list rates."
+                "or explicitly priced predefined shape/disks, and frozen public list rates."
             ),
             "failed_spot_work_included": True,
             "zero_runtime_policy": (
