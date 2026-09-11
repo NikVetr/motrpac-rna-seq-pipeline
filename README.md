@@ -365,8 +365,9 @@ input GiB plus 10 GiB, rounded up, with `merge_results_disk` retained as a floor
 This retains the validated disk headroom as cohort size grows. Merge inputs
 are linked rather than copied. Both merges request at least 4 GB RAM per
 75 libraries, rounded up to whole tiers (16 GB for 297 libraries), preserving
-`merge_results_ramGB` as a floor. Molecule RSEM also raises RAM and scratch
-from its input BAM size; CPU counts and STAR/UMI sizing are unchanged.
+`merge_results_ramGB` as a floor. The shared RSEM task raises RAM and scratch
+from its input BAM size for both molecule and all-read expression, preserving
+configured floors; CPU counts and STAR/UMI sizing are unchanged.
 See [cohort provisioning and operations](docs/cohort-provisioning.md) for
 the measured limits, regional launch guard, metadata command, and verified
 controller shutdown procedure.

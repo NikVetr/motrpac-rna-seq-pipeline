@@ -81,25 +81,20 @@ with tempfile.TemporaryDirectory() as directory:
 print("isoform rendered command, sample order, symlinks, resource floors PASS")
 
 
-def descendants(node):
-    yield node
-    for child in node.children:
-        yield from descendants(child)
-
-
-workflow = WDL.load(str(repo / "wdl/rnaseq_pipeline_scatter.wdl")).workflow
-declarations = [node for node in descendants(workflow) if isinstance(node, WDL.Tree.Decl)
-                and node.name.startswith(("inferred_molecule_rsem_", "effective_molecule_rsem_"))]
-assert len(declarations) == 4
-for gib, memory_floor, disk_floor, expected in (
-    (0, 40, 60, (40, 60)), (12, 40, 60, (40, 60)),
-    (15.21, 40, 60, (48, 71)), (30, 40, 60, (76, 130)),
-    (15.21, 96, 200, (96, 200)),
-):
-    env = WDL.Env.Bindings().bind("molecule_rsem_input_gib", WDL.Value.Float(gib))
-    env = env.bind("rsem_ramGB", WDL.Value.Int(memory_floor)).bind("rsem_disk", WDL.Value.Int(disk_floor))
-    for decl in declarations:
-        env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
-    assert (env.resolve("effective_molecule_rsem_memory").value,
-            env.resolve("effective_molecule_rsem_scratch_gb").value) == expected
+task = WDL.load(str(repo / "wdl/rsem_exp/rsem.wdl")).tasks[0]
+with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "input.bam"
+    for gib, memory_floor, disk_floor, expected in (
+        (0, 40, 60, (40, 60)), (0.06, 32, 60, (32, 60)), (12, 40, 60, (40, 60)),
+        (15.21, 40, 60, (48, 71)), (30, 40, 60, (76, 130)),
+        (15.21, 96, 200, (96, 200)), (70, 128, 250, (156, 290)),
+    ):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))  # Sparse file exercises WDL size() without allocating data.
+        env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": memory_floor,
+                                    "disk_space": disk_floor}, task.available_inputs)
+        for decl in task.postinputs:
+            env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+        assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{expected[0]}GB"
+        assert task.runtime["disks"].eval(env, Files("1.0")).value == f"local-disk {expected[1]} HDD"
 print("RSEM growth and configured floors PASS")

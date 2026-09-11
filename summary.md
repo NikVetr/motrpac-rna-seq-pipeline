@@ -55,8 +55,9 @@ runs. Both cohort merges request at least three times their total input GiB
 plus 10 GiB, rounded up, preserving the configured disk request as a floor.
 Merge inputs are symbolic links to localized files; the validated disk margin
 is retained. Merge RAM grows by 4 GB per 75 libraries, rounded up, with the
-configured value as a floor. Molecule RSEM RAM and scratch also grow from
-transcriptome BAM bytes, preserving configured floors. CPU counts are explicit.
+configured value as a floor. Shared RSEM task RAM and scratch grow from
+transcriptome BAM bytes for both molecule and all-read expression, preserving
+configured floors. CPU counts are explicit.
 The merged QC table retains the legacy
 pipeline-derived covariate contract; participant, visit, treatment, demographic,
 batch, and RIN metadata are joined from study records by sample ID using

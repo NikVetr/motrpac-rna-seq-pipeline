@@ -13,6 +13,13 @@ task rsem {
         String docker
     }
 
+    # Buffered from 297 v47 libraries; shared by molecule and all-read quantification.
+    Float input_gib = size(transcriptome_bam, "GiB")
+    Int inferred_memory = 4 * ceil((16.0 + 2.0 * input_gib) / 4.0)
+    Int inferred_scratch_gb = ceil(10.0 + 4.0 * input_gib)
+    Int effective_memory = if memory > inferred_memory then memory else inferred_memory
+    Int effective_scratch_gb = if disk_space > inferred_scratch_gb then disk_space else inferred_scratch_gb
+
     command <<<
         set -euo pipefail
         mkdir rsem_reference
@@ -49,8 +56,8 @@ task rsem {
 
     runtime {
         cpu: ncpu
-        memory: "${memory}GB"
-        disks: "local-disk ${disk_space} HDD"
+        memory: "${effective_memory}GB"
+        disks: "local-disk ${effective_scratch_gb} HDD"
         docker: docker
         preemptible: preemptible
     }
