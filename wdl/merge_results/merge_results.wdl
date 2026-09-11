@@ -6,6 +6,7 @@ task merge_results {
         Array[File] rsem_files
         Array[File] feature_counts_files
         Array[File] qc_report_files
+        Array[Array[String]] expression_metadata_rows
         String output_report_name
 
         Int memory
@@ -28,6 +29,7 @@ task merge_results {
 
     command <<<
         set -eou pipefail
+        cp "~{write_tsv(expression_metadata_rows)}" expression_metadata.tsv
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, linking localized files ---"
 
         mkdir -p rsem_files
@@ -69,6 +71,7 @@ task merge_results {
         File rsem_genes_fpkm = "rsem_genes_fpkm.txt"
         File feature_counts = "featureCounts.txt"
         File qc_report = "${output_report_name}.csv"
+        File expression_metadata = "expression_metadata.tsv"
     }
 
     parameter_meta {

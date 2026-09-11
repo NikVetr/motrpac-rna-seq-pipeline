@@ -690,6 +690,9 @@ workflow rnaseq_pipeline {
             rsem_files=primary_rsem_genes,
             feature_counts_files=primary_feature_counts,
             qc_report_files=qc_report.rnaseq_report,
+            expression_metadata_rows=flatten([
+                [["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]],
+                expression_metadata_row]),
         # Runtime Parameters
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
@@ -740,9 +743,7 @@ workflow rnaseq_pipeline {
         File rsem_isoforms_count = merge_primary_isoforms.rsem_isoforms_count
         File rsem_isoforms_tpm = merge_primary_isoforms.rsem_isoforms_tpm
         File rsem_isoforms_fpkm = merge_primary_isoforms.rsem_isoforms_fpkm
-        File expression_metadata = write_tsv(flatten([
-            [["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]],
-            expression_metadata_row]))
+        File expression_metadata = merge_results.expression_metadata
         File rsem_genes_count = merge_results.rsem_genes_count
         File rsem_genes_tpm = merge_results.rsem_genes_tpm
         File rsem_genes_fpkm = merge_results.rsem_genes_fpkm

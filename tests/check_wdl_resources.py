@@ -33,6 +33,7 @@ try:
                       "memory": 4, "disk_space": 10, "ncpu": 1, "preemptible": 0, "docker": "unused"}
             if name == "merge_results":
                 inputs.update(qc_report_files=list(map(str, fixture.qc.iterdir())), output_report_name="cohort")
+                inputs["expression_metadata_rows"] = [["sample", "not_deduplicated"]] + [[sample, "0"] for sample in fixture.samples]
             else:
                 inputs["output_prefix"] = "secondary"
             env = WDL.values_from_json(inputs, task.available_inputs)
@@ -45,6 +46,8 @@ try:
                 assert actual.read_bytes() == (fixture.root / filename).read_bytes()
             if name == "merge_results":
                 assert (root / "cohort.csv").read_bytes() == (fixture.root / "cohort.csv").read_bytes()
+                metadata = task.outputs[-1].expr.eval(env, stdlib).value
+                assert (root / metadata).read_text() == "sample\tnot_deduplicated\n" + "".join(sample + "\t0\n" for sample in fixture.samples)
             assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
             for count, floor, expected in ((1, 4, 4), (75, 4, 4), (76, 4, 8), (297, 4, 16), (600, 4, 32), (297, 64, 64)):
                 env = env.bind("sample_prefix", WDL.Value.Array(WDL.Type.String(), [WDL.Value.String(str(i)) for i in range(count)]))
