@@ -1,4 +1,5 @@
 {
+  "workflow_failure_mode": "ContinueWhilePossible",
   "google_labels": {
     "pipeline": "motrpac-rnaseq",
     "purpose": "modernization-benchmark"

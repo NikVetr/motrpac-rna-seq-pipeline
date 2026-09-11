@@ -63,6 +63,13 @@ Set `default_runtime_attributes.zones` in those options to
 and cohort concurrency settings must also be supplied. The checked-in backend
 is a bounded benchmark configuration, not a 297-library launch profile.
 
+Set `"workflow_failure_mode": "ContinueWhilePossible"` in submission options,
+as in the benchmark example, so independent sample tasks continue after a
+terminal task failure. This is a submission option and needs no server restart.
+The workflow still reports failure, and a merge requiring the failed sample
+waits for repair. Preserve execution outputs and enable persistent call caching
+for production repair runs; this option does not retry failures with more RAM.
+
 The guard rejects mismatched execution storage, zones, and workflow root
 overrides; it reports remote input/reference buckets without moving them.
 Running it without a trailing command performs a read-only check. With Caper
