@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 
@@ -73,6 +74,10 @@ DEFAULT_RELEASE_MANIFESTS = {
     / "config"
     / "release-profiles"
     / "human-gencode-v47.json",
+    ("human", "gencode_v50"): REPO_ROOT
+    / "config"
+    / "release-profiles"
+    / "human-gencode-v50.json",
 }
 SUPPORTED_REFERENCES = {
     ("rat", "rn6"),
@@ -80,6 +85,7 @@ SUPPORTED_REFERENCES = {
     ("rat", "rn8"),
     ("human", "gencode_v39"),
     ("human", "gencode_v47"),
+    ("human", "gencode_v50"),
 }
 
 
@@ -399,6 +405,7 @@ def main(command_args: argparse.Namespace):
     use_umi_molecule_expression = getattr(
         command_args, "umi_molecule_expression", True
     )
+    allow_missing_umis = getattr(command_args, "allow_missing_umis", False)
     retain_all_read_expression = getattr(
         command_args, "retain_all_read_expression", False
     )
@@ -414,6 +421,8 @@ def main(command_args: argparse.Namespace):
         "run_umi_qc": not getattr(command_args, "skip_umi_qc", False),
         "run_multiqc": getattr(command_args, "run_multiqc", False),
     }
+    if allow_missing_umis and (not command_args.index or not use_umi_molecule_expression):
+        raise ValueError("--allow-missing-umis requires index discovery and molecule expression")
     if use_umi_molecule_expression and not command_args.index:
         raise ValueError(
             "directional UMI molecule expression requires matched I1 FASTQs"
@@ -478,11 +487,21 @@ def main(command_args: argparse.Namespace):
         include_undetermined=command_args.undetermined,
         include_index=command_args.index,
     )
+    if allow_missing_umis:
+        for batch in batches:
+            for index, path in enumerate(batch["i1"]):
+                try:
+                    fs.info(path)
+                except FileNotFoundError:
+                    batch["i1"][index] = None
+                    print("{}: UMI deduplication skipped (I1 absent); using all-read expression".format(
+                        batch["sample_prefix"][index]), file=sys.stderr)
     expected_inputs = [
         path
         for batch in batches
         for key in ("r2", "i1")
         for path in (batch[key] or [])
+        if path is not None
     ]
     missing = [path for path in expected_inputs if not fs.exists(path)]
     if missing:
@@ -509,6 +528,7 @@ def main(command_args: argparse.Namespace):
                 umi_dup_disk_type=getattr(command_args, "umi_dup_disk_type", None),
                 use_umi_molecule_expression=use_umi_molecule_expression,
                 retain_all_read_expression=retain_all_read_expression,
+                allow_missing_umis=allow_missing_umis,
                 **qc_settings,
             )
         )
@@ -552,6 +572,7 @@ def make_json_dict(
     run_multiqc=False,
     star_disk_type=None,
     umi_dup_disk_type=None,
+    allow_missing_umis=False,
 ):
     if r1 is None:
         r1 = []
@@ -563,7 +584,7 @@ def make_json_dict(
         raise ValueError("R1, R2, and sample-prefix arrays must be nonempty and aligned")
     if i1 is not None and len(i1) != len(r1):
         raise ValueError("I1 array must be absent or aligned with R1 and R2")
-    if use_umi_molecule_expression and not i1:
+    if use_umi_molecule_expression and not allow_missing_umis and (not i1 or any(path is None for path in i1)):
         raise ValueError(
             "UMI molecule expression requires a matched I1 FASTQ for every sample"
         )
@@ -591,7 +612,7 @@ def make_json_dict(
         )
     if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
         raise ValueError("sample prefixes must be nonempty and unique")
-    fastq_uris = r1 + r2 + (i1 or [])
+    fastq_uris = r1 + r2 + [path for path in (i1 or []) if path is not None]
     if len(fastq_uris) != len(set(fastq_uris)):
         raise ValueError("FASTQ URIs must be unique across R1, R2, and I1 roles")
     output_report_name = output_report_stem(output_report_name)
@@ -716,11 +737,13 @@ def make_json_dict(
         "rnaseq_pipeline.merge_results_ncpu": 4,
         "rnaseq_pipeline.merge_results_ramGB": 16,
         "rnaseq_pipeline.merge_results_disk": 200,
-        "rnaseq_pipeline.merge_results_docker": f"{docker_repo}/merge_results:latest",
+        "rnaseq_pipeline.merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:6ef26dcd5979c80f49f16b0896db7f794dbeac8001798d2538ff878bcbc0e126",
     }
     filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = (
         use_umi_molecule_expression
     )
+    filled_dict["rnaseq_pipeline.allow_missing_umis"] = allow_missing_umis
+    filled_dict["rnaseq_pipeline.reference_release"] = version
     filled_dict["rnaseq_pipeline.retain_all_read_expression"] = (
         retain_all_read_expression
     )
@@ -801,7 +824,7 @@ if __name__ == "__main__":
         "-v",
         "--version",
         help="genome build version to use for references",
-        choices=["rn6", "rn7", "rn8", "gencode_v39", "gencode_v47"],
+        choices=["rn6", "rn7", "rn8", "gencode_v39", "gencode_v47", "gencode_v50"],
         required=True,
     )
     parser.add_argument(
@@ -862,16 +885,20 @@ if __name__ == "__main__":
     index_options.add_argument(
         "--no-index",
         dest="index",
-        help="omit I1 FASTQs and UMI QC; requires --legacy-all-read-expression-only",
+        help="omit I1 FASTQs and UMI QC; requires --all-read-expression-only",
         action="store_false",
     )
     parser.add_argument(
-        "--legacy-all-read-expression-only",
+        "--all-read-expression-only", "--legacy-all-read-expression-only",
         dest="umi_molecule_expression",
-        help="omit directional UMI molecule matrices and retain historical "
-        "all-read matrices only",
+        help="quantify all reads without UMI deduplication; strandedness is unchanged "
+        "(legacy flag spelling remains an alias)",
         default=True,
         action="store_false",
+    )
+    parser.add_argument(
+        "--allow-missing-umis", action="store_true",
+        help="deduplicate when I1 exists; otherwise quantify all reads and record the skip",
     )
     parser.add_argument(
         "--retain-all-read-expression",

@@ -187,9 +187,9 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             "if (run_all_read_expression)",
             "umi_report=udup.umi_report",
             "Array[File] umi_metrics = select_all(udup.umi_metrics)",
-            "if !use_umi_molecule_expression || has_fastq_index then [true] else []",
+            "if !use_umi_molecule_expression || allow_missing_umis ||",
             "Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]",
-            "transcriptome_align=if use_umi_molecule_expression then "
+            "transcriptome_align=if use_sample_umi_expression then "
             "[star_align.transcriptome_bam] else []",
             "rsem_files=primary_rsem_genes",
             "feature_counts_files=primary_feature_counts",

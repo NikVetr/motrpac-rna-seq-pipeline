@@ -1,7 +1,9 @@
-"""Merge RSEM gene results in an explicit sample order."""
+"""Merge RSEM gene or isoform results in an explicit sample order."""
 
 import argparse
 import csv
+from contextlib import ExitStack
+from itertools import zip_longest
 from pathlib import Path
 
 
@@ -22,12 +24,12 @@ def sample_order(path):
     return samples
 
 
-def indexed_files(directory, samples):
+def indexed_files(directory, samples, suffix=SUFFIX):
     files = {}
     for path in directory.iterdir():
-        if not path.is_file() or not path.name.endswith(SUFFIX):
+        if not path.is_file() or not path.name.endswith(suffix):
             continue
-        sample = path.name[: -len(SUFFIX)]
+        sample = path.name[: -len(suffix)]
         if not sample or sample in files:
             raise ValueError("duplicate or invalid RSEM sample: {}".format(sample))
         files[sample] = path
@@ -88,13 +90,48 @@ def merge(directory, order_path, output_directory):
                 )
 
 
+def merge_isoforms(directory, order_path, output_directory):
+    samples = sample_order(order_path)
+    files = indexed_files(directory, samples, ".isoforms.results")
+    with ExitStack() as stack:
+        readers = [csv.DictReader(stack.enter_context(files[sample].open(
+            encoding="utf-8", newline="")), delimiter="\t") for sample in samples]
+        required = {"transcript_id", "gene_id"}.union(METRICS)
+        for sample, reader in zip(samples, readers):
+            if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+                raise ValueError("RSEM isoform file lacks required columns: {}".format(sample))
+        writers = {}
+        for metric, filename in METRICS.items():
+            handle = stack.enter_context((output_directory / filename.replace("genes", "isoforms")).open(
+                "x", encoding="utf-8", newline=""))
+            writers[metric] = csv.writer(handle, delimiter="\t", lineterminator="\n")
+            writers[metric].writerow(["transcript_id"] + samples)
+        seen = set()
+        for rows in zip_longest(*readers):
+            if any(row is None or None in row or any(row.get(key) in (None, "") for key in required)
+                   for row in rows):
+                raise ValueError("RSEM isoform rows are malformed or have different lengths")
+            transcript = rows[0]["transcript_id"]
+            if transcript in seen:
+                raise ValueError("duplicate RSEM transcript: {}".format(transcript))
+            seen.add(transcript)
+            if any((row["transcript_id"], row["gene_id"]) != (transcript, rows[0]["gene_id"]) for row in rows):
+                raise ValueError("RSEM transcript order or gene mapping differs: {}".format(transcript))
+            for metric, writer in writers.items():
+                writer.writerow([transcript] + [row[metric] for row in rows])
+        if not seen:
+            raise ValueError("RSEM isoform files have no transcript rows")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--rsem-dir", type=Path, required=True)
     parser.add_argument("--sample-order", type=Path, required=True)
     parser.add_argument("--output-directory", type=Path, default=Path("."))
+    parser.add_argument("--feature-level", choices=("genes", "isoforms"), default="genes")
     args = parser.parse_args(argv)
-    merge(args.rsem_dir, args.sample_order, args.output_directory)
+    merger = merge_isoforms if args.feature_level == "isoforms" else merge
+    merger(args.rsem_dir, args.sample_order, args.output_directory)
     return 0
 
 

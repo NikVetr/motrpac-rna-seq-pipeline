@@ -18,6 +18,8 @@ task rnaseqQC {
         File? markduplicates_metrics
         File? rnaseq_metrics
         File? umi_report
+        String expression_mode = "unspecified"
+        String umi_status = "unspecified"
 
         Int memory
         Int disk_space
@@ -28,6 +30,7 @@ task rnaseqQC {
 
     command <<<
         set -euo pipefail
+        echo "Sample ~{SID}: expression_mode=~{expression_mode}; umi_status=~{umi_status}"
         echo "--- $(date "+[%b %d %H:%M:%S]") Collecting native RNA-seq QC reports ---"
 
         python3 /usr/local/src/rnaseq_qc.py \

@@ -57,6 +57,29 @@ try:
 finally:
     fixture.tearDown()
 
+task = WDL.load(str(repo / "wdl/merge_results/merge_isoforms.wdl")).tasks[0]
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    source = root / "source"
+    source.mkdir()
+    for sample, count in (("a", "1.20"), ("b", "2.30")):
+        (source / (sample + ".isoforms.results")).write_text(
+            "transcript_id\tgene_id\texpected_count\tTPM\tFPKM\n"
+            + "tx.1\tg.1\t" + count + "\t3.40\t5.60\n")
+    stdlib = Files("1.0", write_dir=directory)
+    env = WDL.values_from_json({"sample_prefix": ["b", "a"],
+        "rsem_files": list(map(str, source.iterdir())), "memory": 1,
+        "disk_space": 1, "ncpu": 1, "preemptible": 0, "docker": "unused"}, task.available_inputs)
+    for decl in task.postinputs:
+        env = env.bind(decl.name, decl.expr.eval(env, stdlib))
+    command = task.command.eval(env, stdlib).value.replace("/usr/local/src/", str(repo / "wdl/merge_results") + "/")
+    subprocess.run(["bash", "-c", command], cwd=root, check=True, capture_output=True)
+    assert (root / "rsem_isoforms_count.txt").read_text() == "transcript_id\tb\ta\ntx.1\t2.30\t1.20\n"
+    assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
+    assert task.runtime["memory"].eval(env, stdlib).value == "4GB"
+    assert env.resolve("effective_scratch_gb").value == 11
+print("isoform rendered command, sample order, symlinks, resource floors PASS")
+
 
 def descendants(node):
     yield node

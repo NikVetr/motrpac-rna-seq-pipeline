@@ -29,7 +29,7 @@ This repo contains the rna-seq data processing pipeline implemented in Workflow 
 
 The pipeline supports the following organisms and genome versions:
 - **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115)
-- **Human**: GENCODE v39 or v47 (GRCh38)
+- **Human**: GENCODE v39, v47, or v50 (GRCh38)
 
 ### Pipeline Tools
 
@@ -45,10 +45,30 @@ The pipeline uses:
 The pipeline generates:
 - Gene expression quantification (counts, TPM, FPKM) from RSEM
 - Gene counts from featureCounts
+- Raw RSEM gene/isoform results and transcript counts, TPM, and FPKM matrices
+- Ordered expression metadata including the `not_deduplicated` technical covariate
 - Comprehensive QC metrics for outlier detection and covariate adjustment
 - Optional legacy-compatible MultiQC reports for pre- and post-alignment QC
 
 ## Quick Start
+
+UMI molecule expression is the default. Use `--allow-missing-umis` to explicitly
+permit samples without I1: those samples retain all-read expression in the
+canonical matrices. Missing R2 files and access errors still fail. The workflow
+logs each sample's expression mode and UMI status and publishes
+`expression_metadata` with reference release, UMI availability and
+`not_deduplicated` (1 for all-read, 0 for molecule expression). Include that
+metadata when modeling a cohort with mixed UMI availability.
+
+Use `--all-read-expression-only --no-index` for a wholly non-UMI submission.
+Strandedness is unchanged; `--legacy-all-read-expression-only` remains an alias.
+`--retain-all-read-expression` separately retains all-read results alongside
+the canonical results. Raw `rsem_gene_results` and `rsem_isoform_results` preserve
+effective lengths and annotation identifiers in sample order; the transcript
+matrices are `rsem_isoforms_count`, `rsem_isoforms_tpm`, and `rsem_isoforms_fpkm`.
+Pass `--expression-metadata` to `scripts/prepare_sample_metadata.py` to join the
+workflow's TSV to study and QC covariates in matrix order.
+Regenerate input JSONs for this graph so the merge helper includes isoform support.
 
 For experienced users, here's the essential workflow:
 
@@ -181,7 +201,7 @@ python3 scripts/make_json_rnaseq.py \
   -o OUTPUT_PATH \            # Local path where JSON files will be written
   -r OUTPUT_REPORT_NAME \     # Name for the output QC metrics report
   -a {rat,human} \            # Organism
-  -v {rn6,rn7,rn8,gencode_v39,gencode_v47} \  # Genome/annotation version
+  -v {rn6,rn7,rn8,gencode_v39,gencode_v47,gencode_v50} \  # Genome/annotation version
   -n NUM_CHUNKS \             # Number of batches to split samples into
   -p PROJECT \                # GCP project name
   -d DOCKER_REPO \            # Docker repository prefix (optional)
@@ -209,15 +229,19 @@ This will create JSON configuration file(s) (e.g., `set1_rnaseq.json`, `set2_rna
 
 ### Modernization controls
 
-GENCODE v47 automatically selects the immutable release profile in
-`config/release-profiles/human-gencode-v47.json`; v39 retains the historical
-references and images. Matched I1 reads and directional UMI molecule-expression
+GENCODE v47 and v50 automatically select their immutable release profiles in
+`config/release-profiles/human-gencode-v{47,50}.json`; v39 retains the historical
+references and quantifier images. Matched I1 reads and directional UMI molecule-expression
 matrices are enabled by default and use the canonical RSEM and featureCounts
 filenames. Pass `--retain-all-read-expression` to additionally emit the
 non-UMI-deduplicated matrices under `all_read_*` names, or pass
-`--legacy-all-read-expression-only` to run only the historical all-read branch.
+`--all-read-expression-only` to run only the forward-stranded all-read branch.
 To run without I1 files, combine `--no-index` with
-`--legacy-all-read-expression-only`; UMI QC is then omitted.
+`--all-read-expression-only`; UMI QC is then omitted. For mixed availability,
+`--allow-missing-umis` preserves molecule expression wherever I1 is present.
+The v50 assets are in a private us-west2 bucket; the executing service account
+needs read access. The v47 runtime profiles are measured v47 settings, not yet
+calibrated v50 recommendations.
 For a bounded pilot, pass an exact one-prefix-per-line manifest with
 `--sample-list`; pass the same file with `--exclude-sample-list` when generating
 the remaining cohort. These options select samples within one `--gcp_path` and
@@ -301,7 +325,7 @@ The pipeline generates the following main output files:
 
 With the default directional-UMI policy, these canonical matrices contain
 UMI-deduplicated molecule expression. `--retain-all-read-expression` adds
-secondary `all_read_*` matrices; `--legacy-all-read-expression-only` instead
+secondary `all_read_*` matrices; `--all-read-expression-only` instead
 makes historical non-UMI-deduplicated expression canonical.
 The declared `umi_expression_metrics` sidecars record directional grouping and
 the distinct genomic-featureCounts and transcriptome-RSEM molecule
@@ -569,7 +593,7 @@ If issues persist:
 - **Rat rn6**: Ensembl Rnor_6.0 release 96
 - **Rat rn7**: Ensembl mRatBN7.2 release 108
 - **Rat rn8**: Ensembl GRCr8 release 115
-- **Human**: GENCODE v39 or v47 (GRCh38)
+- **Human**: GENCODE v39, v47, or v50 (GRCh38)
 
 ## Contributing and Support
 

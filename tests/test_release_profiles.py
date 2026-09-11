@@ -76,7 +76,7 @@ class ReleaseProfileTests(unittest.TestCase):
             target[path[-1]] = value
         return profile
 
-    def test_legacy_v39_inputs_are_unchanged_without_a_manifest(self) -> None:
+    def test_legacy_v39_preserves_references_and_uses_isoform_capable_merge(self) -> None:
         self.assertIsNone(generator.resolve_release_inputs("human", "gencode_v39"))
         document = self.document(version="gencode_v39")
         expected_references = {
@@ -109,6 +109,8 @@ class ReleaseProfileTests(unittest.TestCase):
             )
             for role, image_name in legacy_image_names.items()
         }
+        expected_images["rnaseq_pipeline.merge_results_docker"] = generator.resolve_release_inputs(
+            "human", "gencode_v47")["rnaseq_pipeline.merge_results_docker"]
         self.assertEqual(
             expected_references,
             {key: document[key] for key in expected_references},
@@ -182,6 +184,20 @@ class ReleaseProfileTests(unittest.TestCase):
                         "human",
                         "gencode_v47",
                     )
+
+    def test_v50_profile_uses_matching_reference_manifest_and_v47_tools(self) -> None:
+        inputs = generator.resolve_release_inputs("human", "gencode_v50")
+        v47 = generator.resolve_release_inputs("human", "gencode_v47")
+        manifest = json.loads((REPO_ROOT / "config/references/human-grch38-gencode-v50.json").read_text())
+        self.assertEqual("gencode_v50", self.document(inputs, version="gencode_v50")["rnaseq_pipeline.reference_release"])
+        for role in generator.IMAGE_ROLES:
+            self.assertEqual(v47["rnaseq_pipeline." + role], inputs["rnaseq_pipeline." + role])
+        for role, artifact in (("star_index", "star"), ("rsem_reference", "rsem"), ("ref_flat", "refFlat")):
+            entry = manifest["artifacts"][artifact]
+            self.assertEqual(entry["gcs_uri"], inputs["rnaseq_pipeline." + role])
+            self.assertIn("sha256-" + entry["sha256"], entry["gcs_uri"])
+        self.assertEqual(manifest["annotation"]["gcs_uri"], inputs["rnaseq_pipeline.gtf_file"])
+        self.assertEqual(manifest["annotation"]["transcripts"], manifest["artifacts"]["refFlat"]["rows"])
 
 
 if __name__ == "__main__":

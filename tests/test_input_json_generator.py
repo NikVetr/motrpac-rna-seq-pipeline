@@ -32,6 +32,11 @@ class FakeGcsFileSystem:
     def exists(self, path: str) -> bool:
         return path in self.existing
 
+    def info(self, path: str) -> dict:
+        if path not in self.existing:
+            raise FileNotFoundError(path)
+        return {"name": path}
+
 
 class InputJsonGeneratorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -450,11 +455,36 @@ class InputJsonGeneratorTests(unittest.TestCase):
                 generator.main(self.arguments())
         self.assertFalse((self.temp / "set1_rnaseq.json").exists())
 
+    def test_missing_umi_opt_in_preserves_samples_and_access_errors(self) -> None:
+        r1 = ["gs://example/a_R1.fastq.gz", "gs://example/b_R1.fastq.gz"]
+        existing = {"gs://example/a_R2.fastq.gz", "gs://example/b_R2.fastq.gz", "gs://example/a_I1.fastq.gz"}
+        filesystem = FakeGcsFileSystem(r1, existing)
+        arguments = self.arguments()
+        arguments.allow_missing_umis = True
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            generator.main(arguments)
+        output = self.temp / "set1_rnaseq.json"
+        document = json.loads(output.read_text())
+        self.assertEqual(["a", "b"], document["rnaseq_pipeline.sample_prefix"])
+        self.assertEqual(["gs://example/a_I1.fastq.gz", None], document["rnaseq_pipeline.fastq_index"])
+        self.assertTrue(document["rnaseq_pipeline.allow_missing_umis"])
+        output.unlink()
+        with mock.patch.object(filesystem, "info", side_effect=PermissionError("denied")), \
+             mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            with self.assertRaises(PermissionError):
+                generator.main(arguments)
+        self.assertFalse(output.exists())
+        arguments.allow_missing_umis = False
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            with self.assertRaisesRegex(ValueError, "objects are missing"):
+                generator.main(arguments)
+
     def test_cli_index_selection_and_umi_disk_default(self) -> None:
         script = str(REPO_ROOT / "scripts" / "make_json_rnaseq.py")
         cases = (
             ([], True, "SSD"),
             (["--no-index", "--legacy-all-read-expression-only"], False, "SSD"),
+            (["--no-index", "--all-read-expression-only"], False, "SSD"),
             (["--umi-dup-disk-type", "HDD"], True, "HDD"),
         )
         for index, (options, include_index, disk_type) in enumerate(cases):

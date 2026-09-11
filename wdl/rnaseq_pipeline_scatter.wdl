@@ -17,6 +17,7 @@ import "multiqc/multiqc_postalign.wdl" as mqc_postalign
 import "collect_qc_metrics/collect_qc.wdl" as collect_qc
 import "merge_results/merge_results.wdl" as final_merge
 import "merge_results/merge_expression.wdl" as expression_merge
+import "merge_results/merge_isoforms.wdl" as isoform_merge
 
 workflow rnaseq_pipeline {
 
@@ -127,8 +128,9 @@ workflow rnaseq_pipeline {
         # Input files/values
         Array[File]+ fastq1
         Array[File]+ fastq2
-        Array[File]? fastq_index
+        Array[File?]? fastq_index
         Array[String]+ sample_prefix
+        String reference_release = "unspecified"
         # Set to 1 for one preemptible attempt before the on-demand fallback
         Int num_preemptible_attempts = 0
 
@@ -234,6 +236,7 @@ workflow rnaseq_pipeline {
         String umi_dup_docker
         Boolean use_umi_molecule_expression = true
         Boolean retain_all_read_expression = false
+        Boolean allow_missing_umis = false
 
         # Samtools Parameters
         Int mapped_ncpu
@@ -261,17 +264,16 @@ workflow rnaseq_pipeline {
     }
 
     Boolean has_fastq_index = defined(fastq_index) && length(select_first([fastq_index, []])) > 0
+    Array[Boolean] index_length_contract =
+        if !has_fastq_index || length(select_first([fastq_index, []])) == length(fastq1) then [true] else []
+    Boolean index_length_valid = index_length_contract[0]
     Array[Boolean] umi_expression_input_contract =
-        if !use_umi_molecule_expression || has_fastq_index then [true] else []
+        if !use_umi_molecule_expression || allow_missing_umis ||
+            length(select_all(select_first([fastq_index, []]))) == length(fastq1) then [true] else []
     Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]
-    Boolean use_index_reads =
-        umi_expression_inputs_valid && has_fastq_index
     Array[Boolean] expression_policy_contract =
         if !retain_all_read_expression || use_umi_molecule_expression then [true] else []
     Boolean expression_policy_valid = expression_policy_contract[0]
-    Boolean run_all_read_expression =
-        expression_policy_valid &&
-        (!use_umi_molecule_expression || retain_all_read_expression)
     Array[Boolean] contamination_qc_input_contract =
         if contamination_qc_pairs >= 0 &&
             (run_contamination_qc || (!combine_contamination_qc && contamination_qc_pairs == 0))
@@ -291,6 +293,15 @@ workflow rnaseq_pipeline {
     Boolean use_multiqc = multiqc_inputs_valid && run_multiqc
 
     scatter (i in range(length(fastq1))) {
+        Array[File] sample_index = if has_fastq_index then select_all([select_first([fastq_index])[i]]) else []
+        Boolean use_index_reads = index_length_valid && umi_expression_inputs_valid && length(sample_index) > 0
+        Boolean use_sample_umi_expression = use_umi_molecule_expression && use_index_reads
+        Boolean run_all_read_expression = expression_policy_valid && (!use_sample_umi_expression || retain_all_read_expression)
+        String expression_mode = if use_sample_umi_expression then "umi_molecules" else "all_read"
+        String umi_status = if !use_index_reads then "skipped_no_umi" else if use_sample_umi_expression then "deduplicated" else "not_requested"
+        Array[String] expression_metadata_row = [sample_prefix[i], reference_release,
+            if use_index_reads then "1" else "0", if use_sample_umi_expression then "0" else "1",
+            expression_mode, umi_status]
         if (run_pretrim_fastqc) {
             call fastqc.fastQC as pretrim_fastqc {
                 input:
@@ -314,7 +325,7 @@ workflow rnaseq_pipeline {
                     SID=sample_prefix[i],
                     fastqr1=fastq1[i],
                     fastqr2=fastq2[i],
-                    fastqi1=select_first([fastq_index])[i],
+                    fastqi1=sample_index[0],
                 # Runtime Parameters
                     ncpu=attach_umi_ncpu,
                     memory=attach_umi_ramGB,
@@ -564,9 +575,9 @@ workflow rnaseq_pipeline {
             }
         }
 
-        if (use_index_reads && (run_umi_qc || use_umi_molecule_expression)) {
+        if (use_index_reads && (run_umi_qc || use_sample_umi_expression)) {
             Float umi_input_gib = size(star_align.bam_file, "GiB") +
-                (if use_umi_molecule_expression then size(star_align.transcriptome_bam, "GiB") else 0.0)
+                (if use_sample_umi_expression then size(star_align.transcriptome_bam, "GiB") else 0.0)
             Int inferred_umi_scratch_gb = ceil(2.0 * umi_input_gib + 15.0)
             Int effective_umi_scratch_gb =
                 if umi_dup_disk > inferred_umi_scratch_gb then umi_dup_disk else inferred_umi_scratch_gb
@@ -576,8 +587,8 @@ workflow rnaseq_pipeline {
                 # Inputs
                     sample_prefix=sample_prefix[i],
                     star_align=star_align.bam_file,
-                    transcriptome_align=if use_umi_molecule_expression then [star_align.transcriptome_bam] else [],
-                    emit_molecule_expression=use_umi_molecule_expression,
+                    transcriptome_align=if use_sample_umi_expression then [star_align.transcriptome_bam] else [],
+                    emit_molecule_expression=use_sample_umi_expression,
                 # Runtime Parameters
                     ncpu=umi_dup_ncpu,
                     memory=umi_dup_ramGB,
@@ -587,7 +598,7 @@ workflow rnaseq_pipeline {
                     docker=umi_dup_docker
             }
 
-            if (use_umi_molecule_expression) {
+            if (use_sample_umi_expression) {
                 # Buffered from 297 v47 libraries; configured resources remain floors.
                 Float molecule_rsem_input_gib = size(udup.molecule_transcriptome_bam[0], "GiB")
                 Int inferred_molecule_rsem_memory = 4 * ceil((16.0 + 2.0 * molecule_rsem_input_gib) / 4.0)
@@ -623,10 +634,11 @@ workflow rnaseq_pipeline {
             }
         }
 
-        File primary_rsem_genes = if use_umi_molecule_expression then select_first([umi_molecule_rsem.genes]) else select_first([rsem_quant.genes])
-        File primary_rsem_report = if use_umi_molecule_expression then select_first([umi_molecule_rsem.stat_cnt]) else select_first([rsem_quant.stat_cnt])
-        File primary_feature_counts = if use_umi_molecule_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else select_first([feature_counts.fc_out])
-        File primary_feature_counts_report = if use_umi_molecule_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else select_first([feature_counts.fc_summary])
+        File primary_rsem_genes = if use_sample_umi_expression then select_first([umi_molecule_rsem.genes]) else select_first([rsem_quant.genes])
+        File primary_rsem_isoforms = if use_sample_umi_expression then select_first([umi_molecule_rsem.isoforms]) else select_first([rsem_quant.isoforms])
+        File primary_rsem_report = if use_sample_umi_expression then select_first([umi_molecule_rsem.stat_cnt]) else select_first([rsem_quant.stat_cnt])
+        File primary_feature_counts = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else select_first([feature_counts.fc_out])
+        File primary_feature_counts_report = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else select_first([feature_counts.fc_summary])
 
         if (use_multiqc) {
             call mqc_postalign.multiQC_postalign as mqc_pa {
@@ -666,6 +678,8 @@ workflow rnaseq_pipeline {
                 markduplicates_metrics=md.metrics,
                 rnaseq_metrics=rnaqc.rnaseqmetrics,
                 umi_report=udup.umi_report,
+                expression_mode=expression_mode,
+                umi_status=umi_status,
             # Runtime Parameters
                 ncpu=collect_qc_ncpu,
                 memory=collect_qc_ramGB,
@@ -691,7 +705,28 @@ workflow rnaseq_pipeline {
             docker=merge_results_docker,
     }
 
+    call isoform_merge.merge_isoforms as merge_primary_isoforms {
+        input:
+            sample_prefix=sample_prefix,
+            rsem_files=primary_rsem_isoforms,
+            memory=merge_results_ramGB,
+            disk_space=merge_results_disk,
+            ncpu=merge_results_ncpu,
+            preemptible=num_preemptible_attempts,
+            docker=merge_results_docker
+    }
+
     if (use_umi_molecule_expression && retain_all_read_expression) {
+        call isoform_merge.merge_isoforms as merge_all_read_isoforms {
+            input:
+                sample_prefix=sample_prefix,
+                rsem_files=select_all(rsem_quant.isoforms),
+                memory=merge_results_ramGB,
+                disk_space=merge_results_disk,
+                ncpu=merge_results_ncpu,
+                preemptible=num_preemptible_attempts,
+                docker=merge_results_docker
+        }
         call expression_merge.merge_expression as merge_all_read_expression {
             input:
                 sample_prefix=sample_prefix,
@@ -707,6 +742,14 @@ workflow rnaseq_pipeline {
     }
 
     output {
+        Array[File] rsem_gene_results = primary_rsem_genes
+        Array[File] rsem_isoform_results = primary_rsem_isoforms
+        File rsem_isoforms_count = merge_primary_isoforms.rsem_isoforms_count
+        File rsem_isoforms_tpm = merge_primary_isoforms.rsem_isoforms_tpm
+        File rsem_isoforms_fpkm = merge_primary_isoforms.rsem_isoforms_fpkm
+        File expression_metadata = write_tsv(flatten([
+            [["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]],
+            expression_metadata_row]))
         File rsem_genes_count = merge_results.rsem_genes_count
         File rsem_genes_tpm = merge_results.rsem_genes_tpm
         File rsem_genes_fpkm = merge_results.rsem_genes_fpkm
@@ -721,5 +764,10 @@ workflow rnaseq_pipeline {
         File? all_read_rsem_genes_tpm = merge_all_read_expression.rsem_genes_tpm
         File? all_read_rsem_genes_fpkm = merge_all_read_expression.rsem_genes_fpkm
         File? all_read_feature_counts = merge_all_read_expression.feature_counts
+        Array[File] all_read_rsem_gene_results = if retain_all_read_expression then select_all(rsem_quant.genes) else []
+        Array[File] all_read_rsem_isoform_results = if retain_all_read_expression then select_all(rsem_quant.isoforms) else []
+        File? all_read_rsem_isoforms_count = merge_all_read_isoforms.rsem_isoforms_count
+        File? all_read_rsem_isoforms_tpm = merge_all_read_isoforms.rsem_isoforms_tpm
+        File? all_read_rsem_isoforms_fpkm = merge_all_read_isoforms.rsem_isoforms_fpkm
     }
 }

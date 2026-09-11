@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "profile_id": "human_gencode_v47_modern_v1",
+  "profile_id": "human_gencode_v50_modern_v1",
   "organism": "human",
-  "version": "gencode_v47",
+  "version": "gencode_v50",
   "publication_state": "published",
   "provenance": {
-    "reference_manifest": "../references/human-grch38-gencode-v47.json",
+    "reference_manifest": "../references/human-grch38-gencode-v50.json",
     "tool_manifest": "../tool-images-gencode-v47.json",
     "helper_source_revision": "0fc452f2d7ae8cb12eb0e85ae7ef0af82e9f88e3",
     "merge_rsem_source_sha256": "32bb91fb347ff958d8ea7d8390dfd7a77b69196bcb469fc1e2a538c2c7246e5d"
@@ -17,13 +17,13 @@
     "rsem_runtime": "1.3.3"
   },
   "references": {
-    "star_index": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v47/sha256-2f0129bce1583341ea0ed97c700c22740c98f2681fb0a1d0f63d88188901c6a5/hg38_gencode_v47_star_2.7.11b_sjdb100.tar.gz",
-    "gtf_file": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v47/sha256-7478f1c14e4915c32822e03cc7255a52cf0ae5ff4d08e926774dbb96b48b0c9b/gencode.v47.primary_assembly.annotation.gtf",
-    "rsem_reference": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v47/sha256-db190d069ed575ca48379931ae8f605ec5d87377e9a87950d30e38d57c669ddc/hg38_gencode_v47_rsem_1.3.3.tar.gz",
-    "globin_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_globin.tar.gz",
-    "rrna_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_rRNA.tar.gz",
-    "phix_genome_dir_tar": "gs://omicspipelines-public-resources/rnaseq/references/human/phix.tar.gz",
-    "ref_flat": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v47/sha256-1d985c67b63b8ae93118222ba89277634d7491230294a344edcddc318d447459/refFlat_hg38_gencode_v47_ucsc479.txt"
+    "star_index": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-b95b97e01c3e7aacaf0f600a382a38bcb52fc8b381b5d5c5569579f54a219126/hg38_gencode_v50_star.tar.gz",
+    "gtf_file": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-04af7379ad6c214f49758db270938a38c41bebbf7b9dc8e24065d8f3a9f08d0d/gencode.v50.primary_assembly.annotation.gtf",
+    "rsem_reference": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-2449d31808bf3c77f6261db28229974614f49dbacf4264e079e3a02b869cc35e/hg38_gencode_v50_rsem.tar.gz",
+    "globin_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_globin.tar.gz",
+    "rrna_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_rRNA.tar.gz",
+    "phix_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/phix.tar.gz",
+    "ref_flat": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-1d9d39677889d261d07b6b290ef1f440ba534395640ab7fe090d554e30dd3182/refFlat_hg38_gencode_v50_ucsc479.txt"
   },
   "images": {
     "fastqc_docker": "quay.io/biocontainers/fastqc@sha256:e194048df39c3145d9b4e0a14f4da20b59d59250465b6f2a9cb698445fd45900",

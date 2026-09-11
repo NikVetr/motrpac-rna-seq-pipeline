@@ -6,17 +6,31 @@ I1 inputs, attaches UMIs, trims adapters, aligns with STAR, quantifies with
 RSEM and featureCounts, runs selectable QC branches, and gathers cohort-ready
 matrices and QC outputs.
 
-Human runs support the historical GENCODE v39 configuration and an immutable
-GENCODE v47 release profile whose references, index-builder/runtime versions,
+Human runs support the historical GENCODE v39 configuration and immutable
+GENCODE v47 and v50 release profiles whose references, index-builder/runtime versions,
 and container digests are validated as one unit. Rat rn6, rn7, and rn8 inputs
-retain their existing configurations.
+retain their existing reference configurations.
+The v50 primary-assembly references contain 646,577 transcripts, use the same
+STAR 2.7.11b and RSEM 1.3.3 tools as v47, and reside in private us-west2 storage.
+Published v47 resource mappings remain specific to their measured annotation.
 
 Directional UMI grouping and molecule-level RSEM and featureCounts matrices are
 enabled by default when matched I1 reads are present. These matrices use the
 canonical output names. Conventional all-read quantification is skipped unless
-the operator requests secondary `all_read_*` matrices; an explicit legacy
-switch instead makes historical all-read expression canonical. Combining it
-with `--no-index` omits I1 inputs and UMI QC.
+the operator requests secondary `all_read_*` matrices. The explicit
+`--all-read-expression-only` switch instead makes all-read expression canonical,
+without changing strandedness; its former spelling remains an alias. Combining
+it with `--no-index` omits I1 inputs and UMI QC. Opt-in `--allow-missing-umis`
+uses molecule expression for samples with I1 and all-read expression for samples
+without it. Strict mode still rejects missing UMIs. Canonical expression metadata
+records sample order, reference release, UMI availability, `not_deduplicated`,
+expression mode and skip reason; it can be joined to study/QC metadata.
+
+Raw RSEM gene and isoform results are canonical outputs, preserving effective
+lengths and transcript-to-gene mappings. RSEM produces both in the same task.
+Gene and transcript count/TPM/FPKM matrices are separate outputs. The transcript
+merge streams matching rows across samples and rejects inconsistent transcript
+order or gene mappings, avoiding cohort-sized in-memory transcript matrices.
 
 FASTQ QC, contamination screening, alignment QC, and UMI QC are independently
 selectable. Native tool reports feed the stable QC table directly. The three

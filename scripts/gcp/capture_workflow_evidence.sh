@@ -177,6 +177,14 @@ do
     case "$short_name" in
         rsem_genes_count|rsem_genes_tpm|rsem_genes_fpkm|feature_counts_file)
             ;;
+        rsem_gene_results|rsem_isoform_results|expression_metadata)
+            ;;
+        rsem_isoforms_count|rsem_isoforms_tpm|rsem_isoforms_fpkm)
+            ;;
+        all_read_rsem_gene_results|all_read_rsem_isoform_results)
+            ;;
+        all_read_rsem_isoforms_count|all_read_rsem_isoforms_tpm|all_read_rsem_isoforms_fpkm)
+            ;;
         qc_report_file|contamination_sampling_manifests|umi_metrics)
             ;;
         umi_expression_metrics)
