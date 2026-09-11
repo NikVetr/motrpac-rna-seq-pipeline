@@ -101,3 +101,34 @@ with tempfile.TemporaryDirectory() as directory:
         assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{expected[0]}GB"
         assert task.runtime["disks"].eval(env, Files("1.0")).value == f"local-disk {expected[1]} HDD"
 print("RSEM growth and configured floors PASS")
+
+workflow = WDL.load(str(repo / "wdl/rnaseq_pipeline_scatter.wdl")).workflow
+scatter = next(node for node in workflow.body if isinstance(node, WDL.Tree.Scatter))
+resources = [node for node in scatter.body if isinstance(node, WDL.Tree.Decl) and node.name in (
+    "inferred_star_scratch_gb", "reference_star_scratch_gb", "effective_star_scratch_gb")]
+for version, expected_tiers in (
+    ("gencode_v47", [90, 120, 150, 180, 200, 250, 300, 400]),
+    ("gencode_v50", [117, 156, 195, 234, 260, 325, 390, 520]),
+    ("rn8", [90, 120, 150, 180, 200, 250, 300, 400]),
+):
+    for low, high, expected in zip(
+        [0, 5000001, 40000001, 65000001, 90000001, 110000001, 155000001, 200000001],
+        [5000000, 40000000, 65000000, 90000000, 110000000, 155000000, 200000000, 300000000],
+        expected_tiers,
+    ):
+        for pairs in (low, high):
+            for floor in (120, 600):
+                env = WDL.Env.Bindings()
+                for key, value in (("reference_release", WDL.Value.String(version)),
+                                   ("cutadapt_read_pairs", WDL.Value.Int(pairs)),
+                                   ("star_disk", WDL.Value.Int(floor))):
+                    env = env.bind(key, value)
+                for decl in resources:
+                    env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+                assert env.resolve("effective_star_scratch_gb").value == max(floor, expected)
+defaults = {decl.name: decl.expr.eval(WDL.Env.Bindings(), Files("1.0")).value
+            for decl in workflow.inputs if decl.name in (
+                "num_preemptible_attempts", "use_umi_molecule_expression", "retain_all_read_expression")}
+assert defaults == {"num_preemptible_attempts": 1, "use_umi_molecule_expression": True,
+                    "retain_all_read_expression": False}
+print("STAR v47/v50/rat tier boundaries, explicit floors, Spot and expression defaults PASS")

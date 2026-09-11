@@ -295,6 +295,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
             "runtime-human-v47-small-v1.json",
             "runtime-human-v47-full-lean-v1.json",
             "runtime-human-v47-high-candidate-v1.json",
+            "runtime-human-v50-full-candidate-v1.json",
         ):
             overrides = generator.load_runtime_profile(
                 REPO_ROOT / "config" / "backends" / "gcp" / filename

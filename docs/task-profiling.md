@@ -7,11 +7,11 @@ maximum of `current - inactive_file` at each sample, preserves cache-inclusive
 peaks, and accepts older logs. Working memory is not minimum required RAM.
 
 Use the `monitoring_script` URI from
-`config/backends/gcp/workflow-options-benchmark.example.json` in actual submission
+`config/backends/gcp/workflow-options-cohort.example.json` in actual submission
 options. The worker account needs read access to that regional bucket. Keep
-worker/execution locality aligned. The example's disabled caching and bounded
-backend settings are not production defaults: enable persistent caching and
-`ContinueWhilePossible` for calibration repairs.
+worker/execution locality aligned. The cohort options enable cache reads/writes
+and `ContinueWhilePossible`; persistent server-side caching is also required.
+The separate cold-benchmark options and bounded backend are not cohort settings.
 
 Export full Cromwell metadata including call inputs, outputs and runtime
 attributes, then capture a snapshot into a new directory:

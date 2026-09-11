@@ -2,6 +2,8 @@
 
 For the per-attempt input, count and memory evidence needed to recalibrate
 these rules, see [task profiling](task-profiling.md).
+For version-specific human v50 settings and cache-enabled submission options,
+see the [initial v50 cohort calibration](v50-cohort-calibration.md).
 
 Resource checks use all 4,455 successful per-sample monitoring logs from the
 296-library workflow `68aaf86f-b391-4423-a269-21371a91f416` and single-library
@@ -12,6 +14,7 @@ must not be used for resource ceilings or final retry-cost accounting.
 ## Resource rules
 
 All configured resource requests remain floors; CPU counts are unchanged.
+The table below describes the established v47 full-depth profile.
 
 | Task | Rule | Evidence and scope |
 |---|---|---|

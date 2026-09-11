@@ -242,8 +242,13 @@ To run without I1 files, combine `--no-index` with
 `--all-read-expression-only`; UMI QC is then omitted. For mixed availability,
 `--allow-missing-umis` preserves molecule expression wherever I1 is present.
 The v50 assets are in a private us-west2 bucket; the executing service account
-needs read access. The v47 runtime profiles are measured v47 settings, not yet
-calibrated v50 recommendations.
+needs read access. For full-depth v50 calibration, select
+`--runtime-profile config/backends/gcp/runtime-human-v50-full-candidate-v1.json`;
+the v47 profiles retain their established settings. See the
+[v50 cohort handoff](docs/v50-cohort-calibration.md) for candidate allocations,
+cache-enabled submission options and the staged 100-library run. The workflow
+defaults to one Spot attempt before on-demand fallback; an explicit
+`rnaseq_pipeline.num_preemptible_attempts: 0` selects on-demand only.
 For a bounded pilot, pass an exact one-prefix-per-line manifest with
 `--sample-list`; pass the same file with `--exclude-sample-list` when generating
 the remaining cohort. These options select samples within one `--gcp_path` and

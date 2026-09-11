@@ -253,7 +253,7 @@ two selection flags.
 For the on-demand procedure in this runbook, before submission compare every
 controlled-input generation with the asset
 catalog, inspect the generated JSON, confirm that
-`rnaseq_pipeline.num_preemptible_attempts` is absent or zero, restart the VM
+`rnaseq_pipeline.num_preemptible_attempts` is explicitly zero, restart the VM
 watcher, review the exact Cromwell command, and record the clean launch commit:
 
 ```bash

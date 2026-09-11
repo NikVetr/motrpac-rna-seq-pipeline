@@ -132,8 +132,8 @@ workflow rnaseq_pipeline {
         Array[String]? fastq_index
         Array[String]+ sample_prefix
         String reference_release = "unspecified"
-        # Set to 1 for one preemptible attempt before the on-demand fallback
-        Int num_preemptible_attempts = 0
+        # One Spot attempt before on-demand fallback; set to 0 for on-demand only.
+        Int num_preemptible_attempts = 1
 
         # Optional QC groups; all remain enabled by default for compatibility.
         Boolean run_pretrim_fastqc = true
@@ -387,8 +387,11 @@ workflow rnaseq_pipeline {
             else if cutadapt_read_pairs <= 155000000 then 250
             else if cutadapt_read_pairs <= 200000000 then 300
             else 400
+        # v50 produced larger transcriptome BAMs in the matched full-depth pilot.
+        Int reference_star_scratch_gb =
+            ceil(inferred_star_scratch_gb * (if reference_release == "gencode_v50" then 1.30 else 1.0))
         Int effective_star_scratch_gb =
-            if star_disk > inferred_star_scratch_gb then star_disk else inferred_star_scratch_gb
+            if star_disk > reference_star_scratch_gb then star_disk else reference_star_scratch_gb
 
         if (run_posttrim_fastqc) {
             call fastqc.fastQC as posttrim_fastqc {
