@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "currency": "USD",
+  "region_scope": "us-west2",
+  "machine_family": "N1 custom",
+  "source": {
+    "retrieved_utc": "2026-09-11T14:43:35.311477+00:00",
+    "url": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+    "snapshot_sha256": "e5e577679b09348d64bf99c2e08a4cbc5f42dde57739719caf23b69d88c034f9"
+  },
+  "compute": {
+    "STANDARD": {
+      "vcpu_hour_usd": "0.0398685",
+      "memory_gib_hour_usd": "0.00534345",
+      "vcpu_sku_id": "2037-B859-1728",
+      "memory_sku_id": "B371-4493-0816"
+    },
+    "SPOT": {
+      "vcpu_hour_usd": "0.01758",
+      "memory_gib_hour_usd": "0.002355",
+      "vcpu_sku_id": "4EAF-BBAF-9069",
+      "memory_sku_id": "5662-928E-19C3"
+    }
+  },
+  "disk": {
+    "hours_per_month": "720",
+    "account_free_tier_included": false,
+    "pd-standard": {
+      "gib_month_usd": "0.048",
+      "sku_id": "BF8D-1C96-EE1C"
+    },
+    "pd-balanced": {
+      "gib_month_usd": "0.12",
+      "sku_id": "DF86-0465-7120"
+    },
+    "pd-ssd": {
+      "gib_month_usd": "0.204",
+      "sku_id": "0589-AA00-68BD"
+    }
+  }
+}

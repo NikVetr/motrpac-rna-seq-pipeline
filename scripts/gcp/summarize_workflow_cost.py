@@ -62,6 +62,8 @@ PIPELINE_PHASES = {
     "merge_results": "reporting_gather",
     "merge_umi_expression": "reporting_gather",
     "merge_all_read_expression": "reporting_gather",
+    "merge_primary_isoforms": "reporting_gather",
+    "merge_all_read_isoforms": "reporting_gather",
     "mqc_pa": "reporting_gather",
 }
 PIPELINE_PHASE_LABELS = {
@@ -277,6 +279,17 @@ def monitor(path: Path) -> dict[str, Decimal | int | None]:
     memory = values("memory_current_bytes") + values("memory_peak_bytes")
     disk_used = values("disk_used_kb")
     disk_free = values("disk_available_kb")
+    detail = {}
+    for field in ("anon", "file", "inactive_file"):
+        samples = values(f"memory_{field}_bytes")
+        detail[f"peak_memory_{field}_gib"] = max(samples) / GIB if samples else None
+    working = [
+        max(ZERO, dec(row["memory_current_bytes"], "memory current") -
+            dec(row["memory_inactive_file_bytes"], "inactive file memory")) / GIB
+        for row in rows
+        if all(row.get(key) not in {None, "", "NA", "max"}
+               for key in ("memory_current_bytes", "memory_inactive_file_bytes"))
+    ]
     return {
         "sample_count": len(rows),
         "observed_seconds": observed,
@@ -285,6 +298,8 @@ def monitor(path: Path) -> dict[str, Decimal | int | None]:
         "peak_memory_gib": max(memory) / GIB if memory else None,
         "peak_disk_used_gib": max(disk_used) / KIB_PER_GIB if disk_used else None,
         "minimum_disk_free_gib": min(disk_free) / KIB_PER_GIB if disk_free else None,
+        **detail,
+        "peak_working_set_gib": max(working) if working else None,
     }
 
 

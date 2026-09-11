@@ -78,8 +78,8 @@ class GcpBatchScaffoldTests(unittest.TestCase):
             options["default_runtime_attributes"]["zones"],
         )
         self.assertEqual(
-            "gs://omicspipelines-public-resources/rnaseq/monitoring/"
-            "sha256-9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f/"
+            "gs://motrpac-rnaseq-modernization-us-west2/monitoring/"
+            "sha256-d855b17c86e355d95769b87571144c1236d64f11d3c989725740c57c58484d62/"
             "monitor_resources.sh",
             options["monitoring_script"],
         )
@@ -120,8 +120,8 @@ class GcpBatchScaffoldTests(unittest.TestCase):
         )
         lines = result.stdout.splitlines()
         self.assertEqual(2, len(lines))
-        self.assertEqual(9, len(lines[0].split("\t")))
-        self.assertEqual(9, len(lines[1].split("\t")))
+        self.assertEqual(12, len(lines[0].split("\t")))
+        self.assertEqual(12, len(lines[1].split("\t")))
         timestamp = lines[1].split("\t")[0]
         self.assertRegex(timestamp, r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 

@@ -1,5 +1,8 @@
 # Cohort provisioning and operations
 
+For the per-attempt input, count and memory evidence needed to recalibrate
+these rules, see [task profiling](task-profiling.md).
+
 Resource checks use all 4,455 successful per-sample monitoring logs from the
 296-library workflow `68aaf86f-b391-4423-a269-21371a91f416` and single-library
 workflow `6891b68f-1751-4c8f-8acb-b5049377fa9d`. Logs were refreshed using final

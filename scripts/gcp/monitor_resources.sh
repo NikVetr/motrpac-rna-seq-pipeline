@@ -40,7 +40,21 @@ memory_metric() {
     fi
 }
 
-printf 'timestamp_utc\tepoch_s\tcpu_usage_usec\tmemory_current_bytes\tmemory_peak_bytes\tmemory_limit_bytes\thost_mem_available_kb\tdisk_used_kb\tdisk_available_kb\n'
+memory_stat_metric() {
+    local path=/sys/fs/cgroup/memory.stat
+    local key="$1"
+    if [[ ! -r "$path" ]]; then
+        path=/sys/fs/cgroup/memory/memory.stat
+        key="$2"
+    fi
+    if [[ -r "$path" ]]; then
+        awk -v key="$key" '$1 == key { print $2; found=1 } END { if (!found) print "NA" }' "$path"
+    else
+        printf 'NA\n'
+    fi
+}
+
+printf 'timestamp_utc\tepoch_s\tcpu_usage_usec\tmemory_current_bytes\tmemory_peak_bytes\tmemory_limit_bytes\thost_mem_available_kb\tdisk_used_kb\tdisk_available_kb\tmemory_anon_bytes\tmemory_file_bytes\tmemory_inactive_file_bytes\n'
 
 sample_number=0
 while true; do
@@ -62,7 +76,7 @@ while true; do
         df -Pk . | awk 'NR == 2 { print $3, $4 }'
     )
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$timestamp_utc" \
         "$epoch_s" \
         "$cpu_usec" \
@@ -71,7 +85,10 @@ while true; do
         "$memory_limit" \
         "$host_mem_available" \
         "$disk_used" \
-        "$disk_available"
+        "$disk_available" \
+        "$(memory_stat_metric anon total_rss)" \
+        "$(memory_stat_metric file total_cache)" \
+        "$(memory_stat_metric inactive_file total_inactive_file)"
 
     sample_number=$((sample_number + 1))
     if (( max_samples > 0 && sample_number >= max_samples )); then

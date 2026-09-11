@@ -7,7 +7,7 @@
   "default_runtime_attributes": {
     "zones": "us-west1-a us-west1-b us-west1-c"
   },
-  "monitoring_script": "gs://omicspipelines-public-resources/rnaseq/monitoring/sha256-9fcd1f7179d1d4106c39a68e3f116bb57f645b847158d5e1673efcf21adc2f4f/monitor_resources.sh",
+  "monitoring_script": "gs://motrpac-rnaseq-modernization-us-west2/monitoring/sha256-d855b17c86e355d95769b87571144c1236d64f11d3c989725740c57c58484d62/monitor_resources.sh",
   "read_from_cache": false,
   "use_reference_disks": false,
   "write_to_cache": false
