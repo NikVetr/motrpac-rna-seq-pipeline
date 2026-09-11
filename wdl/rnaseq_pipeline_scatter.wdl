@@ -128,7 +128,8 @@ workflow rnaseq_pipeline {
         # Input files/values
         Array[File]+ fastq1
         Array[File]+ fastq2
-        Array[File?]? fastq_index
+        # Empty entries mark missing I1; present entries become File task inputs.
+        Array[String]? fastq_index
         Array[String]+ sample_prefix
         String reference_release = "unspecified"
         # Set to 1 for one preemptible attempt before the on-demand fallback
@@ -263,14 +264,11 @@ workflow rnaseq_pipeline {
         String merge_results_docker
     }
 
-    Boolean has_fastq_index = defined(fastq_index) && length(select_first([fastq_index, []])) > 0
+    Array[String] index_uris = select_first([fastq_index, []])
+    Boolean has_fastq_index = length(index_uris) > 0
     Array[Boolean] index_length_contract =
-        if !has_fastq_index || length(select_first([fastq_index, []])) == length(fastq1) then [true] else []
+        if !has_fastq_index || length(index_uris) == length(fastq1) then [true] else []
     Boolean index_length_valid = index_length_contract[0]
-    Array[Boolean] umi_expression_input_contract =
-        if !use_umi_molecule_expression || allow_missing_umis ||
-            length(select_all(select_first([fastq_index, []]))) == length(fastq1) then [true] else []
-    Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]
     Array[Boolean] expression_policy_contract =
         if !retain_all_read_expression || use_umi_molecule_expression then [true] else []
     Boolean expression_policy_valid = expression_policy_contract[0]
@@ -293,7 +291,11 @@ workflow rnaseq_pipeline {
     Boolean use_multiqc = multiqc_inputs_valid && run_multiqc
 
     scatter (i in range(length(fastq1))) {
-        Array[File] sample_index = if has_fastq_index then select_all([select_first([fastq_index])[i]]) else []
+        String index_uri = if has_fastq_index then index_uris[i] else ""
+        Array[File] sample_index = if index_uri != "" then [index_uri] else []
+        Array[Boolean] umi_expression_input_contract =
+            if !use_umi_molecule_expression || allow_missing_umis || length(sample_index) > 0 then [true] else []
+        Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]
         Boolean use_index_reads = index_length_valid && umi_expression_inputs_valid && length(sample_index) > 0
         Boolean use_sample_umi_expression = use_umi_molecule_expression && use_index_reads
         Boolean run_all_read_expression = expression_policy_valid && (!use_sample_umi_expression || retain_all_read_expression)

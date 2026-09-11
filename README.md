@@ -59,6 +59,8 @@ logs each sample's expression mode and UMI status and publishes
 `expression_metadata` with reference release, UMI availability and
 `not_deduplicated` (1 for all-read, 0 for molecule expression). Include that
 metadata when modeling a cohort with mixed UMI availability.
+Generated JSON uses an empty string for each absent I1 slot; present I1 URIs
+remain typed file inputs at the task boundary.
 
 Use `--all-read-expression-only --no-index` for a wholly non-UMI submission.
 Strandedness is unchanged; `--legacy-all-read-expression-only` remains an alias.

@@ -584,7 +584,7 @@ def make_json_dict(
         raise ValueError("R1, R2, and sample-prefix arrays must be nonempty and aligned")
     if i1 is not None and len(i1) != len(r1):
         raise ValueError("I1 array must be absent or aligned with R1 and R2")
-    if use_umi_molecule_expression and not allow_missing_umis and (not i1 or any(path is None for path in i1)):
+    if use_umi_molecule_expression and not allow_missing_umis and (not i1 or any(path in (None, "") for path in i1)):
         raise ValueError(
             "UMI molecule expression requires a matched I1 FASTQ for every sample"
         )
@@ -612,7 +612,7 @@ def make_json_dict(
         )
     if len(prefix_list) != len(set(prefix_list)) or any(not value for value in prefix_list):
         raise ValueError("sample prefixes must be nonempty and unique")
-    fastq_uris = r1 + r2 + [path for path in (i1 or []) if path is not None]
+    fastq_uris = r1 + r2 + [path for path in (i1 or []) if path not in (None, "")]
     if len(fastq_uris) != len(set(fastq_uris)):
         raise ValueError("FASTQ URIs must be unique across R1, R2, and I1 roles")
     output_report_name = output_report_stem(output_report_name)
@@ -665,7 +665,7 @@ def make_json_dict(
     filled_dict = {
         "rnaseq_pipeline.fastq1": r1,
         "rnaseq_pipeline.fastq2": r2,
-        "rnaseq_pipeline.fastq_index": i1,
+        "rnaseq_pipeline.fastq_index": None if i1 is None else [path or "" for path in i1],
         "rnaseq_pipeline.sample_prefix": prefix_list,
         "rnaseq_pipeline.pretrim_fastqc_ncpu": 8,
         "rnaseq_pipeline.pretrim_fastqc_ramGB": 40,

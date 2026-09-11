@@ -466,7 +466,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
         output = self.temp / "set1_rnaseq.json"
         document = json.loads(output.read_text())
         self.assertEqual(["a", "b"], document["rnaseq_pipeline.sample_prefix"])
-        self.assertEqual(["gs://example/a_I1.fastq.gz", None], document["rnaseq_pipeline.fastq_index"])
+        self.assertEqual(["gs://example/a_I1.fastq.gz", ""], document["rnaseq_pipeline.fastq_index"])
         self.assertTrue(document["rnaseq_pipeline.allow_missing_umis"])
         output.unlink()
         with mock.patch.object(filesystem, "info", side_effect=PermissionError("denied")), \
