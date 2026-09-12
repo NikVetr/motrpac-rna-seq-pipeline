@@ -135,6 +135,8 @@ workflow rnaseq_pipeline {
         # One Spot attempt before on-demand fallback; set to 0 for on-demand only.
         Int num_preemptible_attempts = 1
         Boolean prefer_predefined_n1 = false
+        # Select E2 for STAR, UMI, RSEM and RNA-QC; preserve tool threads and sizing.
+        Boolean use_e2 = false
 
         # Optional QC groups; all remain enabled by default for compatibility.
         Boolean run_pretrim_fastqc = true
@@ -436,6 +438,7 @@ workflow rnaseq_pipeline {
                 fastq2=cutadapt_fastq_trimmed_R2,
             # Runtime Parameters
                 ncpu=star_ncpu,
+                use_e2=use_e2,
                 memory=star_ramGB,
                 disk_space=effective_star_scratch_gb,
                 disk_type=star_disk_type,
@@ -466,6 +469,7 @@ workflow rnaseq_pipeline {
                     rsem_reference=rsem_reference,
                 # Runtime Parameters
                     ncpu=rsem_ncpu,
+                    use_e2=use_e2,
                     memory=rsem_ramGB,
                     disk_space=rsem_disk,
                     preemptible=num_preemptible_attempts,
@@ -561,6 +565,7 @@ workflow rnaseq_pipeline {
                     ref_flat=ref_flat,
                 # Runtime Parameters
                     ncpu=rnaqc_ncpu,
+                    use_e2=use_e2,
                     memory=rnaqc_ramGB,
                     prefer_predefined_n1=prefer_predefined_n1,
                     disk_space=rnaqc_disk,
@@ -598,6 +603,7 @@ workflow rnaseq_pipeline {
                     emit_molecule_expression=use_sample_umi_expression,
                 # Runtime Parameters
                     ncpu=umi_dup_ncpu,
+                    use_e2=use_e2,
                     memory=umi_dup_ramGB,
                     disk_space=effective_umi_scratch_gb,
                     disk_type=umi_dup_disk_type,
@@ -624,6 +630,7 @@ workflow rnaseq_pipeline {
                         transcriptome_bam=udup.molecule_transcriptome_bam[0],
                         rsem_reference=rsem_reference,
                         ncpu=rsem_ncpu,
+                        use_e2=use_e2,
                         memory=rsem_ramGB,
                         disk_space=rsem_disk,
                         preemptible=num_preemptible_attempts,

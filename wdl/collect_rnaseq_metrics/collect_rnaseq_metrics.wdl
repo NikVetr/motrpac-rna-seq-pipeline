@@ -11,10 +11,13 @@ task collectrnaseqmetrics {
         Int memory
         Int disk_space
         Int ncpu
+        Boolean use_e2 = false
         Boolean prefer_predefined_n1 = false
         Int preemptible
         String docker
     }
+
+    Int e2_cpu = 2 * ceil(if ncpu / 2.0 > memory / 16.0 then ncpu / 2.0 else memory / 16.0)
 
     command <<<
         set -euo pipefail
@@ -44,7 +47,8 @@ task collectrnaseqmetrics {
     runtime {
         cpu: ncpu
         # Same-family upgrade, cheaper in both us-west2 markets; other sizes stay custom.
-        gcp: if prefer_predefined_n1 && ncpu == 2 && memory == 12
+        gcp: if use_e2 then object { predefinedMachineType: "e2-custom-${e2_cpu}-${memory * 1024}" }
+            else if prefer_predefined_n1 && ncpu == 2 && memory == 12
             then object { predefinedMachineType: "n1-highmem-2" } else object {}
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"

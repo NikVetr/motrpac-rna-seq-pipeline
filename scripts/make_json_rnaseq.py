@@ -69,7 +69,7 @@ RUNTIME_RESOURCE_KEYS = {
     for role in RUNTIME_RESOURCE_ROLES
     for resource in ("ncpu", "ramGB", "disk")
 }
-RUNTIME_POLICY_KEY = "rnaseq_pipeline.prefer_predefined_n1"
+RUNTIME_POLICY_KEYS = {"rnaseq_pipeline.prefer_predefined_n1", "rnaseq_pipeline.use_e2"}
 DEFAULT_RELEASE_MANIFESTS = {
     ("human", "gencode_v47"): REPO_ROOT
     / "config"
@@ -372,7 +372,7 @@ def load_runtime_profile(path):
 
     actual_keys = set(overrides)
     missing = sorted(RUNTIME_RESOURCE_KEYS - actual_keys)
-    unknown = sorted(actual_keys - RUNTIME_RESOURCE_KEYS - {RUNTIME_POLICY_KEY})
+    unknown = sorted(actual_keys - RUNTIME_RESOURCE_KEYS - RUNTIME_POLICY_KEYS)
     if missing or unknown:
         details = []
         if missing:
@@ -393,8 +393,9 @@ def load_runtime_profile(path):
                 ", ".join(invalid)
             )
         )
-    if RUNTIME_POLICY_KEY in overrides and type(overrides[RUNTIME_POLICY_KEY]) is not bool:
-        raise ValueError("prefer_predefined_n1 must be a boolean")
+    for key in RUNTIME_POLICY_KEYS & actual_keys:
+        if type(overrides[key]) is not bool:
+            raise ValueError("{} must be a boolean".format(key))
     return overrides
 
 

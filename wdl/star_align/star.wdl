@@ -16,9 +16,12 @@ task star {
         Int disk_space
         String disk_type
         Int ncpu
+        Boolean use_e2 = false
         Int preemptible
         String docker
     }
+
+    Int e2_cpu = 2 * ceil(if ncpu / 2.0 > memory / 16.0 then ncpu / 2.0 else memory / 16.0)
 
     command <<<
         set -euo pipefail
@@ -67,6 +70,7 @@ task star {
 
     runtime {
         cpu: ncpu
+        gcp: if use_e2 then object { predefinedMachineType: "e2-custom-${e2_cpu}-${memory * 1024}" } else object {}
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} ${disk_type}"
         docker: docker

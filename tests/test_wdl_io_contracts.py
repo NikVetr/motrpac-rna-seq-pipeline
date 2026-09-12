@@ -80,7 +80,11 @@ class WdlIoContractTests(unittest.TestCase):
             )
         self.assertIn("else 400", workflow)
         self.assertIn(
-            "if star_disk > inferred_star_scratch_gb then star_disk else inferred_star_scratch_gb",
+            "if star_disk > reference_star_scratch_gb then star_disk else reference_star_scratch_gb",
+            workflow,
+        )
+        self.assertIn(
+            'ceil(inferred_star_scratch_gb * (if reference_release == "gencode_v50" then 1.30 else 1.0))',
             workflow,
         )
         self.assertIn("disk_space=effective_star_scratch_gb", workflow)

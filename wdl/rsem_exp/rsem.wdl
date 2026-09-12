@@ -9,6 +9,7 @@ task rsem {
         Int memory
         Int disk_space
         Int ncpu
+        Boolean use_e2 = false
         Int preemptible
         String docker
     }
@@ -19,6 +20,7 @@ task rsem {
     Int inferred_scratch_gb = ceil(10.0 + 4.0 * input_gib)
     Int effective_memory = if memory > inferred_memory then memory else inferred_memory
     Int effective_scratch_gb = if disk_space > inferred_scratch_gb then disk_space else inferred_scratch_gb
+    Int e2_cpu = 2 * ceil(if ncpu / 2.0 > effective_memory / 16.0 then ncpu / 2.0 else effective_memory / 16.0)
 
     command <<<
         set -euo pipefail
@@ -56,6 +58,7 @@ task rsem {
 
     runtime {
         cpu: ncpu
+        gcp: if use_e2 then object { predefinedMachineType: "e2-custom-${e2_cpu}-${effective_memory * 1024}" } else object {}
         memory: "${effective_memory}GB"
         disks: "local-disk ${effective_scratch_gb} HDD"
         docker: docker

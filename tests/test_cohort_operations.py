@@ -102,6 +102,20 @@ class CohortOperationsTests(unittest.TestCase):
             locality.check("gs://execution/run", "us-west1",
                            {"default_runtime_attributes": {"zones": "us-west1-a"}}, inputs, describe)
 
+    def test_e2_policy_rejects_conflicting_machine_selection(self):
+        inputs = {"rnaseq_pipeline.use_e2": True}
+        options = {"default_runtime_attributes": {"zones": "us-west2-a"}}
+        def describe(bucket):
+            return {"location": "US-WEST2", "locationType": "region"}
+        locality.check("gs://execution/run", "us-west2", options, inputs, describe)
+        for key, value in (("cpuPlatform", "Intel Ice Lake"), ("predefinedMachineType", "e2-highmem-2")):
+            conflicting = {"default_runtime_attributes": dict(options["default_runtime_attributes"], **{key: value})}
+            with self.assertRaisesRegex(ValueError, "E2 policy"):
+                locality.check("gs://execution/run", "us-west2", conflicting, inputs, describe)
+        with self.assertRaisesRegex(ValueError, "E2 policy"):
+            locality.check("gs://execution/run", "us-west2", options,
+                           dict(inputs, **{"rnaseq_pipeline.prefer_predefined_n1": True}), describe)
+
 
 if __name__ == "__main__":
     unittest.main()

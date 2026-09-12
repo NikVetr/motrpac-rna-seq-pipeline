@@ -32,6 +32,10 @@ def check(root, region, options, inputs, describe):
         raise ValueError("workflow options must specify worker zones explicitly")
     if any(zone.rsplit("-", 1)[0] != region for zone in zones.split()):
         raise ValueError("worker zones differ from the Batch region")
+    if inputs.get("rnaseq_pipeline.use_e2", False):
+        runtime = options.get("default_runtime_attributes", {})
+        if inputs.get("rnaseq_pipeline.prefer_predefined_n1", False) or runtime.get("cpuPlatform") or runtime.get("predefinedMachineType"):
+            raise ValueError("E2 policy requires predefined N1 disabled and no CPU platform/machine override")
     if inputs.get("rnaseq_pipeline.prefer_predefined_n1", False):
         runtime = options.get("default_runtime_attributes", {})
         if region != "us-west2" or runtime.get("cpuPlatform") or runtime.get("predefinedMachineType"):

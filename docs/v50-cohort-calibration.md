@@ -4,23 +4,36 @@ Use `config/backends/gcp/runtime-human-v50-full-candidate-v1.json` for the
 initial approximately 100 libraries. It preserves the v47 full-depth profile's
 threads and disk floors, changes UMI/RSEM/RNA-QC RAM floors to 36/32/12 GB,
 and keeps STAR at 12 threads/72 GB. Shared BAM-size growth remains active.
+It enables `rnaseq_pipeline.use_e2` for STAR, UMI, both RSEM expression modes
+and RNA-QC. Other tasks retain their existing backend sizing.
 The workflow multiplies STAR's post-trim read-pair scratch tiers by 1.30 only
 when `reference_release` is `gencode_v50`, rounding up and respecting larger
 explicit floors. v47 and rat resource rules are unchanged.
 
-The profile enables `rnaseq_pipeline.prefer_predefined_n1`. In us-west2, a
-2-vCPU/12-GB RNA-QC request uses `n1-highmem-2` (2 vCPUs/13 GiB), approximately
-1.2% cheaper in both Spot and on-demand compute than N1 custom. The heap stays
-at 12 GB. Other CPU/RAM requests keep the backend's normal sizing. The locality
-guard rejects other regions and explicit CPU-platform/machine overrides while
-this policy is enabled; disable it when those settings are needed. Use the
-pinned Cromwell 92 backend, which supports conditional `gcp` runtime objects.
+E2 custom machines retain the requested RAM and use the smallest even vCPU
+count satisfying both tool threads and the 8-GiB/vCPU memory limit. RSEM uses
+its effective BAM-scaled RAM, including when growth exceeds the configured
+floor. For the tested libraries, STAR uses 12/72 CPU/GiB, UMI 6/36, RSEM
+10/32–56 and RNA-QC 2/12. Tool threads and disk formulas are unchanged.
+Do not apply one fixed machine type to the entire workflow or clamp growing
+RAM requests. Requests beyond E2's supported sizes fail allocation and need an
+explicit profile/family decision. The locality guard rejects simultaneous
+predefined N1 selection and CPU-platform/machine overrides. Use Cromwell 92,
+which supports these conditional `gcp` runtime objects. For the N1 comparison
+mode, disable `use_e2` and optionally enable `prefer_predefined_n1` in us-west2.
 
 These are buffered pilot candidates, not validated resource minima. Four
 completed v50 RSEM calls used 7.38/27.82/31.85/35.71 GiB working memory and
 would request 32/48/52/56 GB. Incomplete UMI tails reached 30.94 GiB working
 memory; completed RNA-QC reached approximately 10 GiB. Larger v50 tails and
 the cohort transcript merge still need measurements at these allocations.
+All 12 heavy-task E2 calls completed across three full-depth v50 libraries.
+Their RSEM working-memory peaks were 7.38/30.39/34.51 GiB; STAR was below
+33 GiB, UMI below 16 GiB and RNA-QC below 9.5 GiB. Every allocation retained
+disk headroom. RSEM gene and isoform tables were byte-identical to matched N2
+outputs; available UMI counters, STAR metrics/junctions and Picard metrics
+also agreed. This supports a staged 100-library calibration, not further
+resource reductions or a claim that larger tails have already been tested.
 
 ## Inputs and submission
 
@@ -65,14 +78,15 @@ server execution root, Batch region, inputs and cohort options.
 
 Run two full-depth libraries first as part of the intended 100, including one
 typical library and one larger prior RSEM case. Check gene/isoform outputs,
-expression metadata and [task profiles](task-profiling.md), then expand across
-read depth, prior BAM/runtime extremes and batches. Reuse the first two through
-verified cache hits. Preserve inputs/options and source revision. An independent
+expression metadata and [task profiles](task-profiling.md), then expand to ten
+including high-depth/resource extremes, and finally all 100. Reuse completed
+libraries through verified cache hits. Preserve inputs/options and source revision. An independent
 sample can finish after another fails; a full merge still requires repair of
 the missing sample. Capture failed attempts as well as successes before cleanup.
 
-Keep the N1 family and the eligible predefined RNA-QC upgrade for this calibration. A price-only comparison found
-E2 predefined Spot shapes worth a separate small matched test; changing family
-at the same time would confound RAM calibration. Predefined shape selection
-overrides CPU/RAM runtime requests, so never apply one fixed machine type to
-the entire workflow or bypass dynamic RSEM growth.
+Keep the candidate RAM/disk relationships fixed during this E2 calibration.
+Select approximately 80 representative libraries stratified by batch, visit
+and depth, plus 20 anchors/resource extremes from the original 297. Retain
+the selection reasons and historical metrics separately from newly generated
+QC. Reweight the deliberately enriched panel before estimating cohort-average
+costs. No additional all-read RSEM pass is needed to produce isoform results.

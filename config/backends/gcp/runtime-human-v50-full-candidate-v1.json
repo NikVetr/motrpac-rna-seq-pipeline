@@ -1,9 +1,10 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v50_full_candidate_v1",
-  "description": "Buffered GENCODE v50 full-depth calibration profile. STAR uses 12 threads, 72 GB RAM and version-specific scratch tiers; UMI, RSEM and RNA-QC RAM floors are 36, 32 and 12 GB. BAM-based growth remains active. Validate on the first two cohort libraries before expanding; large v50 tails remain unmeasured.",
+  "description": "GENCODE v50 calibration profile using E2 for STAR, UMI, RSEM and RNA-QC. STAR uses 12 threads, 72 GB RAM and version-specific scratch tiers; UMI, RSEM and RNA-QC RAM floors are 36, 32 and 12 GB. BAM-based growth remains active. Validate the first two full-pipeline libraries before expanding to 100.",
   "overrides": {
-    "rnaseq_pipeline.prefer_predefined_n1": true,
+    "rnaseq_pipeline.prefer_predefined_n1": false,
+    "rnaseq_pipeline.use_e2": true,
     "rnaseq_pipeline.pretrim_fastqc_ncpu": 2,
     "rnaseq_pipeline.pretrim_fastqc_ramGB": 4,
     "rnaseq_pipeline.pretrim_fastqc_disk": 25,
