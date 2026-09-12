@@ -199,6 +199,29 @@ class ReleaseProfileTests(unittest.TestCase):
         self.assertEqual(manifest["annotation"]["gcs_uri"], inputs["rnaseq_pipeline.gtf_file"])
         self.assertEqual(manifest["annotation"]["transcripts"], manifest["artifacts"]["refFlat"]["rows"])
 
+    def test_rat_v116_uses_modern_tools_and_only_matched_rat_references(self) -> None:
+        inputs = generator.resolve_release_inputs("rat", "rn8_v116")
+        human = generator.resolve_release_inputs("human", "gencode_v50")
+        manifest = json.loads((REPO_ROOT / "config/references/rat-grcr8-ensembl-v116.json").read_text())
+        self.assertEqual("GRCr8", manifest["assembly"])
+        self.assertEqual("Ensembl 116", manifest["annotation"]["release"])
+        document = generator.make_json_dict("rat", "rn8_v116", "unused", "cohort",
+            ["gs://example/a_R1.fastq.gz"], ["gs://example/a_R2.fastq.gz"],
+            ["gs://example/a_I1.fastq.gz"], ["a"], release_inputs=inputs, use_umi_molecule_expression=True)
+        self.assertEqual("rn8_v116", document["rnaseq_pipeline.reference_release"])
+        self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
+        self.assertFalse(document["rnaseq_pipeline.retain_all_read_expression"])
+        for role in generator.IMAGE_ROLES:
+            self.assertEqual(human["rnaseq_pipeline." + role], inputs["rnaseq_pipeline." + role])
+        for role, artifact in (("star_index", "star"), ("rsem_reference", "rsem"), ("ref_flat", "refFlat"),
+                               ("globin_genome_dir_tar", "globin"), ("rrna_genome_dir_tar", "rRNA"), ("phix_genome_dir_tar", "phix")):
+            entry = manifest["artifacts"][artifact]
+            self.assertEqual(entry["gcs_uri"], inputs["rnaseq_pipeline." + role])
+            self.assertIn("sha256-" + entry["sha256"], entry["gcs_uri"])
+        self.assertEqual(manifest["annotation"]["gcs_uri"], inputs["rnaseq_pipeline.gtf_file"])
+        self.assertEqual(manifest["annotation"]["transcripts"], manifest["artifacts"]["refFlat"]["rows"])
+        self.assertIsNone(generator.resolve_release_inputs("rat", "rn8"))
+
 
 if __name__ == "__main__":
     unittest.main()

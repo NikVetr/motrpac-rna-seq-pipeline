@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "reference_id": "rat_grcr8_ensembl_v116",
+  "organism": "rat",
+  "assembly": "GRCr8",
+  "assembly_accession": "GCA_036323735.1",
+  "genome": {
+    "source_uri": "https://ftp.ensembl.org/pub/release-116/fasta/rattus_norvegicus/dna/Rattus_norvegicus.GRCr8.dna.toplevel.fa.gz",
+    "ensembl_bsd_sum": [
+      "54074",
+      "831486"
+    ],
+    "compressed_sha256": "b6ebe12ad0b07531b277de1394b6fdd87f0a498945256890cfc70b57a96d51bf",
+    "source_sha256": "3470173db11763360158f49572fa5633d9159183144d5e80d4300621de77461c",
+    "compressed_bytes": 851440915,
+    "source_bytes": 2897097561,
+    "normalized_sha256": "d2c024fa75457033a5268d276e7f058387a5963b7193ca69b44f9bfeea7cac48",
+    "scope": "GRCr8 unmasked toplevel assembly",
+    "contigs": 77,
+    "bases": 2849597492
+  },
+  "annotation": {
+    "source_uri": "https://ftp.ensembl.org/pub/release-116/gtf/rattus_norvegicus/Rattus_norvegicus.GRCr8.116.gtf.gz",
+    "ensembl_bsd_sum": [
+      "48460",
+      "22638"
+    ],
+    "compressed_sha256": "e025aa7eeefa74e896fdfdf760d01166d8e3ba9d99ba1de2f1b004925f41d338",
+    "source_sha256": "5eefc1cb640cf6db78912ec8132654565d951e88d3dc511ecab5a7ec5555bf20",
+    "compressed_bytes": 23181146,
+    "source_bytes": 612137584,
+    "filename": "Rattus_norvegicus.GRCr8.116.chr.gtf",
+    "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-878e117201eb2e8aca85119f1b6d16f0a2355bdaa63ebbe5b04bd781ba447452/Rattus_norvegicus.GRCr8.116.chr.gtf",
+    "gcs_generation": "1789189181007129",
+    "bytes": 617085312,
+    "sha256": "878e117201eb2e8aca85119f1b6d16f0a2355bdaa63ebbe5b04bd781ba447452",
+    "release": "Ensembl 116",
+    "scope": "GRCr8 complete GTF, canonical chromosomes renamed to UCSC convention",
+    "genes": 43360,
+    "transcripts": 95472
+  },
+  "contig_normalization": "scripts/add_chr_prefix.sh: numeric/X/Y -> chr; MT -> chrM; scaffolds unchanged",
+  "artifacts": {
+    "rsem": {
+      "payload_bytes": 1070476245,
+      "payload_sha256_manifest": "SHA256SUMS",
+      "payload_sha256_manifest_sha256": "7d73132a0cbed867221086216739d6cb05aeba8183af86102056c0dd1a41963b",
+      "filename": "rat_GRCr8_ensembl116_rsem.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-3112d32a3d3987c94687f0ad940c42b0dbe03eb42e23799204853fdb73431278/rat_GRCr8_ensembl116_rsem.tar.gz",
+      "gcs_generation": "1789189155949273",
+      "bytes": 170440980,
+      "sha256": "3112d32a3d3987c94687f0ad940c42b0dbe03eb42e23799204853fdb73431278",
+      "builder": {
+        "tool": "RSEM",
+        "version": "1.3.3",
+        "image": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420",
+        "command": "rsem-prepare-reference --num-threads 4 --gtf <GTF> <FASTA> rsem_reference"
+      }
+    },
+    "globin": {
+      "payload_bytes": 8397434,
+      "payload_sha256_manifest": "SHA256SUMS",
+      "payload_sha256_manifest_sha256": "69997d94101d6214ac240f31c69aeb09ca02f26f57422f7d49f986bd2a0e625e",
+      "filename": "rat_GRCr8_ensembl116_globin.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-3e36c0eeaf61e427dd4aced054d81e02b60a6c1193dc3a444d1c779962d20cb0/rat_GRCr8_ensembl116_globin.tar.gz",
+      "gcs_generation": "1789189150970248",
+      "bytes": 34958,
+      "sha256": "3e36c0eeaf61e427dd4aced054d81e02b60a6c1193dc3a444d1c779962d20cb0",
+      "builder": {
+        "tool": "Bowtie2",
+        "version": "2.5.5",
+        "image": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19"
+      },
+      "source": {
+        "source_uri": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz",
+        "generation": "1702335498072031",
+        "archive_sha256": "240e749c9720a12b06333c8062ee8fdb42c6c59bf9c38226c11c12bd92888b09",
+        "fasta_sha256": "f22cb08ba873a9d8b324919ae5463564c1a6fd4682de76fc23c4c368483cd275",
+        "reference_sequences": 9,
+        "provenance": "Retained MoTrPAC rat assay QC sequences; indexes rebuilt with Bowtie2 2.5.5"
+      }
+    },
+    "rRNA": {
+      "payload_bytes": 8412001,
+      "payload_sha256_manifest": "SHA256SUMS",
+      "payload_sha256_manifest_sha256": "05fca2fa839a2240193d28133cb4a48f1345aa90dc793734e2895d2a4ea3e63d",
+      "filename": "rat_GRCr8_ensembl116_rRNA.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-31fb5e025c41512187811869ac58b6c5ef357e16b0d148dd33192d4602685215/rat_GRCr8_ensembl116_rRNA.tar.gz",
+      "gcs_generation": "1789189151003462",
+      "bytes": 73974,
+      "sha256": "31fb5e025c41512187811869ac58b6c5ef357e16b0d148dd33192d4602685215",
+      "builder": {
+        "tool": "Bowtie2",
+        "version": "2.5.5",
+        "image": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19"
+      },
+      "source": {
+        "source_uri": "gs://omicspipelines-public-resources/rnaseq/references/rat/rn_rRNA.tar.gz",
+        "generation": "1702335498546715",
+        "archive_sha256": "f643d2555a97be10cafa6635eda3ae94a12a49af3ecdd41bc31eb45b0d681ddc",
+        "fasta_sha256": "65ff589f79a8c0fff00c6c98483517ffeed20fe8e716bd12b9586e8e1fdfd10a",
+        "reference_sequences": 5,
+        "provenance": "Retained MoTrPAC rat assay QC sequences; indexes rebuilt with Bowtie2 2.5.5"
+      }
+    },
+    "phix": {
+      "payload_bytes": 8396834,
+      "payload_sha256_manifest": "SHA256SUMS",
+      "payload_sha256_manifest_sha256": "971f8787e16f5c49b8ad8a0064af31f65d0c5ece2851e84498a9108ada3e9a76",
+      "filename": "rat_GRCr8_ensembl116_phix.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-121972b967d92d503169bcea8973c8795f29c8f250e6fc0c9d9a50f1b3e4ef80/rat_GRCr8_ensembl116_phix.tar.gz",
+      "gcs_generation": "1789189153591060",
+      "bytes": 45404,
+      "sha256": "121972b967d92d503169bcea8973c8795f29c8f250e6fc0c9d9a50f1b3e4ef80",
+      "builder": {
+        "tool": "Bowtie2",
+        "version": "2.5.5",
+        "image": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19"
+      },
+      "source": {
+        "source_uri": "gs://omicspipelines-public-resources/rnaseq/references/rat/phix.tar.gz",
+        "generation": "1702335495583950",
+        "archive_sha256": "33e6bcd4025d9c86435629c2aecf8f56d8eba630b4e089e3495d768b70f55489",
+        "fasta_sha256": "d881996b40061790dc598426545d2aa01acf324b234fd7fdbbd735239110f785",
+        "reference_sequences": 1,
+        "provenance": "Retained MoTrPAC rat assay QC sequences; indexes rebuilt with Bowtie2 2.5.5"
+      }
+    },
+    "star": {
+      "payload_bytes": 28537336615,
+      "payload_sha256_manifest": "SHA256SUMS",
+      "payload_sha256_manifest_sha256": "7848d660f3160fd12b7c62ffe5213646a9eda04329a07b4f4d70e0a07ddd14dd",
+      "filename": "rat_GRCr8_ensembl116_star.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-9a983fe0fd1054eca56f71d9a11fdaa0dc14b2015a79cc008d7e8f2c21c0639e/rat_GRCr8_ensembl116_star.tar.gz",
+      "gcs_generation": "1789189862327254",
+      "bytes": 25825165446,
+      "sha256": "9a983fe0fd1054eca56f71d9a11fdaa0dc14b2015a79cc008d7e8f2c21c0639e",
+      "builder": {
+        "tool": "STAR",
+        "version": "2.7.11b",
+        "image": "quay.io/biocontainers/star@sha256:c43295cdbc28a7be7d88296775a29cc65b30296c996d8242ef90c031c8b9739b",
+        "annotation_baked": true,
+        "sjdbOverhang": 100,
+        "runThreadN": 10,
+        "limitGenomeGenerateRAM": 85000000000
+      }
+    },
+    "refFlat": {
+      "rows": 95472,
+      "columns": 11,
+      "filename": "refFlat_GRCr8_v116_ucsc479.txt",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-8faf6a944c68bebdd193a8fccd6e571b76f01d40b63a6640f4f00f3a0d69421a/refFlat_GRCr8_v116_ucsc479.txt",
+      "gcs_generation": "1789189168619194",
+      "bytes": 21821127,
+      "sha256": "8faf6a944c68bebdd193a8fccd6e571b76f01d40b63a6640f4f00f3a0d69421a",
+      "builder": {
+        "tool": "UCSC gtfToGenePred",
+        "version": "kent-v479",
+        "sha256": "306e7c1d8da3890bf813e4ae5c94a28bd9bd51ece9cb2b5ee2f51bf98e59f4fc",
+        "arguments": [
+          "-ignoreGroupsWithoutExons",
+          "-genePredExt"
+        ],
+        "postprocess": "genePredExt name2 followed by fields 1-10"
+      }
+    }
+  },
+  "publication_state": "published as checksum-addressed private us-west1 GCS objects"
+}

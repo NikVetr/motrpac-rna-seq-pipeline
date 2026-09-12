@@ -10,7 +10,7 @@ Generates the input configuration file required to run the rna-seq pipeline.
 ```
 usage: make_json_rnaseq.py [-h] -g GCP_PATH -o OUTPUT_PATH
                            -r OUTPUT_REPORT_NAME [-u] -a {rat,human}
-                           -v {rn6,rn7,rn8,gencode_v39,gencode_v47}
+                           -v {rn6,rn7,rn8,rn8_v116,gencode_v39,gencode_v47,gencode_v50}
                            -n NUM_CHUNKS
                            [--sample-list SAMPLE_LIST |
                             --exclude-sample-list EXCLUDE_SAMPLE_LIST]

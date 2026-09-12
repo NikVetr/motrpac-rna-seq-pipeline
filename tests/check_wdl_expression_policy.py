@@ -9,6 +9,9 @@ import WDL
 
 ROOT = Path(__file__).resolve().parents[1]
 workflow = WDL.load(str(ROOT / "wdl/rnaseq_pipeline_scatter.wdl")).workflow
+merge = next(node for node in workflow.body if isinstance(node, WDL.Tree.Call) and node.name == "merge_results")
+metadata_writer = next(part.expr for part in merge.callee.command.parts
+                       if isinstance(part, WDL.Expr.Placeholder) and str(part.expr) == "write_tsv(expression_metadata_rows)")
 
 
 def descendants(node):
@@ -61,9 +64,11 @@ with tempfile.TemporaryDirectory() as directory:
             continue
         assert expected is not None
         metadata_env = env.bind("expression_metadata_row", WDL.Value.Array(WDL.Type.Array(WDL.Type.String()), rows))
+        metadata_env = metadata_env.bind("expression_metadata_rows",
+            merge.inputs["expression_metadata_rows"].eval(metadata_env, stdlib))
         # Host paths are used only for this local expression check.
         stdlib._virtualize_filename = lambda filename: filename
-        path = declarations["expression_metadata"].expr.eval(metadata_env, stdlib).value
+        path = metadata_writer.eval(metadata_env, stdlib).value
         with open(path) as handle:
             actual = list(csv.DictReader(handle, delimiter="\t"))
         assert [row["sample"] for row in actual] == ["a", "b"]

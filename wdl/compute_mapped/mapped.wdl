@@ -79,13 +79,13 @@ task samtools_mapped {
             $1 != "*" {
                 count = $3 + 0
                 total += count
-                if ($1 == "chrX") {
+                if ($1 == "chrX" || $1 == "X") {
                     chr_x += count
-                } else if ($1 == "chrY") {
+                } else if ($1 == "chrY" || $1 == "Y") {
                     chr_y += count
-                } else if ($1 == "chrM") {
+                } else if ($1 == "chrM" || $1 == "MT") {
                     chr_m += count
-                } else if ($1 ~ /^chr[0-9]+$/) {
+                } else if ($1 ~ /^(chr)?[0-9]+$/) {
                     chr_auto += count
                 } else {
                     contig += count

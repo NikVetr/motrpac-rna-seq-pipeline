@@ -16,7 +16,7 @@ set -euo pipefail
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <fasta_file> <gtf_file>"
-    echo "Example: $0 data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.dna.toplevel.fa data/rat-ensembl-release-115/Rattus_norvegicus.GRCr8.115.gtf"
+    echo "Example: $0 Rattus_norvegicus.GRCr8.dna.toplevel.fa Rattus_norvegicus.GRCr8.116.gtf"
     exit 1
 fi
 
@@ -32,7 +32,7 @@ for f in "$FASTA" "$GTF"; do
 done
 
 echo "Adding chr prefix to FASTA: $FASTA"
-sed -E 's/^>([0-9]+|X|Y) />chr\1 /; s/^>MT />chrM /' "$FASTA" > "${FASTA}.tmp" && mv "${FASTA}.tmp" "$FASTA"
+sed -E 's/^>([0-9]+|X|Y)([[:space:]]|$)/>chr\1\2/; s/^>MT([[:space:]]|$)/>chrM\1/' "$FASTA" > "${FASTA}.tmp" && mv "${FASTA}.tmp" "$FASTA"
 
 echo "Adding chr prefix to GTF: $GTF"
 sed -E '/^#/! { s/^([0-9]+|X|Y)\t/chr\1\t/; s/^MT\t/chrM\t/; }' "$GTF" > "${GTF}.tmp" && mv "${GTF}.tmp" "$GTF"
@@ -41,7 +41,7 @@ echo ""
 echo "Done. Verify chromosome names:"
 echo ""
 echo "FASTA headers (first 5):"
-grep '^>' "$FASTA" | head -5
+awk '/^>/ { print; if (++n == 5) exit }' "$FASTA"
 echo ""
 echo "GTF chromosomes (unique):"
-grep -v '^#' "$GTF" | cut -f1 | sort -u | head -10
+awk '!/^#/ { seen[$1] = 1 } END { for (name in seen) print name }' "$GTF"

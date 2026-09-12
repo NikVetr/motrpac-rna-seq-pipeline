@@ -36,7 +36,7 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertNotIn("samtools view -b", wdl)
         self.assertNotIn("samtools index", wdl)
         self.assertIn('$1 == "chrX"', wdl)
-        self.assertIn('$1 ~ /^chr[0-9]+$/', wdl)
+        self.assertIn('$1 ~ /^(chr)?[0-9]+$/', wdl)
         self.assertIn("no mapped primary alignments", wdl)
         self.assertNotIn("grep ", wdl)
         self.assertIn('File aligned_chrinfo = "${SID}_aligned_chr_info.txt"', wdl)

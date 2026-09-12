@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory() as directory:
     ):
         with bam.open("wb") as handle:
             handle.truncate(round(gib * 2**30))  # Sparse file exercises WDL size() without allocating data.
-        env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": memory_floor,
+        env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": memory_floor, "ncpu": 10,
                                     "disk_space": disk_floor}, task.available_inputs)
         for decl in task.postinputs:
             env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
@@ -110,6 +110,7 @@ for version, expected_tiers in (
     ("gencode_v47", [90, 120, 150, 180, 200, 250, 300, 400]),
     ("gencode_v50", [117, 156, 195, 234, 260, 325, 390, 520]),
     ("rn8", [90, 120, 150, 180, 200, 250, 300, 400]),
+    ("rn8_v116", [90, 120, 150, 180, 200, 250, 300, 400]),
 ):
     for low, high, expected in zip(
         [0, 5000001, 40000001, 65000001, 90000001, 110000001, 155000001, 200000001],
@@ -137,7 +138,8 @@ task = WDL.load(str(repo / "wdl/collect_rnaseq_metrics/collect_rnaseq_metrics.wd
 for enabled in (True, False):
     for cpu in (1, 2, 4):
         for ram in (8, 12, 13, 14, 48):
-            env = WDL.values_from_json({"prefer_predefined_n1": enabled, "ncpu": cpu, "memory": ram}, task.available_inputs)
+            env = WDL.values_from_json({"prefer_predefined_n1": enabled, "use_e2": False,
+                                       "ncpu": cpu, "memory": ram}, task.available_inputs)
             selected = task.runtime["gcp"].eval(env, Files("1.0")).json
             expected = {"predefinedMachineType": "n1-highmem-2"} if enabled and cpu == 2 and ram == 12 else {}
             assert selected == expected

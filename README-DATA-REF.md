@@ -2,7 +2,10 @@
 
 This document describes how to prepare reference genome files for running the MoTrPAC RNA-seq pipeline with a new organism or genome build.
 
-The example below uses the rat rn8 (GRCr8) assembly with Ensembl release 115 annotations. The same process was used for rn6 (Ensembl 96) and rn7 (Ensembl 108).
+The example below describes the retained rat rn8 (GRCr8, Ensembl 115) configuration.
+For the modern Ensembl 116 release, use `rn8_v116` and the pinned references and
+build specifications in [rat configuration and validation](docs/rat-ensembl116.md).
+The same historical process was used for rn6 (Ensembl 96) and rn7 (Ensembl 108).
 
 ---
 
@@ -301,12 +304,12 @@ caper submit wdl/bowtie2_index/bowtie2_index.wdl \
 
 ### Step 8: Update Pipeline Configuration
 
-After all reference files are in GCS, add a version block to `scripts/make_json_rnaseq.py`:
+For modern releases, record reference provenance in `config/references/`, add a
+matched reference/image manifest in `config/release-profiles/`, and register it
+in `DEFAULT_RELEASE_MANIFESTS`, `SUPPORTED_REFERENCES` and the CLI version choices
+in `scripts/make_json_rnaseq.py`. The `rn8_v116` manifests provide the rat example.
 
-1. Add the version to the `--version` argument choices
-2. Add a reference mapping block in the `make_json_dict()` function
-
-See the existing rn6, rn7, and rn8 blocks in the script for the pattern to follow.
+The rn6, rn7 and rn8 blocks in `make_json_dict()` retain historical configurations.
 
 ---
 

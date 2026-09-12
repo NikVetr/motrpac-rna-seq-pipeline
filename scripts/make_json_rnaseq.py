@@ -79,11 +79,16 @@ DEFAULT_RELEASE_MANIFESTS = {
     / "config"
     / "release-profiles"
     / "human-gencode-v50.json",
+    ("rat", "rn8_v116"): REPO_ROOT
+    / "config"
+    / "release-profiles"
+    / "rat-grcr8-ensembl-v116.json",
 }
 SUPPORTED_REFERENCES = {
     ("rat", "rn6"),
     ("rat", "rn7"),
     ("rat", "rn8"),
+    ("rat", "rn8_v116"),
     ("human", "gencode_v39"),
     ("human", "gencode_v47"),
     ("human", "gencode_v50"),
@@ -829,7 +834,7 @@ if __name__ == "__main__":
         "-v",
         "--version",
         help="genome build version to use for references",
-        choices=["rn6", "rn7", "rn8", "gencode_v39", "gencode_v47", "gencode_v50"],
+        choices=["rn6", "rn7", "rn8", "rn8_v116", "gencode_v39", "gencode_v47", "gencode_v50"],
         required=True,
     )
     parser.add_argument(

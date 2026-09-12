@@ -28,7 +28,7 @@ This repo contains the rna-seq data processing pipeline implemented in Workflow 
 ### Supported Organisms and Genome Builds
 
 The pipeline supports the following organisms and genome versions:
-- **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115)
+- **Rat**: rn6 (Rnor_6.0, Ensembl 96), rn7 (mRatBN7.2, Ensembl 108), rn8 (GRCr8, Ensembl 115), rn8_v116 (GRCr8, Ensembl 116)
 - **Human**: GENCODE v39, v47, or v50 (GRCh38)
 
 ### Pipeline Tools
@@ -203,7 +203,7 @@ python3 scripts/make_json_rnaseq.py \
   -o OUTPUT_PATH \            # Local path where JSON files will be written
   -r OUTPUT_REPORT_NAME \     # Name for the output QC metrics report
   -a {rat,human} \            # Organism
-  -v {rn6,rn7,rn8,gencode_v39,gencode_v47,gencode_v50} \  # Genome/annotation version
+  -v {rn6,rn7,rn8,rn8_v116,gencode_v39,gencode_v47,gencode_v50} \  # Genome/annotation version
   -n NUM_CHUNKS \             # Number of batches to split samples into
   -p PROJECT \                # GCP project name
   -d DOCKER_REPO \            # Docker repository prefix (optional)
@@ -230,6 +230,11 @@ python3 scripts/make_json_rnaseq.py \
 This will create JSON configuration file(s) (e.g., `set1_rnaseq.json`, `set2_rnaseq.json`, etc.) in the specified output directory.
 
 ### Modernization controls
+
+Rat `rn8_v116` selects matched Ensembl 116 references and the same pinned modern
+tools and expression/QC graph as the human release profiles. Its private
+references reside in us-west1. Select the rat candidate runtime profile for E2
+workers and initial rat resource floors; see [rat configuration and validation](docs/rat-ensembl116.md).
 
 GENCODE v47 and v50 automatically select their immutable release profiles in
 `config/release-profiles/human-gencode-v{47,50}.json`; v39 retains the historical
@@ -601,6 +606,7 @@ If issues persist:
 - **Rat rn6**: Ensembl Rnor_6.0 release 96
 - **Rat rn7**: Ensembl mRatBN7.2 release 108
 - **Rat rn8**: Ensembl GRCr8 release 115
+- **Rat rn8_v116**: Ensembl GRCr8 release 116
 - **Human**: GENCODE v39, v47, or v50 (GRCh38)
 
 ## Contributing and Support

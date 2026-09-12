@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "profile_id": "rat_grcr8_ensembl_v116_modern_v1",
+  "organism": "rat",
+  "version": "rn8_v116",
+  "publication_state": "published",
+  "provenance": {
+    "reference_manifest": "../references/rat-grcr8-ensembl-v116.json",
+    "tool_manifest": "../tool-images-gencode-v47.json",
+    "helper_source_revision": "0fc452f2d7ae8cb12eb0e85ae7ef0af82e9f88e3",
+    "merge_rsem_source_sha256": "32bb91fb347ff958d8ea7d8390dfd7a77b69196bcb469fc1e2a538c2c7246e5d"
+  },
+  "compatibility": {
+    "star_index_builder": "2.7.11b",
+    "star_runtime": "2.7.11b",
+    "rsem_reference_builder": "1.3.3",
+    "rsem_runtime": "1.3.3"
+  },
+  "references": {
+    "star_index": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-9a983fe0fd1054eca56f71d9a11fdaa0dc14b2015a79cc008d7e8f2c21c0639e/rat_GRCr8_ensembl116_star.tar.gz",
+    "rsem_reference": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-3112d32a3d3987c94687f0ad940c42b0dbe03eb42e23799204853fdb73431278/rat_GRCr8_ensembl116_rsem.tar.gz",
+    "ref_flat": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-8faf6a944c68bebdd193a8fccd6e571b76f01d40b63a6640f4f00f3a0d69421a/refFlat_GRCr8_v116_ucsc479.txt",
+    "globin_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-3e36c0eeaf61e427dd4aced054d81e02b60a6c1193dc3a444d1c779962d20cb0/rat_GRCr8_ensembl116_globin.tar.gz",
+    "rrna_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-31fb5e025c41512187811869ac58b6c5ef357e16b0d148dd33192d4602685215/rat_GRCr8_ensembl116_rRNA.tar.gz",
+    "phix_genome_dir_tar": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-121972b967d92d503169bcea8973c8795f29c8f250e6fc0c9d9a50f1b3e4ef80/rat_GRCr8_ensembl116_phix.tar.gz",
+    "gtf_file": "gs://motrpac-rnaseq-modernization-us-west1/references/rat_ensembl116/sha256-878e117201eb2e8aca85119f1b6d16f0a2355bdaa63ebbe5b04bd781ba447452/Rattus_norvegicus.GRCr8.116.chr.gtf"
+  },
+  "images": {
+    "fastqc_docker": "quay.io/biocontainers/fastqc@sha256:e194048df39c3145d9b4e0a14f4da20b59d59250465b6f2a9cb698445fd45900",
+    "multiqc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/multiqc@sha256:2de6e7ee8786b42c09c7b4cd8aff20bf86ad6348b678aed08a4a660b2779b99d",
+    "attach_umi_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_attach@sha256:3d6b9e770afde737ef90e151cfc35196eabbef62dbe5245c7621e205258fa6b9",
+    "cutadapt_docker": "quay.io/biocontainers/cutadapt@sha256:741216fb9a56cdac2a61e93c64f857bc5b3e1f9f2c123cf7ae2c6ea5c97702d8",
+    "star_docker": "quay.io/biocontainers/star@sha256:c43295cdbc28a7be7d88296775a29cc65b30296c996d8242ef90c031c8b9739b",
+    "feature_counts_docker": "quay.io/biocontainers/subread@sha256:a0f7ea960dd0f55240b330b5c4515388a493e266a7b427d6a59a39164bc14865",
+    "rsem_docker": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420",
+    "bowtie_docker": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19",
+    "picard_docker": "quay.io/biocontainers/picard@sha256:84923e37c5a43b0984fdb152a89f8ac952878fafc3e6076c534e5e5c82e278be",
+    "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:7e467d09f2beb6c2484486dcc671186ac39c359600072a56c089a01e00714ad9",
+    "samtools_docker": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561",
+    "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:e23e8a0575c4e85a741d8ada188f5559c38927dd1a05be0b5a7e370cdb89213e",
+    "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:6ef26dcd5979c80f49f16b0896db7f794dbeac8001798d2538ff878bcbc0e126"
+  }
+}
