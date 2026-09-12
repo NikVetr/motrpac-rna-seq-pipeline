@@ -4,8 +4,12 @@ Use `config/backends/gcp/runtime-human-v50-full-candidate-v1.json` for the
 initial approximately 100 libraries. It preserves the v47 full-depth profile's
 threads and disk floors, changes UMI/RSEM/RNA-QC RAM floors to 36/32/12 GB,
 and keeps STAR at 12 threads/72 GB. Shared BAM-size growth remains active.
-It enables `rnaseq_pipeline.use_e2` for STAR, UMI, both RSEM expression modes
-and RNA-QC. Other tasks retain their existing backend sizing.
+It enables `rnaseq_pipeline.use_e2` for STAR, UMI, both RSEM expression modes,
+RNA-QC, FastQC, UMI attachment, Cutadapt, featureCounts, combined contamination
+QC and MarkDuplicates. Chromosome/QC reporting, merges and optional legacy QC
+retain backend sizing. The additional E2 tasks passed a matched full-depth rat
+comparison; their seven calls cost 28% less together on demand. The four tested
+one-CPU reporting/merge calls cost slightly more on E2 and retain N1 selection.
 The workflow multiplies STAR's post-trim read-pair scratch tiers by 1.30 only
 when `reference_release` is `gencode_v50`, rounding up and respecting larger
 explicit floors. v47 and rat resource rules are unchanged.

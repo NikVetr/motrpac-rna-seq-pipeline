@@ -15,7 +15,8 @@ references reside in us-west1 alongside the rat pilot FASTQs and workers.
 Rat rn6, rn7, and rn8 inputs retain their existing reference configurations.
 The rat E2 runtime profile supplies initial resource floors while preserving
 shared read-count and BAM-size growth. The small mixed-UMI rat cloud validation
-passes; full-depth rat calibration is pending.
+and six full-depth libraries pass, including exact gene/isoform matrix and
+expression-metadata checks. Broader rat calibration retains these tested floors.
 The v50 primary-assembly references contain 646,577 transcripts, use the same
 STAR 2.7.11b and RSEM 1.3.3 tools as v47, and reside in private us-west2 storage.
 Published v47 resource mappings remain specific to their measured annotation.
@@ -74,7 +75,12 @@ An explicit controller-stop helper requires complete local evidence first.
 The GCP support layer includes a concurrency guard, read-only preflight,
 pinned Cromwell Batch configuration, resource monitoring, immutable evidence
 capture, and attempt-aware cost summarization. With no `cpuPlatform` override,
-Cromwell provisions N1 custom workers; cost summaries therefore default to a
+Cromwell provisions N1 custom workers unless a task selects E2. The `use_e2`
+policy covers STAR, UMI, RSEM, RNA-QC, FastQC, UMI attachment, Cutadapt,
+featureCounts, combined contamination QC and MarkDuplicates. A matched rat
+replay supports the additional E2 tasks; one-CPU chromosome/QC reporting and
+merges retain backend selection after costing slightly more on E2.
+Cost summaries default to a
 frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.

@@ -146,3 +146,31 @@ for enabled in (True, False):
             assert task.runtime["cpu"].eval(env, Files("1.0")).value == cpu
             assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{ram}GB"
 print("Predefined N1 exact-shape selection, opt-out and larger resource requests PASS")
+
+for path in ("fastqc/fastqc", "attach_umi/attach_umi", "cutadapt/cutadapt",
+             "feature_counts/fc", "contamination_qc/contamination_qc", "mark_duplicates/mark_duplicates"):
+    task = WDL.load(str(repo / "wdl" / (path + ".wdl"))).tasks[0]
+    for cpu, ram, expected_cpu in ((1, 4, 2), (2, 6, 2), (3, 8, 4), (4, 36, 6), (10, 96, 12)):
+        for enabled in (False, True):
+            env = WDL.values_from_json({"ncpu": cpu, "memory": ram, "use_e2": enabled}, task.available_inputs)
+            sizing = next(decl for decl in task.postinputs if decl.name == "e2_cpu")
+            env = env.bind(sizing.name, sizing.expr.eval(env, Files("1.0")))
+            selected = task.runtime["gcp"].eval(env, Files("1.0")).json
+            assert selected == ({"predefinedMachineType": f"e2-custom-{expected_cpu}-{ram * 1024}"} if enabled else {})
+            assert int(task.runtime["cpu"].eval(env, Files("1.0")).value) == cpu
+            assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{ram}GB"
+
+def calls_in(nodes):
+    for node in nodes:
+        if isinstance(node, WDL.Tree.Call):
+            yield node
+        elif isinstance(node, (WDL.Tree.Scatter, WDL.Tree.Conditional)):
+            yield from calls_in(node.body)
+
+calls = {call.name: call for call in calls_in(workflow.body)}
+for alias in ("pretrim_fastqc", "posttrim_fastqc", "aumi", "cutadapt_umi", "cutadapt_noumi",
+              "feature_counts", "umi_molecule_feature_counts_task", "combined_contamination_qc", "md"):
+    for enabled in (False, True):
+        env = WDL.Env.Bindings().bind("use_e2", WDL.Value.Boolean(enabled))
+        assert calls[alias].inputs["use_e2"].eval(env, Files("1.0")).value == enabled
+print("E2 preprocessing/QC/counting shapes, preserved resources, opt-out and both UMI routes PASS")

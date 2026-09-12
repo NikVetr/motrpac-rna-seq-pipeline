@@ -10,11 +10,14 @@ task markduplicates {
         Int memory
         Int disk_space
         Int ncpu
+        Boolean use_e2 = false
         Int preemptible
         String docker
     }
 
     String output_bam = sub(basename(input_bam), "\\.bam$", ".md.bam")
+
+    Int e2_cpu = 2 * ceil(if ncpu / 2.0 > memory / 16.0 then ncpu / 2.0 else memory / 16.0)
 
     command <<<
         set -euo pipefail
@@ -48,6 +51,7 @@ task markduplicates {
         memory: "${memory}GB"
         disks: "local-disk ${disk_space} HDD"
         docker: docker
+        gcp: if use_e2 then object { predefinedMachineType: "e2-custom-${e2_cpu}-${memory * 1024}" } else object {}
         preemptible: preemptible
     }
 

@@ -135,7 +135,7 @@ workflow rnaseq_pipeline {
         # One Spot attempt before on-demand fallback; set to 0 for on-demand only.
         Int num_preemptible_attempts = 1
         Boolean prefer_predefined_n1 = false
-        # Select E2 for STAR, UMI, RSEM and RNA-QC; preserve tool threads and sizing.
+        # Select E2 for benchmarked compute tasks; preserve tool threads and sizing.
         Boolean use_e2 = false
 
         # Optional QC groups; all remain enabled by default for compatibility.
@@ -316,6 +316,7 @@ workflow rnaseq_pipeline {
                     outdir="fastqc_raw",
                 # Runtime Parameters
                     ncpu=pretrim_fastqc_ncpu,
+                    use_e2=use_e2,
                     memory=pretrim_fastqc_ramGB,
                     disk_space=pretrim_fastqc_disk,
                     preemptible=num_preemptible_attempts,
@@ -333,6 +334,7 @@ workflow rnaseq_pipeline {
                     fastqi1=sample_index[0],
                 # Runtime Parameters
                     ncpu=attach_umi_ncpu,
+                    use_e2=use_e2,
                     memory=attach_umi_ramGB,
                     disk_space=attach_umi_disk,
                 preemptible=num_preemptible_attempts,
@@ -350,6 +352,7 @@ workflow rnaseq_pipeline {
                     minimumLength=minimumLength,
                 # Runtime Parameters
                     ncpu=cutadapt_ncpu,
+                    use_e2=use_e2,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
                 preemptible=num_preemptible_attempts,
@@ -369,6 +372,7 @@ workflow rnaseq_pipeline {
                     minimumLength=minimumLength,
                 # Runtime Parameters
                     ncpu=cutadapt_ncpu,
+                    use_e2=use_e2,
                     memory=cutadapt_ramGB,
                     disk_space=cutadapt_disk,
                 preemptible=num_preemptible_attempts,
@@ -405,6 +409,7 @@ workflow rnaseq_pipeline {
                     outdir="fastqc_trim",
                 # Runtime Parameters
                     ncpu=posttrim_fastqc_ncpu,
+                    use_e2=use_e2,
                     memory=posttrim_fastqc_ramGB,
                     disk_space=posttrim_fastqc_disk,
                     preemptible=num_preemptible_attempts,
@@ -455,6 +460,7 @@ workflow rnaseq_pipeline {
                     gtf_file=gtf_file,
                 # Runtime Parameters
                     ncpu=feature_counts_ncpu,
+                    use_e2=use_e2,
                     memory=feature_counts_ramGB,
                     disk_space=feature_counts_disk,
                     preemptible=num_preemptible_attempts,
@@ -536,6 +542,7 @@ workflow rnaseq_pipeline {
                     phix_genome_dir_tar=phix_genome_dir_tar,
                     sample_pairs=contamination_qc_pairs,
                     ncpu=bowtie2_globin_ncpu,
+                    use_e2=use_e2,
                     memory=bowtie2_globin_ramGB,
                     disk_space=bowtie2_globin_disk,
                     preemptible=num_preemptible_attempts,
@@ -551,6 +558,7 @@ workflow rnaseq_pipeline {
                     input_bam=star_align.bam_file,
                 # Runtime Parameters
                     ncpu=markdup_ncpu,
+                    use_e2=use_e2,
                     memory=markdup_ramGB,
                     disk_space=markdup_disk,
                     preemptible=num_preemptible_attempts,
@@ -618,6 +626,7 @@ workflow rnaseq_pipeline {
                         input_bam=udup.molecule_genomic_bam[0],
                         gtf_file=gtf_file,
                         ncpu=feature_counts_ncpu,
+                        use_e2=use_e2,
                         memory=feature_counts_ramGB,
                         disk_space=feature_counts_disk,
                         preemptible=num_preemptible_attempts,
