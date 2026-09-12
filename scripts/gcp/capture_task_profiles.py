@@ -95,12 +95,12 @@ def collect(metadata_path, output, workers=8):
         inputs = attempt.get("inputs", {})
         if attempt.get("jobId") and not inputs:
             raise ValueError(f"metadata lacks task inputs: {call}")
-        samples = workflow_inputs.get("rnaseq_pipeline.sample_prefix", [])
+        samples = workflow_inputs.get("sample_prefix", workflow_inputs.get("rnaseq_pipeline.sample_prefix", []))
         row = {"call": call, "shard": shard, "attempt": number,
                "start": attempt.get("start"), "end": attempt.get("end"),
                "sample": inputs.get("SID", inputs.get("sample_prefix",
                          samples[shard] if 0 <= shard < len(samples) else None)),
-               "reference_release": workflow_inputs.get("rnaseq_pipeline.reference_release"),
+               "reference_release": workflow_inputs.get("reference_release", workflow_inputs.get("rnaseq_pipeline.reference_release")),
                "status": attempt["executionStatus"], "inputs": inputs,
                "runtime": attempt.get("runtimeAttributes", {}),
                "cache": attempt.get("callCaching", {}), "failures": attempt.get("failures", []),

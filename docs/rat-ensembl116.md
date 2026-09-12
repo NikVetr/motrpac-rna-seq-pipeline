@@ -45,10 +45,14 @@ The candidate requests E2 for STAR, UMI, RSEM and RNA QC. Initial floors are
 the BAM actually entering each step remains active. These are buffered starting
 allocations, not measured rat minima.
 
-All 87 local unit tests pass, along with MiniWDL, WOMtool input validation and
+All 88 local unit tests pass, along with MiniWDL, WOMtool input validation and
 rendered WDL resource/expression checks. These cover contig conversion,
 mapped-QC aliases, matched release inputs and shared scientific/output contracts.
-The bounded cloud validation starts
-with two 100,000-pair libraries, including an explicit missing-I1 case, before
-six full-depth PASS1B libraries spanning gastrocnemius, blood, cortex, liver and
-white adipose. Full-depth performance and resource calibration are pending.
+The two-library, 100,000-pair cloud gate passed all 30 calls, including an explicit
+missing-I1 case and optional all-read outputs. Gene/transcript matrix values match
+the raw RSEM files exactly; expression metadata records the expected UMI policy.
+Independent forward/reverse featureCounts checks support forward strandedness in
+both muscle and blood. Six full-depth PASS1B libraries spanning gastrocnemius,
+blood, cortex, liver and white adipose are under calibration. An eleven-call E2
+comparison reuses retained inputs for the smaller steps. Full-depth performance
+and resource calibration are pending.

@@ -14,7 +14,8 @@ transcripts, including matching STAR/RSEM indexes and refFlat. These private
 references reside in us-west1 alongside the rat pilot FASTQs and workers.
 Rat rn6, rn7, and rn8 inputs retain their existing reference configurations.
 The rat E2 runtime profile supplies initial resource floors while preserving
-shared read-count and BAM-size growth; full-depth rat calibration is pending.
+shared read-count and BAM-size growth. The small mixed-UMI rat cloud validation
+passes; full-depth rat calibration is pending.
 The v50 primary-assembly references contain 646,577 transcripts, use the same
 STAR 2.7.11b and RSEM 1.3.3 tools as v47, and reside in private us-west2 storage.
 Published v47 resource mappings remain specific to their measured annotation.
@@ -78,7 +79,7 @@ frozen N1 manifest and require an explicit family-matched manifest for N2
 evidence. Generated evidence and rendered benchmark reports are analysis
 artifacts and are not part of the production repository.
 
-The focused 87-test suite covers input validation, release/runtime profiles,
+The focused 88-test suite covers input validation, release/runtime profiles,
 WDL I/O contracts, native QC parsing, contamination sampling, directional UMI
 grouping, molecule-expression construction, and the GCP monitoring/cost
 contracts. The production execution tree also passes MiniWDL and WOMtool 91

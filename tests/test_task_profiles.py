@@ -14,6 +14,24 @@ from summarize_workflow_cost import monitor, verify_evidence
 
 
 class TaskProfileTests(unittest.TestCase):
+    def test_sample_and_release_labels_accept_resolved_and_submitted_inputs(self):
+        for qualified, submitted in ((False, False), (True, False), (True, True)):
+            with self.subTest(qualified=qualified, submitted=submitted), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prefix = "rnaseq_pipeline." if qualified else ""
+                inputs = {prefix + "sample_prefix": ["rat_a", "rat_b"], prefix + "reference_release": "rn8_v116"}
+                metadata = {"id": "workflow", "calls": {"rnaseq_pipeline.star_align": [
+                    {"shardIndex": 1, "attempt": 1, "executionStatus": "Done", "inputs": {"ncpu": 12}}]}}
+                if submitted:
+                    metadata["submittedFiles"] = {"inputs": json.dumps(inputs)}
+                else:
+                    metadata["inputs"] = inputs
+                path = root / "metadata.json"
+                path.write_text(json.dumps(metadata))
+                row, = profiles.collect(path, root / "capture")["attempts"]
+                self.assertEqual("rat_b", row["sample"])
+                self.assertEqual("rn8_v116", row["reference_release"])
+
     def test_working_memory_uses_simultaneous_samples_and_accepts_old_logs(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "monitoring"
