@@ -1,48 +1,39 @@
-# Initial human v50 cohort calibration
+# Human v50 cohort calibration
 
 Use `config/backends/gcp/runtime-human-v50-full-candidate-v1.json` for the
-initial approximately 100 libraries. It preserves the v47 full-depth profile's
-threads and disk floors, changes UMI/RSEM/RNA-QC RAM floors to 36/32/12 GB,
-and keeps STAR at 12 threads/72 GB. Shared BAM-size growth remains active.
-It enables `rnaseq_pipeline.use_e2` for STAR, UMI, both RSEM expression modes,
+initial cohort. STAR uses 12 threads/72 GB RAM; UMI, RSEM and RNA-QC RAM floors
+are 36, 32 and 12 GB. STAR/UMI/RSEM scratch floors are 120/80/60 GB.
+[Shared resource rules](cohort-provisioning.md) remain active; v50 multiplies
+STAR's post-trim scratch tiers by 1.30, rounded up. v47 and rat tiers are unchanged.
+
+## E2 policy and calibration scope
+
+`rnaseq_pipeline.use_e2` selects E2 for STAR, UMI, both RSEM expression modes,
 RNA-QC, FastQC, UMI attachment, Cutadapt, featureCounts, combined contamination
-QC and MarkDuplicates. Chromosome/QC reporting, merges and optional legacy QC
-retain backend sizing. The additional E2 tasks passed a matched full-depth rat
-comparison; their seven calls cost 28% less together on demand. The four tested
-one-CPU reporting/merge calls cost slightly more on E2 and retain N1 selection.
-The workflow multiplies STAR's post-trim read-pair scratch tiers by 1.30 only
-when `reference_release` is `gencode_v50`, rounding up and respecting larger
-explicit floors. v47 and rat resource rules are unchanged.
+QC and MarkDuplicates. One-CPU chromosome/QC reporting, merges and optional
+legacy QC retain backend sizing.
 
-E2 custom machines retain the requested RAM and use the smallest even vCPU
-count satisfying both tool threads and the 8-GiB/vCPU memory limit. RSEM uses
-its effective BAM-scaled RAM, including when growth exceeds the configured
-floor. For the tested libraries, STAR uses 12/72 CPU/GiB, UMI 6/36, RSEM
-10/32–56 and RNA-QC 2/12. Tool threads and disk formulas are unchanged.
-Do not apply one fixed machine type to the entire workflow or clamp growing
-RAM requests. Requests beyond E2's supported sizes fail allocation and need an
-explicit profile/family decision. The locality guard rejects simultaneous
-predefined N1 selection and CPU-platform/machine overrides. Use Cromwell 92,
-which supports these conditional `gcp` runtime objects. For the N1 comparison
-mode, disable `use_e2` and optionally enable `prefer_predefined_n1` in us-west2.
+E2 custom machines retain requested RAM and use the smallest even vCPU count
+satisfying both tool threads and the 8-GiB/vCPU memory limit. RSEM uses its
+effective BAM-scaled RAM. Tool threads need not equal allocated vCPUs.
+Do not apply a fixed machine type or CPU platform to the entire workflow.
+Requests beyond E2's supported sizes require an explicit profile/family decision.
+Use Cromwell 92. For N1 comparisons, disable `use_e2`; the optional
+`prefer_predefined_n1` policy is restricted to us-west2.
 
-These are buffered pilot candidates, not validated resource minima. Four
-completed v50 RSEM calls used 7.38/27.82/31.85/35.71 GiB working memory and
-would request 32/48/52/56 GB. Incomplete UMI tails reached 30.94 GiB working
-memory; completed RNA-QC reached approximately 10 GiB. Larger v50 tails and
-the cohort transcript merge still need measurements at these allocations.
-All 12 heavy-task E2 calls completed across three full-depth v50 libraries.
-Their RSEM working-memory peaks were 7.38/30.39/34.51 GiB; STAR was below
-33 GiB, UMI below 16 GiB and RNA-QC below 9.5 GiB. Every allocation retained
-disk headroom. RSEM gene and isoform tables were byte-identical to matched N2
-outputs; available UMI counters, STAR metrics/junctions and Picard metrics
-also agreed. This supports a staged 100-library calibration, not further
-resource reductions or a claim that larger tails have already been tested.
+These are buffered starting allocations. Completed v50 RSEM measurements span
+7.38–35.71 GiB working memory, corresponding to 32–56 GB requests. UMI telemetry
+reached 30.94 GiB and RNA-QC approximately 10 GiB. Matched E2 validation covers
+three full-depth human libraries and additional rat processing tasks; it does
+not establish resource minima or universal hardware speedups. Measure broader
+sample tails and the cohort transcript merge before reducing floors.
 
 ## Inputs and submission
 
-Generate each input batch using the existing FASTQ location and an explicit
-sample list. Retain the scientific settings used for the paired pilot:
+Choose approximately 100 intended production libraries spanning batch, visit,
+depth and known UMI/RSEM resource extremes. Record selection reasons and reweight
+an extreme-enriched panel when estimating whole-cohort costs. Generate inputs
+from each FASTQ directory using an exact sample list:
 
 ```bash
 python3 scripts/make_json_rnaseq.py \
@@ -54,43 +45,25 @@ python3 scripts/make_json_rnaseq.py \
   --combine-contamination-qc --contamination-qc-pairs 1000000 -i
 ```
 
-The sample list applies within the specified FASTQ directory; handle multiple
-batches with their existing input assembly. Add `--allow-missing-umis` for a
-mixed-I1 cohort. Missing-I1 samples remain explicitly marked as not deduplicated.
-Default counting is directional UMI molecule expression, with raw gene/isoform
-results and matrices retained. A second all-read pass requires
-`--retain-all-read-expression`; leave it off for this calibration.
+Add `--allow-missing-umis` for mixed I1 availability; those samples are explicitly
+marked as not deduplicated. Default counting produces molecule-level gene and
+isoform results in one RSEM pass. A secondary all-read pass is optional.
 
-Submit with `config/backends/gcp/workflow-options-cohort.example.json`.
-It enables cache reads/writes, `ContinueWhilePossible`, the pinned memory
-monitor, us-west2 worker zones, and `maxRetries: 0` for command failures.
-The workflow defaults to one Spot attempt, followed by on-demand after a
-preemption. In existing JSONs, set `rnaseq_pipeline.num_preemptible_attempts`
-explicitly to `1`: an old explicit `0` overrides the new default. Use `2` for
-two Spot attempts or `0` for on-demand only. `maxRetries` is independent of
-Spot preemption retries; it does not increase RAM after an OOM.
+Copy `config/backends/gcp/workflow-options-cohort.example.json` and set zones
+and monitoring-script placement for the actual execution region. It enables
+cache reads/writes, `ContinueWhilePossible`, and `maxRetries: 0` for command
+failures. The workflow defaults to one Spot attempt before on-demand fallback;
+an explicit `rnaseq_pipeline.num_preemptible_attempts` overrides this
+(`0` for on-demand only, `2` for two Spot attempts). Command retries and
+preemption retries are separate; neither raises RAM after an OOM.
 
-Keep the operator's established regional alignment. Before submission, verify
-the actual Caper server has persistent database-backed call caching enabled,
-48-hour Batch task timeout, and limits that permit the cohort: scatter width
-at least 100, concurrent task VMs initially 20–30, and total jobs per root
-workflow at least 5000. Raise concurrency toward 50 after checking progress
-and quota. The checked-in `google_batch.conf` is a cold, bounded benchmark
-configuration and must not replace that server configuration. Client options
-do not reconfigure the server. Use the existing locality guard with the actual
-server execution root, Batch region, inputs and cohort options.
+Follow the server and app requirements in [cohort deployment](cohort-provisioning.md#deployment-and-locality).
+Run two full-depth libraries from the intended cohort first, including a typical
+sample and a resource extreme. Verify gene/isoform outputs, expression metadata
+and [task profiles](task-profiling.md), then expand to the remaining cohort.
+Preserve accepted results, source revision and input/options manifests.
 
-Run two full-depth libraries first as part of the intended 100, including one
-typical library and one larger prior RSEM case. Check gene/isoform outputs,
-expression metadata and [task profiles](task-profiling.md), then expand to ten
-including high-depth/resource extremes, and finally all 100. Reuse completed
-libraries through verified cache hits. Preserve inputs/options and source revision. An independent
-sample can finish after another fails; a full merge still requires repair of
-the missing sample. Capture failed attempts as well as successes before cleanup.
-
-Keep the candidate RAM/disk relationships fixed during this E2 calibration.
-Select approximately 80 representative libraries stratified by batch, visit
-and depth, plus 20 anchors/resource extremes from the original 297. Retain
-the selection reasons and historical metrics separately from newly generated
-QC. Reweight the deliberately enriched panel before estimating cohort-average
-costs. No additional all-read RSEM pass is needed to produce isoform results.
+Keep candidate allocations fixed within the calibration batch. Include failed
+attempts and retries in the resource/cost analysis, and repair failed samples
+before the full gather. Provisioning changes can follow in a separate release
+without regenerating accepted results.

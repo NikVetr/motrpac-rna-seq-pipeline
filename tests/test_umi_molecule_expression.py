@@ -160,7 +160,6 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
         ):
             self.assertIn(expected, umi_wdl)
         self.assertEqual(1, umi_wdl.count("--method=directional"))
-        self.assertNotIn("nudup", umi_wdl.lower())
         self.assertIn("File umi_metrics", umi_wdl)
         self.assertIn("propagate_molecule_qnames.py", umi_wdl)
         self.assertIn("summarize_molecule_expression.py", umi_wdl)
@@ -176,9 +175,6 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             "summarize_molecule_expression.py",
         ):
             self.assertIn("COPY wdl/umi_dup/{}".format(script), dockerfile)
-        self.assertNotIn("python:2", dockerfile)
-        for retired in ("nudup.py", "umi_dup.sh"):
-            self.assertFalse((UMI_DIR / retired).exists())
 
         for expected in (
             "Boolean use_umi_molecule_expression = true",

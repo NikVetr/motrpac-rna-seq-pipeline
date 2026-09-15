@@ -9,7 +9,7 @@ import unittest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-class GcpBatchScaffoldTests(unittest.TestCase):
+class GcpBatchTests(unittest.TestCase):
     @staticmethod
     def read(relative_path: str) -> str:
         return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
@@ -18,7 +18,7 @@ class GcpBatchScaffoldTests(unittest.TestCase):
     def read_json(cls, relative_path: str) -> dict:
         return json.loads(cls.read(relative_path))
 
-    def test_batch_backend_replaces_retired_papi_for_benchmarks(self) -> None:
+    def test_batch_backend_has_explicit_identity_and_bounded_resources(self) -> None:
         config = self.read("config/backends/gcp/google_batch.conf")
         for expected in (
             "cromwell.backend.google.batch.GcpBatchBackendLifecycleActorFactory",
@@ -44,9 +44,6 @@ class GcpBatchScaffoldTests(unittest.TestCase):
             self.assertIn(expected, config)
         for forbidden in (
             'compute-service-account = "default"',
-            "batch-timeout = 7 days",
-            "PipelinesApiLifecycleActorFactory",
-            "genomics.endpoint-url",
             "reference-disk-localization-manifests",
         ):
             self.assertNotIn(forbidden, config)

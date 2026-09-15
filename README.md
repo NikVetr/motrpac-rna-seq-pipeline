@@ -108,7 +108,7 @@ caper list
 
 ### Required Software (Local Machine)
 - [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-- Python >= 3.6.9
+- Python >= 3.10 for local tooling and tests
 - Git
 
 ### Python Dependencies
@@ -126,6 +126,10 @@ Ensure the following APIs are enabled in your GCP project:
 - Compute Engine API
 - Cloud Storage API
 - Google Cloud Batch API (for workflow execution)
+
+Use Cromwell 92 for task-specific machine selection. See
+[cohort deployment](docs/cohort-provisioning.md#deployment-and-locality) for
+server configuration, regional storage, caching and OmicsPipelines integration.
 
 ## GCP Set-up
 
@@ -229,7 +233,7 @@ python3 scripts/make_json_rnaseq.py \
 
 This will create JSON configuration file(s) (e.g., `set1_rnaseq.json`, `set2_rnaseq.json`, etc.) in the specified output directory.
 
-### Modernization controls
+### Expression, QC and runtime controls
 
 Rat `rn8_v116` selects matched Ensembl 116 references and the same pinned modern
 tools and expression/QC graph as the human release profiles. Its private
@@ -250,7 +254,7 @@ The v50 assets are in a private us-west2 bucket; the executing service account
 needs read access. For full-depth v50 calibration, select
 `--runtime-profile config/backends/gcp/runtime-human-v50-full-candidate-v1.json`;
 the v47 profiles retain their established settings. See the
-[v50 cohort handoff](docs/v50-cohort-calibration.md) for candidate allocations,
+[v50 cohort calibration](docs/v50-cohort-calibration.md) for candidate allocations,
 cache-enabled submission options and the staged 100-library run. The workflow
 defaults to one Spot attempt before on-demand fallback; an explicit
 `rnaseq_pipeline.num_preemptible_attempts: 0` selects on-demand only.
@@ -566,8 +570,8 @@ cd cromwell-executions/rnaseq_pipeline/[WORKFLOW_ID]/
 ```
 
 **GCP Console:**
-- Navigate to Life Sciences API in GCP Console
-- View operation logs and details for each task execution
+- Navigate to Batch in GCP Console
+- View job details and task logs in the worker project and region
 
 ### Getting Help
 

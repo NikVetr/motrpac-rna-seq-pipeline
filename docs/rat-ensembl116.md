@@ -34,8 +34,8 @@ References are checksum-addressed private objects in
 `gs://motrpac-rnaseq-modernization-us-west1`. Workers need read access to this
 bucket and the raw FASTQs. Use us-west1 execution storage and worker zones for
 the PASS1B rat inputs, which are already in us-west1. The submission locality
-guard validates execution placement. Production options can retain caching and
-`ContinueWhilePossible`; a cold benchmark explicitly disables caching and retries.
+guard validates execution placement. Use caching and `ContinueWhilePossible`
+for cohorts; configure cache and retry settings explicitly for cold benchmarks.
 
 ## Resource calibration and validation
 
@@ -45,38 +45,19 @@ Floors are
 48 GiB STAR RAM / 120 GB SSD, 24 GiB UMI RAM / 80 GB SSD, 24 GiB RSEM RAM /
 60 GB scratch, and 8 GiB RNA-QC RAM. Shared growth from post-trim pair counts and
 the BAM actually entering each step remains active. These are buffered starting
-allocations, not measured rat minima. Six full-depth libraries completed all
-80 calls on their first attempts, with 28.5–41.4 million post-trim pairs across
-five tissues. Peak working RAM was 33.7 GiB for STAR, 9.4 GiB for UMI, 15.1 GiB
-for RSEM and 1.9 GiB for RNA QC. Peak scratch was 89.9/21.8/18.9/3.5 GiB,
-respectively. Keep these tested allocations for broader rat calibration;
-the UMI and RNA-QC floors offer the clearest subsequent RAM reductions.
+allocations, not measured rat minima. A six-library, five-tissue calibration
+spanned 28.5–41.4 million post-trim pairs. Peak working RAM was 33.7/9.4/15.1/1.9
+GiB for STAR/UMI/RSEM/RNA-QC; peak scratch was 89.9/21.8/18.9/3.5 GiB.
+Retain these buffered floors while collecting broader cohort measurements.
 
-All 88 local unit tests pass, along with MiniWDL, WOMtool input validation and
-rendered WDL resource/expression checks. These cover contig conversion,
-mapped-QC aliases, matched release inputs and shared scientific/output contracts.
-The two-library, 100,000-pair cloud gate passed all 30 calls, including an explicit
-missing-I1 case and optional all-read outputs. Gene/transcript matrix values match
-the raw RSEM files exactly; expression metadata records the expected UMI policy.
-Independent forward/reverse featureCounts checks support forward strandedness in
-both muscle and blood. Full-depth PASS1B libraries spanning gastrocnemius,
-blood, cortex, liver and white adipose also pass exact raw-to-matrix and UMI
-metadata checks. Their worker cost estimate is $5.06 total, or $0.84/library on
-demand ($0.52/library repriced at uninterrupted Spot rates).
+Validation covers contig conversion, mapped-QC aliases, matched references,
+forward strandedness, mixed I1 availability, optional all-read outputs, and exact
+raw-RSEM-to-matrix agreement. Full-depth coverage includes muscle, blood,
+cortex, liver and white adipose. E2 task comparisons support the shared selection
+policy; performance remains workload-dependent. Rat compatibility MultiQC and
+warm-cache recovery require deployment validation.
 
-An eleven-call E2 comparison reused one full-depth muscle library's inputs and
-the six-library merge inputs. All 32 scientific output checks passed. Seven
-preprocessing/counting/QC calls cost 24–37% less individually on E2; chromosome
-and QC reporting plus the two merges cost 18–40% more, adding $0.007 combined.
-The E2 policy therefore selects the seven winners, retaining backend selection
-for those four calls. These results are one matched replay per task, not a
-hardware guarantee or a human-cohort benchmark. Scientific commands are unchanged.
-
-Evidence is archived under
-`gs://motrpac-rnaseq-modernization-us-west1/rat-ensembl116-pilot-20260912/controller-final/`:
-full workflow `9dc8431f-796d-455c-8961-16f513537be8`, E2 comparison
-`3211459d-a378-448c-bd17-e6ea74f27101`. Cost estimates use captured September 12,
-2026 us-west1 rates and Batch startup/run durations, including boot/scratch;
-they exclude controller, teardown, retained storage and external downloads.
-All pilot workers were removed and the controller stopped. Rat compatibility
-MultiQC and warm-cache recovery were not separately cloud-tested.
+Calibration evidence is retained under
+`gs://motrpac-rnaseq-modernization-us-west1/rat-ensembl116-pilot-20260912/controller-final/`.
+Follow [cohort deployment](cohort-provisioning.md#deployment-and-locality) for
+the two-sample acceptance gate, broader sampling, profiling and output retention.
