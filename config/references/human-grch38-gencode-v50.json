@@ -83,7 +83,28 @@
         "name2_field": "GENCODE gene_id",
         "postprocess": "project genePredExt name2 (field 12) followed by fields 1-10 to the 11-column refFlat schema"
       }
+    },
+    "globin": {
+      "filename": "hs_globin.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_globin.tar.gz",
+      "gcs_generation": "1789087098215424",
+      "bytes": 41675,
+      "sha256": "2b94be8731356cd36e185658c44ac443086fe5bab5c88e6355855ddbe9489a32"
+    },
+    "rRNA": {
+      "filename": "hs_rRNA.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_rRNA.tar.gz",
+      "gcs_generation": "1789087102160530",
+      "bytes": 108985,
+      "sha256": "328dc72da8dd2e1728218c0bbae3de47a3113edd4f6cdb1238edf2d375534a6f"
+    },
+    "phix": {
+      "filename": "phix.tar.gz",
+      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/phix.tar.gz",
+      "gcs_generation": "1789087105755556",
+      "bytes": 43732,
+      "sha256": "847445cae6086e3b4d6bcd226eb41fb81651d1a1c3f1c0025a27538fe81c7ae3"
     }
   },
-  "publication_state": "published as checksum-addressed private us-west2 GCS objects on 2026-09-11"
+  "publication_state": "Primary annotation/index artifacts published at checksum-addressed paths; contamination archives retain shared paths with recorded SHA-256 and GCS generation."
 }

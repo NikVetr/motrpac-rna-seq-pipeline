@@ -77,11 +77,13 @@ For experienced users, here's the essential workflow:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/MoTrPAC/motrpac-rna-seq-pipeline
+cd motrpac-rna-seq-pipeline
 
 # 2. Install Python dependencies
 pip3 install -r scripts/requirements.txt
 
 # 3. Generate input JSON configuration
+mkdir -p input_json
 python3 scripts/make_json_rnaseq.py \
   -g gs://your-bucket/fastq_raw \
   -o ./input_json \
@@ -159,38 +161,24 @@ A brief summary of the steps to set-up a VM to run the Motrpac pipelines on GCP 
 
 ## Software / Dockerfiles
 
-Several tools are required to run the rna-seq pipeline. All of them are pre-installed in docker containers, which are publicly available in the [Artifact Registry](https://cloud.google.com/artifact-registry).
-
-### Available Docker Images
-
-The pipeline uses the following containerized tools (all available at `us-docker.pkg.dev/motrpac-portal/rnaseq`):
-
-- `fastqc:latest` - FastQC for quality control
-- `umi_attach:latest` - UMI attachment utility
-- `cutadapt:latest` - Adapter trimming
-- `multiqc:latest` - Aggregate QC reporting
-- `star:latest` - STAR aligner
-- `feature_counts:latest` - featureCounts from Subread
-- `rsem:latest` - RSEM quantification
-- `bowtie:latest` - Bowtie2 aligner (for contamination screening)
-- `picard:latest` - Picard tools (MarkDuplicates, CollectRnaSeqMetrics)
-- `umi_dup:latest` - UMI-based duplication assessment
-- `samtools:latest` - SAMtools utilities
-- `collect_qc:latest` - Custom QC metrics collection
-- `merge_results:latest` - Result merging across samples
+Tools and pipeline helpers run in containers. The matched profiles in
+[`config/release-profiles/`](config/release-profiles/) select exact image digests
+from BioContainers and our Artifact Registry; private images require registry
+read access. These profiles are the source of truth for execution versions.
+The `dockerfiles/` directory contains recipes for tools and our custom helpers.
 
 ### Building and Updating Containers
 
-To find out more about the specific versions of tools used to run the pipeline, check the `dockerfiles/*.Dockerfile`.
+Build from any working directory, specifying the registry and release tag.
+Omit image names to build all recipes; add `--push` to publish explicitly:
 
-To build and push updated containers:
 ```bash
-# Build all dockerfiles
-bash scripts/build_dockerfiles.sh
-
-# Push to Artifact Registry (requires appropriate permissions)
-bash scripts/push_dockerfiles.sh
+bash scripts/build_dockerfiles.sh us-docker.pkg.dev/PROJECT/rnaseq RELEASE_TAG umi_dup
+bash scripts/build_dockerfiles.sh --push us-docker.pkg.dev/PROJECT/rnaseq RELEASE_TAG umi_dup
 ```
+
+Published digests are printed after each push. Validate rebuilt helpers and
+update the matching release profile with the new digest before deploying.
 
 ## Configuration Files
 
@@ -216,6 +204,7 @@ python3 scripts/make_json_rnaseq.py \
 
 **Complete Example:**
 ```bash
+mkdir -p input_json
 python3 scripts/make_json_rnaseq.py \
   -g gs://motrpac-bucket/rna-seq/human/batch7_20220316/fastq_raw \
   -o ./input_json \
@@ -240,7 +229,7 @@ tools and expression/QC graph as the human release profiles. Its private
 references reside in us-west1. Select the rat candidate runtime profile for E2
 workers and initial rat resource floors; see [rat configuration and validation](docs/rat-ensembl116.md).
 
-GENCODE v47 and v50 automatically select their immutable release profiles in
+GENCODE v47 and v50 automatically select their matched release profiles in
 `config/release-profiles/human-gencode-v{47,50}.json`; v39 retains the historical
 references and quantifier images. Matched I1 reads and directional UMI molecule-expression
 matrices are enabled by default and use the canonical RSEM and featureCounts
@@ -374,17 +363,14 @@ report archives are also published as top-level outputs.
 
 Final merged outputs are written to the GCS bucket specified during pipeline submission. Individual sample outputs are organized in the Cromwell execution directory structure.
 
-Both merge tasks size scratch from their actual inputs: three times the total
-input GiB plus 10 GiB, rounded up, with `merge_results_disk` retained as a floor.
-This retains the validated disk headroom as cohort size grows. Merge inputs
-are linked rather than copied. Both merges request at least 4 GB RAM per
-75 libraries, rounded up to whole tiers (16 GB for 297 libraries), preserving
-`merge_results_ramGB` as a floor. The shared RSEM task raises RAM and scratch
-from its input BAM size for both molecule and all-read expression, preserving
-configured floors; CPU counts and STAR/UMI sizing are unchanged.
-See [cohort provisioning and operations](docs/cohort-provisioning.md) for
-the measured limits, regional launch guard, metadata command, and verified
-controller shutdown procedure.
+Merge tasks size scratch from their actual inputs: three times the total
+input GiB plus 10 GiB, rounded up, preserving `merge_results_disk` as a floor.
+Inputs are linked rather than copied. Gene and secondary expression merges
+request at least 4 GB RAM per 75 libraries, rounded up (16 GB for 297 libraries).
+The streaming isoform merge needs at least 4 GB. Both rules preserve
+`merge_results_ramGB` as a floor. RSEM raises RAM and scratch from the BAM
+entering that task. See [cohort provisioning](docs/cohort-provisioning.md)
+for the resource rules, locality checks and output retention.
 
 The merged QC table supplies pipeline-derived covariates such as `pct_umi_dup`.
 As in legacy master, participant IDs, visits, treatment groups, demographics,
@@ -493,43 +479,37 @@ bash scripts/setup/setup_vm.sh
 bash scripts/setup/setup_develop.sh
 ```
 
-### Validating JSON Files
+### Validating Inputs and Running Tests
 
-Before submitting workflows, validate your JSON configuration files:
-
-```bash
-python3 scripts/validate_jsons.py input_json/set1_rnaseq.json
-```
-
-### Testing with Prototype Examples
-
-The `prototype/` directory contains example configuration files and submission scripts:
+Validate workflow syntax and input types with WOMtool before submitting:
 
 ```bash
-# Example submission script for generic use
-bash prototype/submit_rnaseq_generic.sh
-
-# Example JSON configurations in prototype/input_json/
+java -jar womtool-92.jar validate wdl/rnaseq_pipeline_scatter.wdl -i input.json
+python3 -m unittest discover -s tests
 ```
 
-The `examples/` directory contains additional JSON examples for individual tasks and different organism configurations.
-
-### Building Docker Images Locally
+In a MiniWDL environment, also run `python3 tests/check_wdl_resources.py` and
+`python3 tests/check_wdl_expression_policy.py`. The executable UMI fixture
+requires MiniWDL, pysam 0.22.1 and Docker:
 
 ```bash
-# Build all docker images
-bash scripts/build_dockerfiles.sh
-
-# Push to your container registry (configure registry URL first)
-bash scripts/push_dockerfiles.sh
+python3 tests/check_umi_truth.py
 ```
+
+It runs the rendered UMI task against known paired-read families using the
+pinned tool image and current helpers. With Apptainer, supply a local SIF built
+from the base digest in `dockerfiles/umi_dup.Dockerfile` via `--apptainer-image`.
+
+`scripts/validate_jsons.py first.json second.json` compares two parsed JSON
+values for equality; it does not validate workflow inputs. For image builds,
+see [Building and Updating Containers](#building-and-updating-containers).
 
 ## Troubleshooting
 
 ### Common Issues
 
 **1. Pipeline Fails During Submission**
-- Verify JSON configuration is valid using `scripts/validate_jsons.py`
+- Validate the workflow and input JSON with WOMtool (see above)
 - Ensure all required input files exist in the specified GCS paths
 - Check that service account has permissions to access GCS buckets
 
@@ -660,8 +640,8 @@ If you use this pipeline in your research, please cite:
 ### Compatibility Notes
 
 - **WDL Version**: 1.0
-- **Cromwell Version**: Compatible with Cromwell 50+
-- **Python Version**: Requires Python >= 3.6.9
+- **Cromwell Version**: Requires Cromwell 92 for task-specific GCP machine selection
+- **Python Version**: Requires Python >= 3.10 for local tooling and tests
 - **GCP**: Designed for Google Cloud Platform (adaptable to other backends with Cromwell configuration)
 
 ### Change History

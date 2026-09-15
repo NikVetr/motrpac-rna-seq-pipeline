@@ -36,8 +36,9 @@ deterministic post-trim read sample across globin, rRNA and PhiX screens.
 
 Runtime profiles set resource floors. STAR scratch grows with post-trim pairs,
 UMI scratch with combined STAR BAM bytes, and RSEM RAM/scratch with the
-transcriptome BAM entering that task. Merge resources grow with library count
-and input bytes. Human v50 applies a separate STAR scratch multiplier.
+transcriptome BAM entering that task. Gene merge RAM grows with library count;
+isoform merging streams rows with a 4-GB minimum. Merge scratch grows with input
+bytes. Human v50 applies a separate STAR scratch multiplier.
 The human v50 and rat v116 profiles select E2 for supported processing tasks;
 one-CPU reporting and merges retain backend selection. See
 [cohort provisioning](docs/cohort-provisioning.md) for rules and deployment.
@@ -56,6 +57,9 @@ Tests cover input and reference contracts, QC parsing, UMI grouping and molecule
 propagation, gene/isoform merging, profiling and failure accounting. Run
 `python3 -m unittest discover -s tests`; in a MiniWDL environment, also run
 `tests/check_wdl_resources.py` and `tests/check_wdl_expression_policy.py`.
+`tests/check_umi_truth.py` runs the rendered UMI task in its pinned tool
+container with known read families, multimappers and transcript alternatives.
+It requires pysam and Docker or Apptainer.
 Validate the workflow before deployment. GCP task-specific machine selection
 requires Cromwell 92. App deployments must synchronize their bundled workflow,
 input settings and backend with the selected pipeline release.

@@ -15,7 +15,8 @@ Each effective request is the larger of the configured floor and the rule below.
 | UMI scratch | `ceil(2 * combined_STAR_BAM_GiB + 15)` |
 | RSEM RAM | `4 * ceil((16 + 2 * transcriptome_BAM_GiB) / 4)` GB |
 | RSEM scratch | `ceil(10 + 4 * transcriptome_BAM_GiB)` GB |
-| Gene/expression/isoform merge RAM | `4 * ceil(libraries / 75)` GB |
+| Gene/expression merge RAM | `4 * ceil(libraries / 75)` GB |
+| Streaming isoform merge RAM | 4 GB minimum, preserving the configured floor |
 | Merge scratch | `ceil(3 * input_GiB + 10)` GB |
 
 Merge inputs are symbolic links to localized files, avoiding a second input

@@ -280,6 +280,13 @@ After the workflow completes:
 
 The pipeline requires Bowtie2 indices for globin, rRNA, and PhiX contamination screening.
 
+The human v47/v50 reference manifests record the SHA-256, byte size and GCS
+generation of each shared contamination archive. Their execution URIs are
+ordinary object paths, so the recorded identities do not enforce immutability
+at runtime. Verify these hashes when staging or publishing a reference bundle;
+publish under checksum-addressed paths and update the release-profile URIs
+before retiring the shared copies.
+
 For a **new genome version of an existing organism** (e.g., rn8 for rat), reuse the existing indices since the globin, rRNA, and PhiX sequences are conserved:
 
 - Globin: `gs://omicspipelines-public-resources/rnaseq/references/rat/rn_globin.tar.gz`
