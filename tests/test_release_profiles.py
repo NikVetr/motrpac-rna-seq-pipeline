@@ -109,8 +109,9 @@ class ReleaseProfileTests(unittest.TestCase):
             )
             for role, image_name in legacy_image_names.items()
         }
-        expected_images["rnaseq_pipeline.merge_results_docker"] = generator.resolve_release_inputs(
-            "human", "gencode_v47")["rnaseq_pipeline.merge_results_docker"]
+        for role in ("merge_results_docker", "collect_qc_docker"):
+            expected_images["rnaseq_pipeline." + role] = generator.resolve_release_inputs(
+                "human", "gencode_v47")["rnaseq_pipeline." + role]
         self.assertEqual(
             expected_references,
             {key: document[key] for key in expected_references},

@@ -18,6 +18,9 @@ task rnaseqQC {
         File? markduplicates_metrics
         File? rnaseq_metrics
         File? umi_report
+        File rsem_log
+        File rsem_counts
+        File feature_counts_summary
         String expression_mode = "unspecified"
         String umi_status = "unspecified"
 
@@ -50,6 +53,11 @@ task rnaseqQC {
             ~{"--markduplicates-metrics \"" + markduplicates_metrics + "\""} \
             ~{"--rnaseq-metrics \"" + rnaseq_metrics + "\""} \
             ~{"--umi-report \"" + umi_report + "\""} \
+            --rsem-log "~{rsem_log}" \
+            --rsem-counts "~{rsem_counts}" \
+            --feature-counts-summary "~{feature_counts_summary}" \
+            --expression-mode "~{expression_mode}" \
+            --diagnostics "~{SID}.qc_diagnostics.json" \
             --output "~{SID}_qc_info.csv"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished native RNA-seq QC collection ---"
@@ -57,6 +65,7 @@ task rnaseqQC {
 
     output {
         File rnaseq_report = "${SID}_qc_info.csv"
+        File diagnostics = "${SID}.qc_diagnostics.json"
     }
 
     runtime {

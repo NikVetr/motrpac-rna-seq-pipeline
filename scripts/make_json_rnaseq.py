@@ -742,7 +742,7 @@ def make_json_dict(
         "rnaseq_pipeline.collect_qc_ncpu": 8,
         "rnaseq_pipeline.collect_qc_ramGB": 16,
         "rnaseq_pipeline.collect_qc_disk": 100,
-        "rnaseq_pipeline.collect_qc_docker": f"{docker_repo}/collect_qc:latest",
+        "rnaseq_pipeline.collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:ee7aa13e58cb34395dabd2ef4ff3777a81754083c98300a2f5ffae0394860815",
         "rnaseq_pipeline.output_report_name": output_report_name,
         "rnaseq_pipeline.merge_results_ncpu": 4,
         "rnaseq_pipeline.merge_results_ramGB": 16,

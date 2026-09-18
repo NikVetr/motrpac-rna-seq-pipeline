@@ -343,12 +343,23 @@ denominators.
      - Read alignment statistics
      - rRNA, globin, and PhiX contamination rates
      - PCR duplication rates
-     - Strand specificity
      - 5' to 3' coverage bias
      - Percentage of reads mapping to coding/intronic/intergenic regions
      - Chromosome mapping percentages
 
 ### Additional Outputs (Per Sample)
+
+`qc_diagnostics` retains one JSON per sample with RSEM convergence and ignored
+short-pair counts, Picard strand consistency, featureCounts assignment categories,
+and per-module FastQC statuses. Skipped QC groups are `null`. These diagnostics
+use canonical expression for RSEM/featureCounts and input/aligned reads for
+FastQC/Picard; raw `rsem_logs` and optional
+`all_read_rsem_logs` are retained too. Review these flags even when execution
+succeeds: an RSEM iteration-cap warning or a FastQC FAIL is not a task failure.
+
+The pinned RSEM 1.3.3 image permits up to 20,000 EM iterations and stops early
+at the unchanged upstream convergence tolerance. The cap is a container build
+setting (`MAX_ROUND` in `dockerfiles/rsem.Dockerfile`), not an RSEM CLI option.
 
 The pipeline also generates intermediate outputs for each sample (stored in Cromwell execution directories):
 - FastQC reports (pre- and post-trimming)

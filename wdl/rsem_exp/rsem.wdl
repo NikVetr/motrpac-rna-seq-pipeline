@@ -42,7 +42,7 @@ task rsem {
             --seed 12345 \
             ~{transcriptome_bam} \
             rsem_reference \
-            ~{SID}
+            ~{SID} 2>&1 | tee ~{SID}.rsem.log
         echo "--- $(date "+[%b %d %H:%M:%S]") Done: rsem-calculate-expression --- "
         ls
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished task --- "
@@ -54,6 +54,7 @@ task rsem {
         File stat_cnt = "rsem_reference/${SID}.stat/${SID}.cnt"
         File stat_model = "rsem_reference/${SID}.stat/${SID}.model"
         File stat_theta = "rsem_reference/${SID}.stat/${SID}.theta"
+        File log = "rsem_reference/${SID}.rsem.log"
     }
 
     runtime {

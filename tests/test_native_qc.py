@@ -1,5 +1,7 @@
 import csv
 import io
+import importlib.util
+import json
 import subprocess
 import sys
 import tarfile
@@ -11,6 +13,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = REPO_ROOT / "wdl/collect_qc_metrics/rnaseq_qc.py"
+spec = importlib.util.spec_from_file_location("native_qc", COLLECTOR)
+qc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(qc)
 
 
 class NativeQcTests(unittest.TestCase):
@@ -27,10 +32,12 @@ class NativeQcTests(unittest.TestCase):
         with tarfile.open(archive_path, "w:gz") as archive:
             for index, filename in enumerate(filenames, start=1):
                 data = (
+                    ">>Basic Statistics\tpass\n"
                     "Filename\t{}\n"
                     "Total Sequences\t{}\n"
                     "%GC\t{}\n"
                     "#Total Deduplicated Percentage\t{}\n"
+                    ">>END_MODULE\n>>Per tile sequence quality\tfail\n>>END_MODULE\n"
                 ).format(filename, reads, 50 + index, 80 - index).encode()
                 payload = io.BytesIO()
                 with zipfile.ZipFile(payload, "w") as zipped:
@@ -102,13 +109,14 @@ class NativeQcTests(unittest.TestCase):
             "rna.txt",
             "## METRICS CLASS\tpicard.analysis.RnaSeqMetrics\n"
             "PCT_CODING_BASES\tPCT_UTR_BASES\tPCT_INTRONIC_BASES\t"
-            "PCT_INTERGENIC_BASES\tPCT_MRNA_BASES\tMEDIAN_5PRIME_TO_3PRIME_BIAS\n"
-            "0.5\t0.2\t0.1\t0.2\t0.7\t0.25\n\n",
+            "PCT_INTERGENIC_BASES\tPCT_MRNA_BASES\tMEDIAN_5PRIME_TO_3PRIME_BIAS\t"
+            "CORRECT_STRAND_READS\tINCORRECT_STRAND_READS\tPCT_CORRECT_STRAND_READS\n"
+            "0.5\t0.2\t0.1\t0.2\t0.7\t0.25\t98\t2\t0.98\n\n",
         )
         return raw_names, trim_names, paths
 
     def run_collector(
-        self, output, include_umi=True, expected_raw_names=None, omitted=()
+        self, output, include_umi=True, expected_raw_names=None, omitted=(), diagnostics=False
     ):
         raw_names, trim_names, paths = self.fixtures()
         if expected_raw_names is not None:
@@ -125,6 +133,16 @@ class NativeQcTests(unittest.TestCase):
             "--star-log", str(paths["star"]),
             "--output", str(output),
         ]
+        if diagnostics:
+            log = self.write("rsem.log", "ROUND = 10000, SUM = 89, bChange = 0.0012, totNum = 1\n"
+                             "Warning: RSEM reaches 10000 iterations before meeting the convergence criteria.\n"
+                             "Warning: Read pair1 is ignored due to at least one of the mates' length < seed length (= 25)!\n"
+                             "Expression Results are written!\n")
+            counts = self.write("rsem.cnt", "0 90 0 90\n")
+            fc = self.write("fc.summary", "Status\tsample.bam\nAssigned\t80\nUnassigned_NoFeatures\t20\n")
+            command.extend(["--rsem-log", str(log), "--rsem-counts", str(counts),
+                            "--feature-counts-summary", str(fc), "--expression-mode", "umi_molecule",
+                            "--diagnostics", str(output.with_suffix(".json"))])
         optional_reports = {
             "pre": ("--fastqc-pretrim", paths["pre"]),
             "post": ("--fastqc-posttrim", paths["post"]),
@@ -159,6 +177,36 @@ class NativeQcTests(unittest.TestCase):
         self.assertEqual("12.345", rows[0]["pct_picard_dup"])
         self.assertEqual("45.12", rows[0]["pct_umi_dup"])
         self.assertEqual("", rows[0]["pct_chimeric"])
+
+    def test_diagnostics_preserve_scientific_flags_without_rejecting_outputs(self):
+        for omitted in ((), ("pre", "post", "rna")):
+            with self.subTest(omitted=omitted):
+                output = self.root / ("diagnostics-{}.csv".format(len(omitted)))
+                result = self.run_collector(output, diagnostics=True, omitted=omitted)
+                self.assertEqual(0, result.returncode, result.stderr.decode())
+                self.assertIn(b"WARNING", result.stdout)
+                data = json.loads(output.with_suffix(".json").read_text())
+                self.assertFalse(data["rsem"]["converged"])
+                self.assertEqual(10000, data["rsem"]["iterations"])
+                self.assertEqual(1 / 90, data["rsem"]["ignored_short_pair_fraction"])
+                self.assertEqual(0.8, data["feature_counts"]["assigned_alignment_fraction"])
+                if omitted:
+                    self.assertIsNone(data["picard_strand"])
+                    self.assertIsNone(data["fastqc"]["posttrim"])
+                else:
+                    self.assertEqual(0.98, data["picard_strand"]["correct_strand_fraction"])
+                    self.assertEqual("fail", data["fastqc"]["posttrim"]["trim_R2.fastq.gz"]["Per tile sequence quality"])
+
+    def test_rsem_convergence_requires_completed_and_consistent_log(self):
+        counts = self.write("rsem.cnt", "0 90 0 90\n")
+        text = "ROUND = 12345, SUM = 90, bChange = 0.0009, totNum = 0\n"
+        log = self.write("rsem.log", text + "Expression Results are written!\n")
+        self.assertTrue(qc.parse_rsem(log, counts)["converged"])
+        for invalid in (text, "Expression Results are written!\n",
+                        text.replace("totNum = 0", "totNum = 1") + "Expression Results are written!\n"):
+            log.write_text(invalid)
+            with self.assertRaises(ValueError):
+                qc.parse_rsem(log, counts)
 
     def test_absent_umi_is_explicit_and_filename_mismatch_fails(self):
         output = self.root / "without_umi.csv"

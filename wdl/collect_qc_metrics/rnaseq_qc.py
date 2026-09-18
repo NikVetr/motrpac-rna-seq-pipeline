@@ -4,6 +4,7 @@ import argparse
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import io
+import json
 from pathlib import Path
 import re
 import tarfile
@@ -103,7 +104,13 @@ def single_match(pattern, text, label):
 def parse_fastqc_data(data, source):
     text = data.decode("utf-8")
     fields = {}
+    modules = {}
     for line in text.splitlines():
+        if line.startswith(">>") and line != ">>END_MODULE":
+            name, status = line[2:].split("\t")
+            if name in modules or status not in ("pass", "warn", "fail"):
+                raise ValueError("invalid FastQC module status in {}".format(source))
+            modules[name] = status
         if line.startswith(("Filename\t", "Total Sequences\t", "%GC\t")):
             key, value = line.split("\t", 1)
             if key in fields:
@@ -114,7 +121,7 @@ def parse_fastqc_data(data, source):
             raise ValueError("FastQC {} lacks {}".format(source, key))
     deduplicated = number(
         single_match(
-            r"^#Total Deduplicated Percentage\t([^\t]+)$",
+            r"^#Total Deduplicated Percentage\t([^\t\r\n]+)$",
             text,
             "FastQC deduplicated percentage",
         ),
@@ -126,6 +133,7 @@ def parse_fastqc_data(data, source):
         "reads": integer(fields["Total Sequences"], "FastQC total sequences"),
         "gc": number(fields["%GC"], "FastQC GC", percent=True),
         "duplicates": Decimal(100) - deduplicated,
+        "modules": modules,
     }
 
 
@@ -255,6 +263,49 @@ def fraction_percent(metrics, key, source):
     if value > 1:
         raise ValueError("{} {} is outside 0-1".format(source, key))
     return value * 100
+
+
+def parse_rsem(log_path, counts_path):
+    text = read_text(log_path)
+    rounds = re.findall(r"^ROUND = (\d+), SUM = \S+, bChange = (\S+), totNum = (\d+)$", text, re.MULTILINE)
+    if not rounds or "Expression Results are written!" not in text:
+        raise ValueError("RSEM log lacks completed EM diagnostics: {}".format(log_path))
+    iteration, change, remaining = rounds[-1]
+    caps = re.findall(r"RSEM reaches (\d+) iterations before meeting the convergence criteria", text)
+    if len(caps) > 1 or (caps and (caps[0] != iteration or int(remaining) == 0)):
+        raise ValueError("inconsistent RSEM convergence diagnostics")
+    if int(remaining) and not caps:
+        raise ValueError("RSEM stopped without convergence or an iteration-cap warning")
+    counts = read_text(counts_path).splitlines()[0].split()
+    if len(counts) != 4:
+        raise ValueError("invalid RSEM count summary: {}".format(counts_path))
+    unaligned, aligned, filtered, total = [integer(value, "RSEM pair count") for value in counts]
+    if unaligned + aligned + filtered != total:
+        raise ValueError("RSEM pair counts do not reconcile")
+    ignored = len(re.findall(r"^Warning: Read .* is ignored due to at least one of the mates' length < seed length", text, re.MULTILINE))
+    if ignored > aligned:
+        raise ValueError("RSEM ignored pairs exceed aligned pairs")
+    return {"converged": not caps, "iterations": int(iteration),
+            "components_above_tolerance": int(remaining),
+            "largest_relative_change": float(number(change, "RSEM relative change")),
+            "aligned_input_pairs": aligned, "ignored_short_pairs": ignored,
+            "ignored_short_pair_fraction": ignored / aligned if aligned else None}
+
+
+def parse_feature_counts(path):
+    rows = list(csv.reader(read_text(path).splitlines(), delimiter="\t"))
+    if not rows or len(rows[0]) != 2 or rows[0][0] != "Status":
+        raise ValueError("expected a single-sample featureCounts summary")
+    counts = {}
+    for row in rows[1:]:
+        if len(row) != 2 or row[0] in counts:
+            raise ValueError("invalid featureCounts summary row")
+        counts[row[0]] = integer(row[1], "featureCounts " + row[0])
+    assigned = integer(required(counts, "Assigned", str(path)), "assigned records")
+    total = sum(counts.values())
+    # The summary counts alignment/template records, including multimappers.
+    return {"counts": counts, "total_alignment_records": total,
+            "assigned_alignment_fraction": assigned / total if total else None}
 
 
 def collect(args):
@@ -429,6 +480,29 @@ def collect(args):
     columns = BASE_COLUMNS + ["pct_umi_dup"] + STAR_COLUMNS + MAPPED_COLUMNS + RNA_COLUMNS
     if list(row) != columns:
         raise AssertionError("QC fields do not match the published column contract")
+    if args.diagnostics is not None:
+        if args.rsem_log is None or args.rsem_counts is None or args.feature_counts_summary is None:
+            raise ValueError("diagnostics require RSEM log/counts and featureCounts summary")
+        fastqc = {}
+        for stage, reports in (("pretrim", pre_reports), ("posttrim", post_reports)):
+            fastqc[stage] = None if reports is None else {
+                report["filename"]: report["modules"] for report in reports}
+            if reports is not None and any(not report["modules"] for report in reports):
+                raise ValueError("FastQC report lacks module statuses")
+        strand = None if rna is None else {
+            "correct_strand_reads": integer(required(rna, "CORRECT_STRAND_READS", "RNA metrics"), "correct strand reads"),
+            "incorrect_strand_reads": integer(required(rna, "INCORRECT_STRAND_READS", "RNA metrics"), "incorrect strand reads"),
+            "correct_strand_fraction": float(fraction_percent(rna, "PCT_CORRECT_STRAND_READS", "RNA metrics") / 100)}
+        diagnostics = {"schema_version": 1, "sample": args.sample,
+                       "expression_mode": args.expression_mode,
+                       "rsem": parse_rsem(args.rsem_log, args.rsem_counts),
+                       "feature_counts": parse_feature_counts(args.feature_counts_summary),
+                       "picard_strand": strand, "fastqc": fastqc}
+        with args.diagnostics.open("x", encoding="utf-8") as handle:
+            json.dump(diagnostics, handle, indent=2, allow_nan=False)
+            handle.write("\n")
+        if not diagnostics["rsem"]["converged"]:
+            print("WARNING: {} RSEM reached its iteration cap; review qc_diagnostics.json".format(args.sample))
     return columns, row
 
 
@@ -450,6 +524,11 @@ def make_parser():
     parser.add_argument("--markduplicates-metrics", type=Path)
     parser.add_argument("--rnaseq-metrics", type=Path)
     parser.add_argument("--umi-report", type=Path)
+    parser.add_argument("--rsem-log", type=Path)
+    parser.add_argument("--rsem-counts", type=Path)
+    parser.add_argument("--feature-counts-summary", type=Path)
+    parser.add_argument("--expression-mode", default="unspecified")
+    parser.add_argument("--diagnostics", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     return parser
 

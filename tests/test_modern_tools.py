@@ -27,7 +27,6 @@ class ModernToolTests(unittest.TestCase):
             "cutadapt": "cutadapt.Dockerfile",
             "fastqc": "fastqc.Dockerfile",
             "picard": "picard.Dockerfile",
-            "rsem": "rsem.Dockerfile",
             "samtools": "samtools.Dockerfile",
             "star": "star.Dockerfile",
             "subread": "feature_counts.Dockerfile",
@@ -35,6 +34,15 @@ class ModernToolTests(unittest.TestCase):
         for tool, filename in dockerfiles.items():
             content = (REPO_ROOT / "dockerfiles" / filename).read_text().strip()
             self.assertEqual("FROM " + manifest["images"][tool]["uri"], content)
+
+        rsem = manifest["images"]["rsem"]
+        content = (REPO_ROOT / "dockerfiles/rsem.Dockerfile").read_text()
+        self.assertEqual("FROM " + rsem["base_uri"], content.splitlines()[0])
+        self.assertIn("ARG MAX_ROUND={}".format(rsem["max_iterations"]), content)
+        self.assertIn(rsem["source_sha256"], content)
+        self.assertIn("sha256sum -c -", content)
+        self.assertIn("const int MAX_ROUND = ${MAX_ROUND};", content)
+        self.assertNotIn("STOP_CRITERIA", content)
 
     def test_updated_command_interfaces_are_explicit(self):
         cutadapt = (REPO_ROOT / "wdl/cutadapt/cutadapt.wdl").read_text()

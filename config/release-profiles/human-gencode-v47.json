@@ -32,12 +32,12 @@
     "cutadapt_docker": "quay.io/biocontainers/cutadapt@sha256:741216fb9a56cdac2a61e93c64f857bc5b3e1f9f2c123cf7ae2c6ea5c97702d8",
     "star_docker": "quay.io/biocontainers/star@sha256:c43295cdbc28a7be7d88296775a29cc65b30296c996d8242ef90c031c8b9739b",
     "feature_counts_docker": "quay.io/biocontainers/subread@sha256:a0f7ea960dd0f55240b330b5c4515388a493e266a7b427d6a59a39164bc14865",
-    "rsem_docker": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420",
+    "rsem_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/rsem@sha256:55ed79ca9d28a71cfcccba95e0c2bf125efbb29f5f2ea615b807320e89b7f10e",
     "bowtie_docker": "quay.io/biocontainers/bowtie2@sha256:1a46d8fcf4d9befc14fcb59865f18a60da4914bfa0f7f7e481f6ca9b07e2fd19",
     "picard_docker": "quay.io/biocontainers/picard@sha256:84923e37c5a43b0984fdb152a89f8ac952878fafc3e6076c534e5e5c82e278be",
     "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:7e467d09f2beb6c2484486dcc671186ac39c359600072a56c089a01e00714ad9",
     "samtools_docker": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561",
-    "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:e23e8a0575c4e85a741d8ada188f5559c38927dd1a05be0b5a7e370cdb89213e",
+    "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:ee7aa13e58cb34395dabd2ef4ff3777a81754083c98300a2f5ffae0394860815",
     "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:6ef26dcd5979c80f49f16b0896db7f794dbeac8001798d2538ff878bcbc0e126"
   }
 }
