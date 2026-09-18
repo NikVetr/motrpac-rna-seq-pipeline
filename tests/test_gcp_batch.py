@@ -229,6 +229,13 @@ fi
                             "rnaseq_pipeline.umi_metrics": [
                                 "gs://test/sample.umi_metrics.json"
                             ],
+                            "rnaseq_pipeline.qc_diagnostics": [
+                                "gs://test/sample.qc_diagnostics.json"
+                            ],
+                            "rnaseq_pipeline.rsem_logs": ["gs://test/sample.rsem.log"],
+                            "rnaseq_pipeline.all_read_rsem_logs": [
+                                "gs://test/sample.all_read.rsem.log"
+                            ],
                             "rnaseq_pipeline.multiqc_prealign_reports": [
                                 "gs://test/sample.multiqc_prealign_report.tar.gz"
                             ],
@@ -256,7 +263,7 @@ fi
             self.assertEqual(workflow_id, status["workflow_id"])
             self.assertEqual(2, status["attempt_count"])
             self.assertEqual(2, status["submitted_gcs_object_count"])
-            self.assertEqual(4, status["top_level_output_object_count"])
+            self.assertEqual(7, status["top_level_output_object_count"])
             self.assertEqual(0, status["missing_artifact_count"])
             self.assertEqual(1, status["expected_unavailable_artifact_count"])
             self.assertTrue(status["complete"])
@@ -277,12 +284,15 @@ fi
                 {
                     "rnaseq_pipeline.rsem_genes_count",
                     "rnaseq_pipeline.umi_metrics",
+                    "rnaseq_pipeline.qc_diagnostics",
+                    "rnaseq_pipeline.rsem_logs",
+                    "rnaseq_pipeline.all_read_rsem_logs",
                     "rnaseq_pipeline.multiqc_prealign_reports",
                     "rnaseq_pipeline.multiqc_postalign_reports",
                 },
                 {entry["output_name"] for entry in output_objects},
             )
-            self.assertEqual(4, len(list((output / "top-level-outputs").iterdir())))
+            self.assertEqual(7, len(list((output / "top-level-outputs").iterdir())))
             self.assertEqual(2, len(list((output / "batch-jobs").glob("*.json"))))
             self.assertEqual(5, len(list((output / "task-streams").iterdir())))
             unavailable = (

@@ -33,6 +33,11 @@ Native tool reports feed the QC table. FastQC, contamination, alignment and UMI
 QC are selectable; optional MultiQC archives require both FastQC groups and
 alignment QC. Combined contamination screening shares one worker and an optional
 deterministic post-trim read sample across globin, rRNA and PhiX screens.
+Per-sample diagnostic JSON retains RSEM convergence and ignored short pairs,
+FastQC module statuses, Picard strand consistency and featureCounts assignment
+categories. RSEM logs are canonical outputs. The pinned RSEM 1.3.3 build permits
+20,000 EM iterations without changing its stopping tolerance; capped fits are
+reported explicitly for review.
 
 Runtime profiles set resource floors. STAR scratch grows with post-trim pairs,
 UMI scratch with combined STAR BAM bytes, and RSEM RAM/scratch with the

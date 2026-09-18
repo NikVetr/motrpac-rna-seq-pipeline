@@ -187,6 +187,8 @@ do
             ;;
         qc_report_file|contamination_sampling_manifests|umi_metrics)
             ;;
+        qc_diagnostics|rsem_logs|all_read_rsem_logs)
+            ;;
         umi_expression_metrics)
             ;;
         multiqc_prealign_reports|multiqc_postalign_reports)
