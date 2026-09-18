@@ -106,6 +106,54 @@ class TaskProfileTests(unittest.TestCase):
             self.assertEqual("gs://b/missing.bam", result["errors"][0]["uri"])
             verify_evidence(root / "capture")
 
+    def test_only_preemption_404_is_nonfatal_and_retry_logs_are_not_substituted(self):
+        for status, error, fatal in (("RetryableFailure", "404 not found", False),
+                                     ("Done", "404 not found", True),
+                                     ("RetryableFailure", "403 permission denied for shard-404/monitoring.log", True)):
+            with self.subTest(status=status, error=error), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "metadata.json"
+                path.write_text(json.dumps({"id": "workflow", "calls": {"rnaseq_pipeline.udup": [
+                    {"shardIndex": 0, "attempt": 1, "executionStatus": status,
+                     "failures": [{"message": "VMPreemption(50001)"}], "monitoringLog": "gs://b/monitoring.log"},
+                    {"shardIndex": 0, "attempt": 2, "executionStatus": "Done",
+                     "monitoringLog": "gs://b/attempt-2/monitoring.log"}]}}))
+                trace = b"epoch_s\tcpu_usage_usec\tmemory_peak_bytes\tdisk_used_kb\tdisk_available_kb\tmemory_current_bytes\n1\t0\t1024\t0\t1\t1024\n"
+                def cloud(*args):
+                    if args[:3] == ("storage", "objects", "describe"):
+                        if args[3] == "gs://b/monitoring.log":
+                            raise ValueError(error)
+                        return json.dumps({"size": len(trace), "generation": "123"}).encode()
+                    self.assertEqual(("storage", "cat", "gs://b/attempt-2/monitoring.log#123"), args)
+                    return trace
+                with patch.object(profiles, "cloud", side_effect=cloud):
+                    if fatal:
+                        with self.assertRaisesRegex(ValueError, "incomplete capture"):
+                            profiles.collect(path, root / "capture")
+                    else:
+                        profiles.collect(path, root / "capture")
+                result = json.loads((root / "capture/profiles.json").read_text())
+                self.assertFalse(result["complete_capture"])
+                self.assertIsNone(result["attempts"][0]["monitoring"])
+                self.assertIsNotNone(result["attempts"][1]["monitoring"])
+                self.assertEqual(not fatal, result["errors"][0]["expected_after_preemption"])
+                verify_evidence(root / "capture")
+
+    def test_batch_permission_error_still_preserves_other_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "metadata.json"
+            path.write_text(json.dumps({"id": "workflow", "calls": {"rnaseq_pipeline.udup": [
+                {"shardIndex": 0, "attempt": 1, "executionStatus": "Done", "jobId": "job1",
+                 "inputs": {"ncpu": 4}}]}}))
+            with patch.object(profiles, "cloud", side_effect=ValueError("PERMISSION_DENIED")):
+                with self.assertRaisesRegex(ValueError, "incomplete capture"):
+                    profiles.collect(path, root / "capture")
+            result = json.loads((root / "capture/profiles.json").read_text())
+            self.assertEqual("job1", result["errors"][0]["job"])
+            self.assertEqual(1, len(result["attempts"]))
+            verify_evidence(root / "capture")
+
 
 if __name__ == "__main__":
     unittest.main()

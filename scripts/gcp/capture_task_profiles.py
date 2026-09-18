@@ -16,7 +16,7 @@ from summarize_workflow_cost import monitor
 
 SMALL_METRICS = (".umi_metrics.json", ".umi_molecule_expression_metrics.json",
                  ".sampling_manifest.json", ".Log.final.out", "_qc_info.csv", ".cnt",
-                 "expression_metadata.tsv")
+                 "_contamination_sampling.json", ".qc_diagnostics.json", "expression_metadata.tsv")
 
 
 def cloud(*args):
@@ -50,6 +50,11 @@ def collect(metadata_path, output, workers=8):
     terminal = {"Done", "Failed", "RetryableFailure", "Aborted", "Bypassed"}
     selected = [(call, attempt) for call, attempt in attempts
                 if attempt.get("executionStatus") in terminal]
+    preempted_logs = {attempt.get("monitoringLog") for _, attempt in selected
+                     if attempt.get("executionStatus") == "RetryableFailure"
+                     and "VMPreemption(50001)" in json.dumps(attempt.get("failures", []))}
+    preempted_logs -= {attempt.get("monitoringLog") for _, attempt in selected
+                      if attempt.get("executionStatus") == "Done"}
     uris = sorted({uri for _, attempt in selected
                    for field in ("inputs", "outputs", "monitoringLog", "stdout", "stderr")
                    for uri in file_uris(attempt.get(field))})
@@ -69,7 +74,9 @@ def collect(metadata_path, output, workers=8):
                 key, value = future.result()
                 objects[key] = value
             except (ValueError, subprocess.CalledProcessError) as error:
-                errors.append({"uri": uri, "error": str(error)})
+                errors.append({"uri": uri, "error": str(error),
+                               "expected_after_preemption": uri in preempted_logs
+                               and bool(re.search(r"not found:\s*404\b|\b404[:\s]+not found\b", str(error), re.I))})
     (output / "objects.json").write_text(json.dumps(objects, indent=2) + "\n")
 
     def download(uri, target, limit):
@@ -109,9 +116,12 @@ def collect(metadata_path, output, workers=8):
                                if set(file_uris(value)) and all(uri in objects for uri in file_uris(value))},
                "monitoring": None}
         if attempt.get("jobId"):
-            job = json.loads(cloud("batch", "jobs", "describe", attempt["jobId"], "--format=json"))
-            (directory / "batch.json").write_text(json.dumps(job, indent=2) + "\n")
-            row["batch"] = job
+            try:
+                job = json.loads(cloud("batch", "jobs", "describe", attempt["jobId"], "--format=json"))
+                (directory / "batch.json").write_text(json.dumps(job, indent=2) + "\n")
+                row["batch"] = job
+            except ValueError as error:
+                errors.append({"job": attempt["jobId"], "error": str(error)})
         for field in ("monitoringLog", "stdout", "stderr"):
             uri = attempt.get(field)
             if not uri:
@@ -149,8 +159,9 @@ def collect(metadata_path, output, workers=8):
     manifest = [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  ./{path.relative_to(output)}"
                 for path in sorted(output.rglob("*")) if path.is_file()]
     (output / "evidence-manifest.sha256").write_text("\n".join(manifest) + "\n")
-    if errors:
-        raise ValueError(f"incomplete capture: {len(errors)} unavailable objects; see profiles.json")
+    unexpected = [error for error in errors if not error.get("expected_after_preemption")]
+    if unexpected:
+        raise ValueError(f"incomplete capture: {len(unexpected)} unexpected unavailable artifacts; see profiles.json")
     return result
 
 
@@ -161,3 +172,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     result = collect(args.metadata, args.output)
     print(f"Captured {len(result['attempts'])} terminal attempts; {len(result['not_terminal'])} still pending")
+    if result["errors"]:
+        print(f"WARNING: {len(result['errors'])} preempted-attempt monitoring logs unavailable; capture remains incomplete")

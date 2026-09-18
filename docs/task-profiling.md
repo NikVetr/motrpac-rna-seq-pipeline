@@ -32,10 +32,18 @@ cover molecule and all-read runs. No extra scientific task or BAM scan is needed
 identities. `objects.json` retains size/generation; downloads use that generation.
 A SHA-256 manifest covers captured evidence. Failed parent workflows are
 supported without requiring a final merge. Missing objects are recorded and
-produce an explicit incomplete-capture error. Live/aborted streams may never
+produce an explicit incomplete-capture error, except a monitoring-log 404 for
+an explicitly recorded VM preemption: this prints a warning and keeps
+`complete_capture: false`. Each retry retains its own logs; successful-attempt
+measurements never replace missing earlier measurements. Batch read failures
+also preserve the remaining evidence before reporting an error. Live/aborted streams may never
 have been exported; unavailable measurements must not be treated as final peaks
 or omitted from failure accounting. Capture before deleting jobs or execution
 files. Use a separate directory and metadata export for every snapshot.
+
+Per-sample `qc_diagnostics.json` files are included when available. They retain
+RSEM convergence/short-pair diagnostics, strand consistency, featureCounts
+assignment categories and FastQC flags alongside resource measurements.
 
 The collector supports larger and partial workflows without downloading final
 matrices. Join attempt identities with actual billed durations and market rates
