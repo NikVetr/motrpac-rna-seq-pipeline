@@ -20,6 +20,8 @@ task rnaseqQC {
         File? umi_report
         File rsem_log
         File rsem_counts
+        File rsem_convergence
+        File rsem_gene_convergence
         File feature_counts_summary
         String expression_mode = "unspecified"
         String umi_status = "unspecified"
@@ -55,6 +57,8 @@ task rnaseqQC {
             ~{"--umi-report \"" + umi_report + "\""} \
             --rsem-log "~{rsem_log}" \
             --rsem-counts "~{rsem_counts}" \
+            --rsem-convergence "~{rsem_convergence}" \
+            --rsem-gene-convergence "~{rsem_gene_convergence}" \
             --feature-counts-summary "~{feature_counts_summary}" \
             --expression-mode "~{expression_mode}" \
             --diagnostics "~{SID}.qc_diagnostics.json" \

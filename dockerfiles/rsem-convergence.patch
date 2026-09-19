@@ -1,0 +1,40 @@
+--- a/EM.cpp
++++ b/EM.cpp
+@@ -45,6 +45,7 @@
+ #include "BamWriter.h"
+ 
+ #include "WriteResults.h"
++#include "rsem_convergence.h"
+ 
+ using namespace std;
+ 
+@@ -457,6 +458,10 @@
+ 		fout.close();
+ 	}
+ 
++	// Preserve the final stopping-test state before the output expectation pass.
++	vector<double> previousTheta(probv, probv + M + 1);
++	vector<double> previousCounts(countvs[0], countvs[0] + M + 1);
++
+ 	//calculate expected weights and counts using learned parameters
+ 	//just use the raw theta learned from the data, do not correct for eel or mw
+ 	updateModel = false; calcExpectedWeights = true;
+@@ -476,6 +481,9 @@
+ 		}
+ 	}
+ 	countvs[0][0] += N0;
++
++	writeConvergence(outName, refName, transcripts, ROUND, STOP_CRITERIA,
++	                 previousTheta, theta, previousCounts, countvs[0]);
+ 
+ 	/* destroy attribute */
+ 	pthread_attr_destroy(&attr);
+@@ -626,6 +634,8 @@
+ 		for (int i = 1; i <= M; ++i) eel[i] = transcripts.getTranscriptAt(i).getLength();
+ 		double *countv = new double[M + 1];
+ 		memset(countv, 0, sizeof(double) * (M + 1));
++		writeConvergence(outName, refName, transcripts, 0, STOP_CRITERIA,
++		                 theta, theta, vector<double>(M + 1, 0.0), countv);
+ 		writeResultsEM(M, refName, imdName, transcripts, theta, eel, countv, appendNames);
+ 		if (genBamF) {
+ 			sprintf(outBamF, "%s.transcript.bam", outName);

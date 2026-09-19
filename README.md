@@ -361,6 +361,24 @@ The pinned RSEM 1.3.3 image permits up to 20,000 EM iterations and stops early
 at the unchanged upstream convergence tolerance. The cap is a container build
 setting (`MAX_ROUND` in `dockerfiles/rsem.Dockerfile`), not an RSEM CLI option.
 
+`rsem_convergence` retains a TSV of final-iteration components that meet RSEM's
+stopping-test predicate: previous theta at least `1e-7` and relative change at
+least `0.001`. Rows contain transcript/gene IDs, iteration, previous/final raw
+theta, relative change, expected counts evaluated at each theta, and signed
+count change. Theta is the internal mixture weight, not TPM. A flagged background
+component has `component=background` and `.` IDs; it is not counted as a transcript.
+`rsem_gene_convergence` sums **all** isoforms of each affected gene and also records
+the sum of absolute isoform count changes. Converged fits produce header-only
+TSVs. Optional second-pass outputs use the `all_read_` prefix.
+
+`qc_diagnostics.json` summarizes these tables under `rsem.final_iteration`,
+including affected transcript/gene counts, expression mass, count changes and
+background status. The diagnostic uses RSEM's existing final expectation pass;
+it adds no fitting iterations and does not alter or filter expression results.
+Last-step changes are not uncertainty bounds or proof of non-identifiability.
+Existing input JSONs must select both the matching RSEM and QC images from the
+release profile; pulling the WDL alone does not update saved image settings.
+
 The pipeline also generates intermediate outputs for each sample (stored in Cromwell execution directories):
 - FastQC reports (pre- and post-trimming)
 - STAR alignment BAM files

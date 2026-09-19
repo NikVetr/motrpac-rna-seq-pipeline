@@ -43,6 +43,7 @@ class ModernToolTests(unittest.TestCase):
         self.assertIn("sha256sum -c -", content)
         self.assertIn("const int MAX_ROUND = ${MAX_ROUND};", content)
         self.assertNotIn("STOP_CRITERIA", content)
+        self.assertIn("patch -p1 < /tmp/rsem-convergence.patch", content)
 
     def test_updated_command_interfaces_are_explicit(self):
         cutadapt = (REPO_ROOT / "wdl/cutadapt/cutadapt.wdl").read_text()

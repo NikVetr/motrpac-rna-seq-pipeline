@@ -189,6 +189,8 @@ do
             ;;
         qc_diagnostics|rsem_logs|all_read_rsem_logs)
             ;;
+        rsem_convergence|rsem_gene_convergence|all_read_rsem_convergence|all_read_rsem_gene_convergence)
+            ;;
         umi_expression_metrics)
             ;;
         multiqc_prealign_reports|multiqc_postalign_reports)

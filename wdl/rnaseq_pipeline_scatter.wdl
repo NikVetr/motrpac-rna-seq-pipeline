@@ -652,6 +652,8 @@ workflow rnaseq_pipeline {
         File primary_rsem_isoforms = if use_sample_umi_expression then select_first([umi_molecule_rsem.isoforms]) else select_first([rsem_quant.isoforms])
         File primary_rsem_report = if use_sample_umi_expression then select_first([umi_molecule_rsem.stat_cnt]) else select_first([rsem_quant.stat_cnt])
         File primary_rsem_log = if use_sample_umi_expression then select_first([umi_molecule_rsem.log]) else select_first([rsem_quant.log])
+        File primary_rsem_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.convergence]) else select_first([rsem_quant.convergence])
+        File primary_rsem_gene_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.gene_convergence]) else select_first([rsem_quant.gene_convergence])
         File primary_feature_counts = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else select_first([feature_counts.fc_out])
         File primary_feature_counts_report = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else select_first([feature_counts.fc_summary])
 
@@ -695,6 +697,8 @@ workflow rnaseq_pipeline {
                 umi_report=udup.umi_report,
                 rsem_log=primary_rsem_log,
                 rsem_counts=primary_rsem_report,
+                rsem_convergence=primary_rsem_convergence,
+                rsem_gene_convergence=primary_rsem_gene_convergence,
                 feature_counts_summary=primary_feature_counts_report,
                 expression_mode=expression_mode,
                 umi_status=umi_status,
@@ -776,7 +780,11 @@ workflow rnaseq_pipeline {
         File qc_report_file = merge_results.qc_report
         Array[File] qc_diagnostics = qc_report.diagnostics
         Array[File] rsem_logs = primary_rsem_log
+        Array[File] rsem_convergence = primary_rsem_convergence
+        Array[File] rsem_gene_convergence = primary_rsem_gene_convergence
         Array[File] all_read_rsem_logs = if retain_all_read_expression then select_all(rsem_quant.log) else []
+        Array[File] all_read_rsem_convergence = if retain_all_read_expression then select_all(rsem_quant.convergence) else []
+        Array[File] all_read_rsem_gene_convergence = if retain_all_read_expression then select_all(rsem_quant.gene_convergence) else []
         Array[File] contamination_sampling_manifests = select_all(combined_contamination_qc.sampling_manifest)
         Array[File] multiqc_prealign_reports = select_all(mqc.multiQC_report)
         Array[File] multiqc_postalign_reports = select_all(mqc_pa.multiQC_report)

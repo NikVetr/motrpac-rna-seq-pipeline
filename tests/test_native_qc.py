@@ -52,6 +52,14 @@ class NativeQcTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
+    def convergence_files(self, components, genes):
+        values = "previous_theta\tfinal_theta\trelative_change\texpected_count_previous_theta\texpected_count_final_theta\texpected_count_change"
+        return (
+            self.write("convergence.tsv", "component\ttranscript_id\tgene_id\titeration\t" + values + "\n" + components),
+            self.write("gene_convergence.tsv", "gene_id\titeration\tflagged_transcripts\t" + values +
+                       "\tsum_absolute_isoform_count_change\n" + genes),
+        )
+
     def fixtures(self):
         raw_names = ("raw_R1.fastq.gz", "raw_R2.fastq.gz")
         trim_names = ("trim_R1.fastq.gz", "trim_R2.fastq.gz")
@@ -139,8 +147,12 @@ class NativeQcTests(unittest.TestCase):
                              "Warning: Read pair1 is ignored due to at least one of the mates' length < seed length (= 25)!\n"
                              "Expression Results are written!\n")
             counts = self.write("rsem.cnt", "0 90 0 90\n")
+            convergence, gene_convergence = self.convergence_files(
+                "transcript\tt1\tg1\t10000\t0.01\t0.010012\t0.0012\t0.9\t0.901\t0.001\n",
+                "g1\t10000\t1\t0.02\t0.020012\t0.0006\t1.8\t1.801\t0.001\t0.001\n")
             fc = self.write("fc.summary", "Status\tsample.bam\nAssigned\t80\nUnassigned_NoFeatures\t20\n")
             command.extend(["--rsem-log", str(log), "--rsem-counts", str(counts),
+                            "--rsem-convergence", str(convergence), "--rsem-gene-convergence", str(gene_convergence),
                             "--feature-counts-summary", str(fc), "--expression-mode", "umi_molecule",
                             "--diagnostics", str(output.with_suffix(".json"))])
         optional_reports = {
@@ -189,6 +201,8 @@ class NativeQcTests(unittest.TestCase):
                 self.assertFalse(data["rsem"]["converged"])
                 self.assertEqual(10000, data["rsem"]["iterations"])
                 self.assertEqual(1 / 90, data["rsem"]["ignored_short_pair_fraction"])
+                self.assertEqual(1, data["rsem"]["final_iteration"]["flagged_transcripts"])
+                self.assertEqual(1, data["rsem"]["final_iteration"]["affected_genes"])
                 self.assertEqual(0.8, data["feature_counts"]["assigned_alignment_fraction"])
                 if omitted:
                     self.assertIsNone(data["picard_strand"])
@@ -207,6 +221,27 @@ class NativeQcTests(unittest.TestCase):
             log.write_text(invalid)
             with self.assertRaises(ValueError):
                 qc.parse_rsem(log, counts)
+
+    def test_convergence_empty_background_and_malformed_reports(self):
+        rsem = {"iterations": 20, "components_above_tolerance": 0}
+        paths = self.convergence_files("", "")
+        result = qc.parse_rsem_convergence(*paths, rsem)
+        self.assertEqual(0, result["flagged_transcripts"])
+        self.assertEqual(0, result["affected_genes"])
+        self.assertIsNone(result["background"])
+        rsem["components_above_tolerance"] = 1
+        background = "background\t.\t.\t20\t0.1\t0.102\t0.02\t10\t11\t1\n"
+        paths = self.convergence_files(background, "")
+        result = qc.parse_rsem_convergence(*paths, rsem)
+        self.assertEqual(0, result["flagged_transcripts"])
+        self.assertEqual(1, result["background"]["expected_count_change"])
+        for components, genes in (("", ""), (background.replace("\t20\t", "\t21\t"), ""),
+                                  (background.replace("\t0.02\t", "\tnan\t"), ""),
+                                  (background.replace("background\t.\t.", "transcript\tt1\tg1"), "")):
+            with self.subTest(components=components):
+                paths = self.convergence_files(components, genes)
+                with self.assertRaises(ValueError):
+                    qc.parse_rsem_convergence(*paths, rsem)
 
     def test_absent_umi_is_explicit_and_filename_mismatch_fails(self):
         output = self.root / "without_umi.csv"

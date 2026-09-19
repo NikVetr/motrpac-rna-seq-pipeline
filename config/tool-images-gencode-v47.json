@@ -23,7 +23,7 @@
     },
     "rsem": {
       "version": "1.3.3",
-      "uri": "us-docker.pkg.dev/motrpac-portal/rnaseq/rsem@sha256:55ed79ca9d28a71cfcccba95e0c2bf125efbb29f5f2ea615b807320e89b7f10e",
+      "uri": "us-docker.pkg.dev/motrpac-portal/rnaseq/rsem@sha256:80120bc60cdf1756bc7073c070e18c607450c3f2d3cd1ac9cc3ee49b43a3c3a7",
       "base_uri": "quay.io/biocontainers/rsem@sha256:05b9a0be934d1ac7fe894d965fbe45deff8d4fb1bbbfddb31b339541116b7420",
       "max_iterations": 20000,
       "source_sha256": "90e784dd9df8346caa2a7e3ad2ad07649608a51df1c69bfb6e16f45e611a40dc"

@@ -55,6 +55,8 @@ task rsem {
         File stat_model = "rsem_reference/${SID}.stat/${SID}.model"
         File stat_theta = "rsem_reference/${SID}.stat/${SID}.theta"
         File log = "rsem_reference/${SID}.rsem.log"
+        File convergence = "rsem_reference/${SID}.rsem_convergence.tsv"
+        File gene_convergence = "rsem_reference/${SID}.rsem_gene_convergence.tsv"
     }
 
     runtime {

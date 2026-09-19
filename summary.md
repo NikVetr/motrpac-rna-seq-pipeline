@@ -38,6 +38,10 @@ FastQC module statuses, Picard strand consistency and featureCounts assignment
 categories. RSEM logs are canonical outputs. The pinned RSEM 1.3.3 build permits
 20,000 EM iterations without changing its stopping tolerance; capped fits are
 reported explicitly for review.
+Final-iteration TSVs identify flagged transcripts/background and summarize all
+isoforms of affected genes, including theta and expected-count changes.
+`qc_diagnostics.json` summarizes their counts and expression mass. Diagnostic
+reporting preserves the estimates and uses the existing final expectation pass.
 
 Runtime profiles set resource floors. STAR scratch grows with post-trim pairs,
 UMI scratch with combined STAR BAM bytes, and RSEM RAM/scratch with the
@@ -65,6 +69,9 @@ propagation, gene/isoform merging, profiling and failure accounting. Run
 `tests/check_umi_truth.py` runs the rendered UMI task in its pinned tool
 container with known read families, multimappers and transcript alternatives.
 It requires pysam and Docker or Apptainer.
+`tests/check_rsem_convergence.py --rsem-source /path/to/RSEM-1.3.3` compiles a
+small fixture against the RSEM source headers to verify diagnostic thresholds,
+background handling and all-isoform gene sums; it requires a C++14 compiler.
 Validate the workflow before deployment. GCP task-specific machine selection
 requires Cromwell 92. App deployments must synchronize their bundled workflow,
 input settings and backend with the selected pipeline release.

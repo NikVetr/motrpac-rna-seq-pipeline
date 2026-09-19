@@ -44,6 +44,9 @@ files. Use a separate directory and metadata export for every snapshot.
 Per-sample `qc_diagnostics.json` files are included when available. They retain
 RSEM convergence/short-pair diagnostics, strand consistency, featureCounts
 assignment categories and FastQC flags alongside resource measurements.
+RSEM transcript/background and affected-gene convergence TSVs are captured too,
+with a 64-MiB limit per table. Their summary is under `rsem.final_iteration` in
+the QC JSON; header-only tables indicate no flagged components/genes.
 
 The collector supports larger and partial workflows without downloading final
 matrices. Join attempt identities with actual billed durations and market rates

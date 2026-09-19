@@ -1,10 +1,12 @@
 """Collect the published per-sample QC row directly from native task reports."""
 
 import argparse
+from collections import Counter
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import io
 import json
+import math
 from pathlib import Path
 import re
 import tarfile
@@ -308,6 +310,62 @@ def parse_feature_counts(path):
             "assigned_alignment_fraction": assigned / total if total else None}
 
 
+def parse_rsem_convergence(path, gene_path, rsem):
+    values = ["previous_theta", "final_theta", "relative_change",
+              "expected_count_previous_theta", "expected_count_final_theta", "expected_count_change"]
+
+    def rows(source, columns):
+        with source.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            if reader.fieldnames != columns:
+                raise ValueError("invalid RSEM convergence columns: {}".format(source))
+            result = list(reader)
+        for row in result:
+            if None in row or any(value in (None, "") for value in row.values()):
+                raise ValueError("incomplete RSEM convergence row: {}".format(source))
+            row["iteration"] = integer(row["iteration"], "RSEM iteration")
+            if row["iteration"] != rsem["iterations"]:
+                raise ValueError("RSEM convergence iteration differs from log")
+            for key in values + (["sum_absolute_isoform_count_change"] if source == gene_path else []):
+                row[key] = float(row[key])
+                if not math.isfinite(row[key]) or (key != "expected_count_change" and row[key] < 0):
+                    raise ValueError("invalid RSEM convergence {}".format(key))
+        return result
+
+    components = rows(path, ["component", "transcript_id", "gene_id", "iteration"] + values)
+    genes = rows(gene_path, ["gene_id", "iteration", "flagged_transcripts"] + values +
+                 ["sum_absolute_isoform_count_change"])
+    if len(components) != rsem["components_above_tolerance"]:
+        raise ValueError("RSEM convergence components differ from log")
+    for row in components:
+        if row["component"] not in ("transcript", "background"):
+            raise ValueError("unknown RSEM convergence component")
+        if row["previous_theta"] < 1e-7 or row["relative_change"] < 0.001:
+            raise ValueError("RSEM convergence row does not meet the stopping-test threshold")
+        if (row["component"] == "background") != (row["transcript_id"] == row["gene_id"] == "."):
+            raise ValueError("invalid RSEM background identity")
+    transcripts = [row for row in components if row["component"] == "transcript"]
+    background = [row for row in components if row["component"] == "background"]
+    if len(background) > 1 or len({row["transcript_id"] for row in transcripts}) != len(transcripts):
+        raise ValueError("duplicate RSEM convergence component")
+    affected = Counter(row["gene_id"] for row in transcripts)
+    if len(genes) != len(affected) or {row["gene_id"] for row in genes} != set(affected):
+        raise ValueError("RSEM convergence genes differ from flagged transcripts")
+    for row in genes:
+        if integer(row["flagged_transcripts"], "flagged transcripts") != affected[row["gene_id"]]:
+            raise ValueError("RSEM convergence gene transcript count differs")
+    return {"relative_tolerance": 0.001, "minimum_previous_theta": 1e-7,
+            "flagged_transcripts": len(transcripts), "affected_genes": len(genes),
+            "background": background[0] if background else None,
+            "flagged_transcript_theta": sum(row["final_theta"] for row in transcripts),
+            "flagged_transcript_expected_count": sum(row["expected_count_final_theta"] for row in transcripts),
+            "max_transcript_relative_change": max((row["relative_change"] for row in transcripts), default=0),
+            "max_absolute_transcript_count_change": max((abs(row["expected_count_change"]) for row in transcripts), default=0),
+            "sum_absolute_transcript_count_change": sum(abs(row["expected_count_change"]) for row in transcripts),
+            "max_absolute_gene_count_change": max((abs(row["expected_count_change"]) for row in genes), default=0),
+            "sum_absolute_gene_count_change": sum(abs(row["expected_count_change"]) for row in genes)}
+
+
 def collect(args):
     cutadapt = parse_cutadapt(args.cutadapt_report)
     reads_raw, reads = cutadapt["pairs_in"], cutadapt["pairs_out"]
@@ -481,8 +539,9 @@ def collect(args):
     if list(row) != columns:
         raise AssertionError("QC fields do not match the published column contract")
     if args.diagnostics is not None:
-        if args.rsem_log is None or args.rsem_counts is None or args.feature_counts_summary is None:
-            raise ValueError("diagnostics require RSEM log/counts and featureCounts summary")
+        if any(value is None for value in (args.rsem_log, args.rsem_counts, args.rsem_convergence,
+                                          args.rsem_gene_convergence, args.feature_counts_summary)):
+            raise ValueError("diagnostics require RSEM log/counts/convergence and featureCounts summary")
         fastqc = {}
         for stage, reports in (("pretrim", pre_reports), ("posttrim", post_reports)):
             fastqc[stage] = None if reports is None else {
@@ -498,6 +557,8 @@ def collect(args):
                        "rsem": parse_rsem(args.rsem_log, args.rsem_counts),
                        "feature_counts": parse_feature_counts(args.feature_counts_summary),
                        "picard_strand": strand, "fastqc": fastqc}
+        diagnostics["rsem"]["final_iteration"] = parse_rsem_convergence(
+            args.rsem_convergence, args.rsem_gene_convergence, diagnostics["rsem"])
         with args.diagnostics.open("x", encoding="utf-8") as handle:
             json.dump(diagnostics, handle, indent=2, allow_nan=False)
             handle.write("\n")
@@ -526,6 +587,8 @@ def make_parser():
     parser.add_argument("--umi-report", type=Path)
     parser.add_argument("--rsem-log", type=Path)
     parser.add_argument("--rsem-counts", type=Path)
+    parser.add_argument("--rsem-convergence", type=Path)
+    parser.add_argument("--rsem-gene-convergence", type=Path)
     parser.add_argument("--feature-counts-summary", type=Path)
     parser.add_argument("--expression-mode", default="unspecified")
     parser.add_argument("--diagnostics", type=Path)

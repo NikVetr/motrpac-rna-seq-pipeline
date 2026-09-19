@@ -51,6 +51,8 @@ class TaskProfileTests(unittest.TestCase):
             metadata = root / "metadata.json"
             metrics = json.dumps({"denominators": {"selected_representative_qnames_present_in_transcriptome": 7}}).encode()
             objects = {"gs://b/input.bam": None, "gs://b/counts.isoforms.results": None,
+                       "gs://b/s.rsem_convergence.tsv": b"component\ttranscript_id\n" + b"transcript\tt1\n" * 100000,
+                       "gs://b/s.rsem_gene_convergence.tsv": b"gene_id\titeration\n",
                        "gs://b/s.umi_molecule_expression_metrics.json": metrics}
             metadata.write_text(json.dumps({"id": "workflow", "status": "Failed", "calls": {
                 "rnaseq_pipeline.udup": [
@@ -59,6 +61,8 @@ class TaskProfileTests(unittest.TestCase):
                     {"shardIndex": 1, "attempt": 1, "executionStatus": "Done", "jobId": "job2",
                      "inputs": {"star_align": "gs://b/input.bam"},
                      "outputs": {"results": "gs://b/counts.isoforms.results",
+                                 "convergence": "gs://b/s.rsem_convergence.tsv",
+                                 "gene_convergence": "gs://b/s.rsem_gene_convergence.tsv",
                                  "molecule_expression_metrics": ["gs://b/s.umi_molecule_expression_metrics.json"]}},
                     {"shardIndex": 2, "attempt": 1, "executionStatus": "Running"}]} }))
             downloads = []
@@ -80,7 +84,10 @@ class TaskProfileTests(unittest.TestCase):
             self.assertEqual(1, len(result["not_terminal"]))
             self.assertEqual(10**12, result["attempts"][0]["input_bytes"]["star_align"])
             self.assertEqual("OOM", result["attempts"][0]["failures"][0]["message"])
-            self.assertEqual(1, len(downloads))
+            self.assertEqual(3, len(downloads))
+            self.assertEqual(objects["gs://b/s.rsem_convergence.tsv"].decode(),
+                             result["attempts"][1]["metrics"]["s.rsem_convergence.tsv"])
+            self.assertEqual("gene_id\titeration\n", result["attempts"][1]["metrics"]["s.rsem_gene_convergence.tsv"])
             self.assertEqual(7, result["attempts"][1]["metrics"][
                 "s.umi_molecule_expression_metrics.json"]["denominators"][
                 "selected_representative_qnames_present_in_transcriptome"])

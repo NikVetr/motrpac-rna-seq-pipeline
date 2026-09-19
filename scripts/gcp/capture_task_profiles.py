@@ -16,7 +16,8 @@ from summarize_workflow_cost import monitor
 
 SMALL_METRICS = (".umi_metrics.json", ".umi_molecule_expression_metrics.json",
                  ".sampling_manifest.json", ".Log.final.out", "_qc_info.csv", ".cnt",
-                 "_contamination_sampling.json", ".qc_diagnostics.json", "expression_metadata.tsv")
+                 "_contamination_sampling.json", ".qc_diagnostics.json", "expression_metadata.tsv",
+                 ".rsem_convergence.tsv", ".rsem_gene_convergence.tsv")
 
 
 def cloud(*args):
@@ -138,7 +139,8 @@ def collect(metadata_path, output, workers=8):
             target = directory / name
             if target.exists():
                 raise ValueError(f"duplicate profiling output name: {name}")
-            data = download(uri, target, 1024**2)
+            limit = 64 * 1024**2 if name.endswith((".rsem_convergence.tsv", ".rsem_gene_convergence.tsv")) else 1024**2
+            data = download(uri, target, limit)
             if data is not None:
                 row["metrics"][name] = json.loads(data) if name.endswith(".json") else data.decode()
         row["outputs"] = attempt.get("outputs", {})  # Includes scalar post-trim read counts.
