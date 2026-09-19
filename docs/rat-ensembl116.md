@@ -5,6 +5,9 @@ Use `-a rat -v rn8_v116` with
 and `--star-disk-type SSD`. The release profile pins the same tool/container
 versions as human GENCODE v50, including STAR 2.7.11b, RSEM 1.3.3, Bowtie2 2.5.5,
 Subread 2.1.1, Samtools 1.24 and Picard 3.5.0. `rn8` continues to mean Ensembl 115.
+Hand-edited inputs must also set `rnaseq_pipeline.reference_release` to
+`rn8_v116`; this controls the reference label and rat RSEM memory sizing.
+Pulling the repository does not update already-generated input JSONs.
 
 The shared workflow performs directional UMI deduplication and forward-stranded
 RSEM/featureCounts quantification by default. Canonical outputs include raw RSEM
@@ -41,14 +44,26 @@ for cohorts; configure cache and retry settings explicitly for cold benchmarks.
 
 The candidate requests E2 for STAR, UMI, RSEM, RNA QC and the benchmarked
 preprocessing/counting/QC tasks listed in [the E2 policy](v50-cohort-calibration.md).
-Floors are
-48 GiB STAR RAM / 120 GB SSD, 24 GiB UMI RAM / 80 GB SSD, 24 GiB RSEM RAM /
-60 GB scratch, and 8 GiB RNA-QC RAM. Shared growth from post-trim pair counts and
-the BAM actually entering each step remains active. These are buffered starting
-allocations, not measured rat minima. A six-library, five-tissue calibration
-spanned 28.5–41.4 million post-trim pairs. Peak working RAM was 33.7/9.4/15.1/1.9
-GiB for STAR/UMI/RSEM/RNA-QC; peak scratch was 89.9/21.8/18.9/3.5 GiB.
-Retain these buffered floors while collecting broader cohort measurements.
+Floors are 40 GiB STAR RAM / 120 GB SSD, 11 GiB UMI RAM / 30 GB SSD,
+18 GiB RSEM RAM / 30 GB scratch, and 3 GiB RNA-QC RAM. Across 60 full-depth
+libraries, including five tissues and 54 liver samples, peak working RAM was
+33.7/9.4/15.1/1.9 GiB respectively. STAR, UMI and RSEM allocations provide
+17–20% above those maxima; RNA QC rounds up to whole GiB. MarkDuplicates retains
+36 GiB against a 31.0-GiB peak. Working RAM excludes reclaimable inactive file
+cache; reduced cache space may affect runtime.
+
+Rat RSEM RAM is `max(configured floor, ceil(0.5 + 4 × input BAM GiB))`.
+The same rule applies to molecule and optional all-read expression. Other
+releases retain their existing formula. Shared scratch growth from post-trim
+pairs and the BAM actually entering each step remains active. Calibration covers
+27.2–41.4 million post-trim pairs and 0.63–4.31 GiB molecule transcriptome BAMs;
+larger inputs and optional all-read fits remain extrapolations. STAR and UMI RAM
+are configured allocations, not read-depth growth formulas.
+
+These reduced allocations require validation on subsequent production samples.
+Generate new inputs with the updated runtime profile and retain monitoring;
+do not resubmit completed cohorts solely to adopt provisioning changes. Changed
+task inputs, including the RSEM release selector, can invalidate call-cache hits.
 
 Validation covers contig conversion, mapped-QC aliases, matched references,
 forward strandedness, mixed I1 availability, optional all-read outputs, and exact

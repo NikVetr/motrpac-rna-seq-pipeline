@@ -5,6 +5,7 @@ task rsem {
         String SID
         File transcriptome_bam
         File rsem_reference
+        String reference_release = "unspecified"
 
         Int memory
         Int disk_space
@@ -14,9 +15,10 @@ task rsem {
         String docker
     }
 
-    # Buffered from 297 v47 libraries; shared by molecule and all-read quantification.
+    # Release-specific working-memory buffers; size the BAM entering this call.
     Float input_gib = size(transcriptome_bam, "GiB")
-    Int inferred_memory = 4 * ceil((16.0 + 2.0 * input_gib) / 4.0)
+    Int inferred_memory = if reference_release == "rn8_v116" then ceil(0.5 + 4.0 * input_gib)
+                          else 4 * ceil((16.0 + 2.0 * input_gib) / 4.0)
     Int inferred_scratch_gb = ceil(10.0 + 4.0 * input_gib)
     Int effective_memory = if memory > inferred_memory then memory else inferred_memory
     Int effective_scratch_gb = if disk_space > inferred_scratch_gb then disk_space else inferred_scratch_gb

@@ -473,6 +473,7 @@ workflow rnaseq_pipeline {
                     SID=sample_prefix[i],
                     transcriptome_bam=star_align.transcriptome_bam,
                     rsem_reference=rsem_reference,
+                    reference_release=reference_release,
                 # Runtime Parameters
                     ncpu=rsem_ncpu,
                     use_e2=use_e2,
@@ -638,6 +639,7 @@ workflow rnaseq_pipeline {
                         SID=sample_prefix[i],
                         transcriptome_bam=udup.molecule_transcriptome_bam[0],
                         rsem_reference=rsem_reference,
+                        reference_release=reference_release,
                         ncpu=rsem_ncpu,
                         use_e2=use_e2,
                         memory=rsem_ramGB,

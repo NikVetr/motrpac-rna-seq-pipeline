@@ -95,12 +95,28 @@ with tempfile.TemporaryDirectory() as directory:
         with bam.open("wb") as handle:
             handle.truncate(round(gib * 2**30))  # Sparse file exercises WDL size() without allocating data.
         env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": memory_floor, "ncpu": 10,
-                                    "disk_space": disk_floor}, task.available_inputs)
+                                    "disk_space": disk_floor, "reference_release": "unspecified"}, task.available_inputs)
         for decl in task.postinputs:
             env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
         assert task.runtime["memory"].eval(env, Files("1.0")).value == f"{expected[0]}GB"
         assert task.runtime["disks"].eval(env, Files("1.0")).value == f"local-disk {expected[1]} HDD"
 print("RSEM growth and configured floors PASS")
+
+with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "rat.bam"
+    for gib, floor, rat_memory, other_memory in (
+        (0.63, 18, 18, 20), (4.32, 18, 18, 28), (4.375, 18, 18, 28),
+        (4.376, 18, 19, 28), (10, 18, 41, 36), (30, 18, 121, 76), (4.32, 64, 64, 64),
+    ):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))
+        for release in ("rn8_v116", "rn8", "gencode_v47", "gencode_v50"):
+            env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": floor,
+                "ncpu": 10, "disk_space": 30, "reference_release": release}, task.available_inputs)
+            for decl in task.postinputs:
+                env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+            assert env.resolve("effective_memory").value == (rat_memory if release == "rn8_v116" else other_memory)
+print("Rat RSEM sizing, larger inputs, explicit floors and other releases PASS")
 
 workflow = WDL.load(str(repo / "wdl/rnaseq_pipeline_scatter.wdl")).workflow
 scatter = next(node for node in workflow.body if isinstance(node, WDL.Tree.Scatter))
@@ -168,6 +184,9 @@ def calls_in(nodes):
             yield from calls_in(node.body)
 
 calls = {call.name: call for call in calls_in(workflow.body)}
+for alias in ("rsem_quant", "umi_molecule_rsem"):
+    env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String("rn8_v116"))
+    assert calls[alias].inputs["reference_release"].eval(env, Files("1.0")).value == "rn8_v116"
 for alias in ("pretrim_fastqc", "posttrim_fastqc", "aumi", "cutadapt_umi", "cutadapt_noumi",
               "feature_counts", "umi_molecule_feature_counts_task", "combined_contamination_qc", "md"):
     for enabled in (False, True):
