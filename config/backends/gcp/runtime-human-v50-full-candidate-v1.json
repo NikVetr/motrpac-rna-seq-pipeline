@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v50_full_candidate_v1",
-  "description": "GENCODE v50 E2 profile with 12-thread, 56-GB STAR and read-pair-based scratch. UMI and molecule RSEM memory grow with their input BAMs above 20- and 32-GB floors; RNA-QC uses 12 GB. Configured higher floors are preserved.",
+  "description": "GENCODE v50 E2 profile with 12-thread, 56-GB STAR and read-pair-based scratch. UMI and molecule RSEM memory grow with their input BAMs above 20- and 16-GB floors; RNA-QC uses 12 GB.",
   "overrides": {
     "rnaseq_pipeline.prefer_predefined_n1": false,
     "rnaseq_pipeline.use_e2": true,
@@ -27,7 +27,7 @@
     "rnaseq_pipeline.feature_counts_ramGB": 6,
     "rnaseq_pipeline.feature_counts_disk": 50,
     "rnaseq_pipeline.rsem_ncpu": 10,
-    "rnaseq_pipeline.rsem_ramGB": 32,
+    "rnaseq_pipeline.rsem_ramGB": 16,
     "rnaseq_pipeline.rsem_disk": 60,
     "rnaseq_pipeline.bowtie2_globin_ncpu": 4,
     "rnaseq_pipeline.bowtie2_globin_ramGB": 8,

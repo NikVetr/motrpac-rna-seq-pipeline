@@ -120,7 +120,7 @@ print("Rat RSEM sizing, larger inputs, explicit floors and other releases PASS")
 
 with tempfile.TemporaryDirectory() as directory:
     bam = Path(directory) / "molecules.bam"
-    for gib, floor, expected, scratch in ((4.73, 32, 32, 60), (15, 32, 38, 70),
+    for gib, floor, expected, scratch in ((0, 16, 16, 60), (4.73, 16, 22, 60), (4.73, 32, 32, 60), (15, 32, 38, 70),
                                          (35, 32, 70, 150), (37, 32, 74, 158), (15, 96, 96, 70)):
         with bam.open("wb") as handle:
             handle.truncate(round(gib * 2**30))

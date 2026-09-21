@@ -2,7 +2,7 @@
 
 Use `config/backends/gcp/runtime-human-v50-full-candidate-v1.json` for the
 cohort. STAR uses 12 threads/56 GB RAM; UMI, RSEM and RNA-QC RAM floors
-are 20, 32 and 12 GB. STAR/UMI/RSEM scratch floors are 120/80/60 GB.
+are 20, 16 and 12 GB. STAR/UMI/RSEM scratch floors are 120/80/60 GB.
 [Shared resource rules](cohort-provisioning.md) scale v50 STAR scratch with
 post-trim pairs and UMI/molecule RSEM memory with task input BAM sizes.
 v47, rat and all-read RSEM memory rules are unchanged.
