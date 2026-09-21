@@ -1,10 +1,11 @@
 # Human v50 cohort calibration
 
 Use `config/backends/gcp/runtime-human-v50-full-candidate-v1.json` for the
-initial cohort. STAR uses 12 threads/72 GB RAM; UMI, RSEM and RNA-QC RAM floors
-are 36, 32 and 12 GB. STAR/UMI/RSEM scratch floors are 120/80/60 GB.
-[Shared resource rules](cohort-provisioning.md) remain active; v50 multiplies
-STAR's post-trim scratch tiers by 1.30, rounded up. v47 and rat tiers are unchanged.
+cohort. STAR uses 12 threads/56 GB RAM; UMI, RSEM and RNA-QC RAM floors
+are 20, 32 and 12 GB. STAR/UMI/RSEM scratch floors are 120/80/60 GB.
+[Shared resource rules](cohort-provisioning.md) scale v50 STAR scratch with
+post-trim pairs and UMI/molecule RSEM memory with task input BAM sizes.
+v47, rat and all-read RSEM memory rules are unchanged.
 
 ## E2 policy and calibration scope
 
@@ -21,12 +22,10 @@ Requests beyond E2's supported sizes require an explicit profile/family decision
 Use Cromwell 92. For N1 comparisons, disable `use_e2`; the optional
 `prefer_predefined_n1` policy is restricted to us-west2.
 
-These are buffered starting allocations. Completed v50 RSEM measurements span
-7.38–35.71 GiB working memory, corresponding to 32–56 GB requests. UMI telemetry
-reached 30.94 GiB and RNA-QC approximately 10 GiB. Matched E2 validation covers
-three full-depth human libraries and additional rat processing tasks; it does
-not establish resource minima or universal hardware speedups. Measure broader
-sample tails and the cohort transcript merge before reducing floors.
+These buffered allocations apply to full-depth human muscle libraries; they
+are not universal resource bounds for other tissues or larger inputs. Higher
+configured floors remain effective. Existing input JSONs retain their saved
+floors; regenerate inputs with this runtime profile to use its current settings.
 
 ## Inputs and submission
 

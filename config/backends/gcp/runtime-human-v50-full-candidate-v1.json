@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v50_full_candidate_v1",
-  "description": "GENCODE v50 calibration profile using E2 for STAR, UMI, RSEM and RNA-QC. STAR uses 12 threads, 72 GB RAM and version-specific scratch tiers; UMI, RSEM and RNA-QC RAM floors are 36, 32 and 12 GB. BAM-based growth remains active. Validate the first two full-pipeline libraries before expanding to 100.",
+  "description": "GENCODE v50 E2 profile with 12-thread, 56-GB STAR and read-pair-based scratch. UMI and molecule RSEM memory grow with their input BAMs above 20- and 32-GB floors; RNA-QC uses 12 GB. Configured higher floors are preserved.",
   "overrides": {
     "rnaseq_pipeline.prefer_predefined_n1": false,
     "rnaseq_pipeline.use_e2": true,
@@ -21,7 +21,7 @@
     "rnaseq_pipeline.multiqc_ramGB": 4,
     "rnaseq_pipeline.multiqc_disk": 10,
     "rnaseq_pipeline.star_ncpu": 12,
-    "rnaseq_pipeline.star_ramGB": 72,
+    "rnaseq_pipeline.star_ramGB": 56,
     "rnaseq_pipeline.star_disk": 120,
     "rnaseq_pipeline.feature_counts_ncpu": 2,
     "rnaseq_pipeline.feature_counts_ramGB": 6,
@@ -45,7 +45,7 @@
     "rnaseq_pipeline.rnaqc_ramGB": 12,
     "rnaseq_pipeline.rnaqc_disk": 50,
     "rnaseq_pipeline.umi_dup_ncpu": 4,
-    "rnaseq_pipeline.umi_dup_ramGB": 36,
+    "rnaseq_pipeline.umi_dup_ramGB": 20,
     "rnaseq_pipeline.umi_dup_disk": 80,
     "rnaseq_pipeline.mapped_ncpu": 1,
     "rnaseq_pipeline.mapped_ramGB": 4,

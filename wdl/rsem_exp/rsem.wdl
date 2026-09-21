@@ -6,6 +6,7 @@ task rsem {
         File transcriptome_bam
         File rsem_reference
         String reference_release = "unspecified"
+        Boolean umi_deduplicated = false
 
         Int memory
         Int disk_space
@@ -18,6 +19,7 @@ task rsem {
     # Release-specific working-memory buffers; size the BAM entering this call.
     Float input_gib = size(transcriptome_bam, "GiB")
     Int inferred_memory = if reference_release == "rn8_v116" then ceil(0.5 + 4.0 * input_gib)
+                          else if reference_release == "gencode_v50" && umi_deduplicated then 2 * ceil((14.0 + 1.6 * input_gib) / 2.0)
                           else 4 * ceil((16.0 + 2.0 * input_gib) / 4.0)
     Int inferred_scratch_gb = ceil(10.0 + 4.0 * input_gib)
     Int effective_memory = if memory > inferred_memory then memory else inferred_memory

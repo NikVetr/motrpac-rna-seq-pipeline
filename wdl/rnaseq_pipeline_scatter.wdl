@@ -384,7 +384,7 @@ workflow rnaseq_pipeline {
         File cutadapt_fastq_trimmed_R2 = if (use_index_reads) then select_first([cutadapt_umi.fastq_trimmed_R2]) else select_first([cutadapt_noumi.fastq_trimmed_R2])
         File cutadapt_report = if (use_index_reads) then select_first([cutadapt_umi.report]) else select_first([cutadapt_noumi.report])
         Int cutadapt_read_pairs = if (use_index_reads) then select_first([cutadapt_umi.read_pairs]) else select_first([cutadapt_noumi.read_pairs])
-        # Buffered tiers fitted from observed v47 STAR scratch; star_disk is a floor.
+        # STAR scratch scales with post-trim pairs; star_disk is a floor.
         Int inferred_star_scratch_gb =
             if cutadapt_read_pairs <= 5000000 then 90
             else if cutadapt_read_pairs <= 40000000 then 120
@@ -394,9 +394,9 @@ workflow rnaseq_pipeline {
             else if cutadapt_read_pairs <= 155000000 then 250
             else if cutadapt_read_pairs <= 200000000 then 300
             else 400
-        # v50 produced larger transcriptome BAMs in the matched full-depth pilot.
         Int reference_star_scratch_gb =
-            ceil(inferred_star_scratch_gb * (if reference_release == "gencode_v50" then 1.30 else 1.0))
+            if reference_release == "gencode_v50" then ceil(66.0 + 1.5 * cutadapt_read_pairs / 1000000.0)
+            else inferred_star_scratch_gb
         Int effective_star_scratch_gb =
             if star_disk > reference_star_scratch_gb then star_disk else reference_star_scratch_gb
 
@@ -597,6 +597,9 @@ workflow rnaseq_pipeline {
         }
 
         if (use_index_reads && (run_umi_qc || use_sample_umi_expression)) {
+            Int inferred_umi_memory = if reference_release == "gencode_v50" then
+                2 * ceil((12.0 + 2.2 * size(star_align.bam_file, "GiB")) / 2.0) else umi_dup_ramGB
+            Int effective_umi_memory = if umi_dup_ramGB > inferred_umi_memory then umi_dup_ramGB else inferred_umi_memory
             Float umi_input_gib = size(star_align.bam_file, "GiB") +
                 (if use_sample_umi_expression then size(star_align.transcriptome_bam, "GiB") else 0.0)
             Int inferred_umi_scratch_gb = ceil(2.0 * umi_input_gib + 15.0)
@@ -613,7 +616,7 @@ workflow rnaseq_pipeline {
                 # Runtime Parameters
                     ncpu=umi_dup_ncpu,
                     use_e2=use_e2,
-                    memory=umi_dup_ramGB,
+                    memory=effective_umi_memory,
                     disk_space=effective_umi_scratch_gb,
                     disk_type=umi_dup_disk_type,
                     preemptible=num_preemptible_attempts,
@@ -640,6 +643,7 @@ workflow rnaseq_pipeline {
                         transcriptome_bam=udup.molecule_transcriptome_bam[0],
                         rsem_reference=rsem_reference,
                         reference_release=reference_release,
+                        umi_deduplicated=true,
                         ncpu=rsem_ncpu,
                         use_e2=use_e2,
                         memory=rsem_ramGB,

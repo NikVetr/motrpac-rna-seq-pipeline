@@ -84,7 +84,7 @@ class WdlIoContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            'ceil(inferred_star_scratch_gb * (if reference_release == "gencode_v50" then 1.30 else 1.0))',
+            'if reference_release == "gencode_v50" then ceil(66.0 + 1.5 * cutadapt_read_pairs / 1000000.0)',
             workflow,
         )
         self.assertIn("disk_space=effective_star_scratch_gb", workflow)

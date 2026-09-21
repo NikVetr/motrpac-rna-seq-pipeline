@@ -11,9 +11,10 @@ Each effective request is the larger of the configured floor and the rule below.
 
 | Task | Dynamic rule |
 |---|---|
-| STAR scratch | Post-trim pair-count tiers: 90/120/150/180/200/250/300/400 GB at up to 5/40/65/90/110/155/200/>200 million pairs. Human v50 multiplies the tier by 1.30, rounded up. |
+| STAR scratch | Human v50: `ceil(66 + 1.5 * post_trim_pairs / 1000000)` GB. Other releases retain tiers: 90/120/150/180/200/250/300/400 GB at up to 5/40/65/90/110/155/200/>200 million pairs. |
+| UMI RAM | Human v50: `2 * ceil((12 + 2.2 * genomic_BAM_GiB) / 2)` GB. Other releases use the configured RAM. |
 | UMI scratch | `ceil(2 * combined_STAR_BAM_GiB + 15)` |
-| RSEM RAM | `4 * ceil((16 + 2 * transcriptome_BAM_GiB) / 4)` GB |
+| RSEM RAM | Human v50 molecule expression: `2 * ceil((14 + 1.6 * transcriptome_BAM_GiB) / 2)` GB. Rat v116: `ceil(0.5 + 4 * transcriptome_BAM_GiB)` GB. Other modes/releases: `4 * ceil((16 + 2 * transcriptome_BAM_GiB) / 4)` GB. |
 | RSEM scratch | `ceil(10 + 4 * transcriptome_BAM_GiB)` GB |
 | Gene/expression merge RAM | `4 * ceil(libraries / 75)` GB |
 | Streaming isoform merge RAM | 4 GB minimum, preserving the configured floor |

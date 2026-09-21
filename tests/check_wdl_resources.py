@@ -112,11 +112,25 @@ with tempfile.TemporaryDirectory() as directory:
             handle.truncate(round(gib * 2**30))
         for release in ("rn8_v116", "rn8", "gencode_v47", "gencode_v50"):
             env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": floor,
-                "ncpu": 10, "disk_space": 30, "reference_release": release}, task.available_inputs)
+                "ncpu": 10, "disk_space": 30, "reference_release": release, "umi_deduplicated": False}, task.available_inputs)
             for decl in task.postinputs:
                 env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
             assert env.resolve("effective_memory").value == (rat_memory if release == "rn8_v116" else other_memory)
 print("Rat RSEM sizing, larger inputs, explicit floors and other releases PASS")
+
+with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "molecules.bam"
+    for gib, floor, expected, scratch in ((4.73, 32, 32, 60), (15, 32, 38, 70),
+                                         (35, 32, 70, 150), (37, 32, 74, 158), (15, 96, 96, 70)):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))
+        env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": floor, "ncpu": 10,
+            "disk_space": 60, "reference_release": "gencode_v50", "umi_deduplicated": True}, task.available_inputs)
+        for decl in task.postinputs:
+            env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+        assert env.resolve("effective_memory").value == expected
+        assert env.resolve("effective_scratch_gb").value == scratch
+print("v50 molecule RSEM memory, tail inputs and explicit floors PASS")
 
 workflow = WDL.load(str(repo / "wdl/rnaseq_pipeline_scatter.wdl")).workflow
 scatter = next(node for node in workflow.body if isinstance(node, WDL.Tree.Scatter))
@@ -124,7 +138,6 @@ resources = [node for node in scatter.body if isinstance(node, WDL.Tree.Decl) an
     "inferred_star_scratch_gb", "reference_star_scratch_gb", "effective_star_scratch_gb")]
 for version, expected_tiers in (
     ("gencode_v47", [90, 120, 150, 180, 200, 250, 300, 400]),
-    ("gencode_v50", [117, 156, 195, 234, 260, 325, 390, 520]),
     ("rn8", [90, 120, 150, 180, 200, 250, 300, 400]),
     ("rn8_v116", [90, 120, 150, 180, 200, 250, 300, 400]),
 ):
@@ -143,6 +156,13 @@ for version, expected_tiers in (
                 for decl in resources:
                     env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
                 assert env.resolve("effective_star_scratch_gb").value == max(floor, expected)
+for pairs, floor, expected in ((0, 120, 120), (36000000, 120, 120), (36000001, 120, 121),
+                              (150000000, 120, 291), (300000000, 120, 516), (150000000, 600, 600)):
+    env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String("gencode_v50"))
+    env = env.bind("star_disk", WDL.Value.Int(floor)).bind("cutadapt_read_pairs", WDL.Value.Int(pairs))
+    for decl in resources:
+        env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+    assert env.resolve("effective_star_scratch_gb").value == expected
 defaults = {decl.name: decl.expr.eval(WDL.Env.Bindings(), Files("1.0")).value
             for decl in workflow.inputs if decl.name in (
                 "num_preemptible_attempts", "use_umi_molecule_expression", "retain_all_read_expression")}
@@ -184,6 +204,25 @@ def calls_in(nodes):
             yield from calls_in(node.body)
 
 calls = {call.name: call for call in calls_in(workflow.body)}
+assert "umi_deduplicated" not in calls["rsem_quant"].inputs
+assert calls["umi_molecule_rsem"].inputs["umi_deduplicated"].eval(WDL.Env.Bindings(), Files("1.0")).value
+umi_condition = next(node for node in scatter.body if isinstance(node, WDL.Tree.Conditional)
+                     and calls["udup"] in node.body)
+umi_memory = [node for node in umi_condition.body if isinstance(node, WDL.Tree.Decl)
+              and node.name in ("inferred_umi_memory", "effective_umi_memory")]
+with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "genomic.bam"
+    for gib, floor, expected in ((0, 20, 20), (4, 20, 22), (10, 20, 34), (11, 20, 38), (4, 64, 64)):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))
+        for release in ("gencode_v50", "gencode_v47", "rn8_v116"):
+            env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String(release))
+            env = env.bind("umi_dup_ramGB", WDL.Value.Int(floor))
+            env = env.bind("star_align.bam_file", WDL.Value.File(str(bam)))
+            for decl in umi_memory:
+                env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+            assert env.resolve("effective_umi_memory").value == (expected if release == "gencode_v50" else floor)
+print("UMI BAM-based memory, configured floors and release isolation PASS")
 for alias in ("rsem_quant", "umi_molecule_rsem"):
     env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String("rn8_v116"))
     assert calls[alias].inputs["reference_release"].eval(env, Files("1.0")).value == "rn8_v116"

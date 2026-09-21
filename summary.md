@@ -47,7 +47,8 @@ Runtime profiles set resource floors. STAR scratch grows with post-trim pairs,
 UMI scratch with combined STAR BAM bytes, and RSEM RAM/scratch with the
 transcriptome BAM entering that task. Gene merge RAM grows with library count;
 isoform merging streams rows with a 4-GB minimum. Merge scratch grows with input
-bytes. Human v50 applies a separate STAR scratch multiplier. Rat v116 uses
+bytes. Human v50 uses affine STAR scratch and UMI/molecule RSEM memory rules;
+all-read RSEM retains its separate memory rule. Rat v116 uses
 40/11/18/3-GiB STAR/UMI/RSEM/RNA-QC floors and a separate BAM-based RSEM memory
 formula; these rounded working-memory buffers require deployment validation.
 The human v50 and rat v116 profiles select E2 for supported processing tasks;
