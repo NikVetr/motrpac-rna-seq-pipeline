@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
   "profile_id": "gcp_human_v47_full_lean_v1",
-  "description": "Buffered GENCODE v47 full-depth profile. Its 120-GB STAR and 80-GB UMI values are minimums that the workflow raises per sample; with no cpuPlatform override, Cromwell GCP Batch provisions these explicit CPU and RAM requests as N1 custom workers.",
+  "description": "Buffered GENCODE v47 full-depth E2 profile. Its 120-GB STAR and 80-GB UMI disk values are minimums that the workflow raises per sample.",
   "overrides": {
+    "rnaseq_pipeline.use_e2": true,
     "rnaseq_pipeline.pretrim_fastqc_ncpu": 2,
     "rnaseq_pipeline.pretrim_fastqc_ramGB": 4,
     "rnaseq_pipeline.pretrim_fastqc_disk": 25,

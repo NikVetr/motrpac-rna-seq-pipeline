@@ -9,8 +9,8 @@
     "compressed_md5": "289b91e5e95e8b0450d223246f10a12e",
     "compressed_sha256": "89bbad69a8c89fee5fadec0a2f14a098752d27a4ef7f24e4de9bac681e1b18f4",
     "decompressed_sha256": "04af7379ad6c214f49758db270938a38c41bebbf7b9dc8e24065d8f3a9f08d0d",
-    "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-04af7379ad6c214f49758db270938a38c41bebbf7b9dc8e24065d8f3a9f08d0d/gencode.v50.primary_assembly.annotation.gtf",
-    "gcs_generation": "1789089056751332",
+    "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v50/sha256-04af7379ad6c214f49758db270938a38c41bebbf7b9dc8e24065d8f3a9f08d0d/gencode.v50.primary_assembly.annotation.gtf",
+    "gcs_generation": "1789595608386396",
     "bytes": 4688772094,
     "genes": 78941,
     "transcripts": 646577
@@ -26,8 +26,8 @@
   "artifacts": {
     "star": {
       "filename": "hg38_gencode_v50_star.tar.gz",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-b95b97e01c3e7aacaf0f600a382a38bcb52fc8b381b5d5c5569579f54a219126/hg38_gencode_v50_star.tar.gz",
-      "gcs_generation": "1789090109136784",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v50/sha256-b95b97e01c3e7aacaf0f600a382a38bcb52fc8b381b5d5c5569579f54a219126/hg38_gencode_v50_star.tar.gz",
+      "gcs_generation": "1789596003832822",
       "bytes": 27413196250,
       "sha256": "b95b97e01c3e7aacaf0f600a382a38bcb52fc8b381b5d5c5569579f54a219126",
       "payload_sha256_manifest": "SHA256SUMS",
@@ -48,8 +48,8 @@
     },
     "rsem": {
       "filename": "hg38_gencode_v50_rsem.tar.gz",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-2449d31808bf3c77f6261db28229974614f49dbacf4264e079e3a02b869cc35e/hg38_gencode_v50_rsem.tar.gz",
-      "gcs_generation": "1789088794866685",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v50/sha256-2449d31808bf3c77f6261db28229974614f49dbacf4264e079e3a02b869cc35e/hg38_gencode_v50_rsem.tar.gz",
+      "gcs_generation": "1789595514960624",
       "bytes": 464767494,
       "sha256": "2449d31808bf3c77f6261db28229974614f49dbacf4264e079e3a02b869cc35e",
       "payload_sha256_manifest": "SHA256SUMS",
@@ -64,8 +64,8 @@
     },
     "refFlat": {
       "filename": "refFlat_hg38_gencode_v50_ucsc479.txt",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v50/sha256-1d9d39677889d261d07b6b290ef1f440ba534395640ab7fe090d554e30dd3182/refFlat_hg38_gencode_v50_ucsc479.txt",
-      "gcs_generation": "1789088857552343",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/gencode_v50/sha256-1d9d39677889d261d07b6b290ef1f440ba534395640ab7fe090d554e30dd3182/refFlat_hg38_gencode_v50_ucsc479.txt",
+      "gcs_generation": "1789595511383635",
       "bytes": 148491754,
       "sha256": "1d9d39677889d261d07b6b290ef1f440ba534395640ab7fe090d554e30dd3182",
       "rows": 646577,
@@ -86,22 +86,22 @@
     },
     "globin": {
       "filename": "hs_globin.tar.gz",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_globin.tar.gz",
-      "gcs_generation": "1789087098215424",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_globin.tar.gz",
+      "gcs_generation": "1789667621233031",
       "bytes": 41675,
       "sha256": "2b94be8731356cd36e185658c44ac443086fe5bab5c88e6355855ddbe9489a32"
     },
     "rRNA": {
       "filename": "hs_rRNA.tar.gz",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/hs_rRNA.tar.gz",
-      "gcs_generation": "1789087102160530",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/hs_rRNA.tar.gz",
+      "gcs_generation": "1789667621244288",
       "bytes": 108985,
       "sha256": "328dc72da8dd2e1728218c0bbae3de47a3113edd4f6cdb1238edf2d375534a6f"
     },
     "phix": {
       "filename": "phix.tar.gz",
-      "gcs_uri": "gs://motrpac-rnaseq-modernization-us-west2/references/gencode_v47/human/phix.tar.gz",
-      "gcs_generation": "1789087105755556",
+      "gcs_uri": "gs://omicspipelines-public-resources/rnaseq/references/human/phix.tar.gz",
+      "gcs_generation": "1789667621248220",
       "bytes": 43732,
       "sha256": "847445cae6086e3b4d6bcd226eb41fb81651d1a1c3f1c0025a27538fe81c7ae3"
     }

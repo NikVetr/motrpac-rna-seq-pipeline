@@ -48,6 +48,12 @@ Add `--allow-missing-umis` for mixed I1 availability; those samples are explicit
 marked as not deduplicated. Default counting produces molecule-level gene and
 isoform results in one RSEM pass. A secondary all-read pass is optional.
 
+For v47, select `-v gencode_v47` and
+`--runtime-profile config/backends/gcp/runtime-human-v47-full-lean-v1.json`.
+Both human profiles enable E2; their release profiles select references in
+the us-central1 `omicspipelines-public-resources` bucket. Keep execution storage
+and workers in that region when using these copies.
+
 Copy `config/backends/gcp/workflow-options-cohort.example.json` and set zones
 and monitoring-script placement for the actual execution region. It enables
 cache reads/writes, `ContinueWhilePossible`, and `maxRetries: 0` for command

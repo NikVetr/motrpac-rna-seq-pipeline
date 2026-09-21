@@ -302,6 +302,8 @@ class InputJsonGeneratorTests(unittest.TestCase):
             )
             expected_keys = generator.RUNTIME_RESOURCE_KEYS | (
                 generator.RUNTIME_POLICY_KEYS if "v50" in filename else set())
+            if filename == "runtime-human-v47-full-lean-v1.json":
+                expected_keys = expected_keys | {"rnaseq_pipeline.use_e2"}
             self.assertEqual(expected_keys, set(overrides))
             profiled_document = self.make_document(runtime_overrides=overrides)
             self.assertEqual(
@@ -333,8 +335,9 @@ class InputJsonGeneratorTests(unittest.TestCase):
             profile_dir / "runtime-human-v47-high-candidate-v1.json"
         )
 
-        self.assertEqual(set(lean), set(high))
-        changed = {key for key in lean if lean[key] != high[key]}
+        self.assertTrue(lean["rnaseq_pipeline.use_e2"])
+        self.assertEqual(set(lean) - {"rnaseq_pipeline.use_e2"}, set(high))
+        changed = {key for key in high if lean[key] != high[key]}
         self.assertEqual({"rnaseq_pipeline.star_disk"}, changed)
         self.assertGreater(high["rnaseq_pipeline.star_disk"], lean["rnaseq_pipeline.star_disk"])
         for cpu_key in (key for key in lean if key.endswith("_ncpu")):
