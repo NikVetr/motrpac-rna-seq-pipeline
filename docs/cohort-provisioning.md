@@ -12,9 +12,9 @@ Each effective request is the larger of the configured floor and the rule below.
 | Task | Dynamic rule |
 |---|---|
 | STAR scratch | Human v50: `ceil(66 + 1.5 * post_trim_pairs / 1000000)` GB. Other releases retain tiers: 90/120/150/180/200/250/300/400 GB at up to 5/40/65/90/110/155/200/>200 million pairs. |
-| UMI RAM | Human v50: `2 * ceil((12 + 2.2 * genomic_BAM_GiB) / 2)` GB. Other releases use the configured RAM. |
+| UMI RAM | Human v50: `2 * ceil((12 + 2.2 * genomic_BAM_GiB) / 2)` GB. Rat v116: `ceil(8.1 + 1.2 * genomic_BAM_GiB)` GB. Other releases use the configured RAM. |
 | UMI scratch | `ceil(2 * combined_STAR_BAM_GiB + 15)` |
-| RSEM RAM | Human v50 molecule expression: `2 * ceil((14 + 1.6 * transcriptome_BAM_GiB) / 2)` GB. Rat v116: `ceil(0.5 + 4 * transcriptome_BAM_GiB)` GB. Other modes/releases: `4 * ceil((16 + 2 * transcriptome_BAM_GiB) / 4)` GB. |
+| RSEM RAM | Human v50 molecule expression: `2 * ceil((14 + 1.6 * transcriptome_BAM_GiB) / 2)` GB. Rat v116 molecule expression: `ceil(2 + 4 * transcriptome_BAM_GiB)` GB; all-read expression retains `ceil(0.5 + 4 * transcriptome_BAM_GiB)` with an 18-GB minimum. Other modes/releases: `4 * ceil((16 + 2 * transcriptome_BAM_GiB) / 4)` GB. |
 | RSEM scratch | `ceil(10 + 4 * transcriptome_BAM_GiB)` GB |
 | Gene/expression merge RAM | `4 * ceil(libraries / 75)` GB |
 | Streaming isoform merge RAM | 4 GB minimum, preserving the configured floor |
@@ -58,6 +58,11 @@ cache reads/writes in workflow options. Set
 `"workflow_failure_mode": "ContinueWhilePossible"` so independent samples
 continue after a terminal failure. Merges requiring a failed sample wait for
 repair; this setting does not increase RAM or retry command failures.
+The cohort options example sets `default_runtime_attributes.maxRetries = 1`
+for one additional failure retry, independent of the Spot-attempt allowance.
+This also covers Batch failures misclassified as non-preemptions by Cromwell 92;
+it does not enlarge the VM and can repeat a deterministic failure once. Update
+existing submission options explicitly to adopt it.
 
 For 100-library calibration, permit scatter width of at least 100 and enough
 total task calls, including retries (5,000 is sufficient for the default graph).

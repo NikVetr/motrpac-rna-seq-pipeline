@@ -598,7 +598,9 @@ workflow rnaseq_pipeline {
 
         if (use_index_reads && (run_umi_qc || use_sample_umi_expression)) {
             Int inferred_umi_memory = if reference_release == "gencode_v50" then
-                2 * ceil((12.0 + 2.2 * size(star_align.bam_file, "GiB")) / 2.0) else umi_dup_ramGB
+                2 * ceil((12.0 + 2.2 * size(star_align.bam_file, "GiB")) / 2.0)
+                else if reference_release == "rn8_v116" then ceil(8.1 + 1.2 * size(star_align.bam_file, "GiB"))
+                else umi_dup_ramGB
             Int effective_umi_memory = if umi_dup_ramGB > inferred_umi_memory then umi_dup_ramGB else inferred_umi_memory
             Float umi_input_gib = size(star_align.bam_file, "GiB") +
                 (if use_sample_umi_expression then size(star_align.transcriptome_bam, "GiB") else 0.0)

@@ -119,6 +119,27 @@ with tempfile.TemporaryDirectory() as directory:
 print("Rat RSEM sizing, larger inputs, explicit floors and other releases PASS")
 
 with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "rat-molecules.bam"
+    for gib, floor, expected in ((0, 6, 6), (1, 6, 6), (1.01, 6, 7), (3, 6, 14),
+                                 (4.31, 6, 20), (8.91, 6, 38), (3, 32, 32)):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))
+        for molecules in (False, True):
+            env = WDL.values_from_json({"transcriptome_bam": str(bam), "memory": floor,
+                "ncpu": 10, "disk_space": 30, "use_e2": True,
+                "reference_release": "rn8_v116", "umi_deduplicated": molecules}, task.available_inputs)
+            for decl in task.postinputs:
+                env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+            actual = env.resolve("effective_memory").value
+            if molecules:
+                assert actual == expected
+            else:
+                assert actual >= max(18, floor)
+            cpu = env.resolve("e2_cpu").value
+            assert cpu % 2 == 0 and 0.5 <= actual / cpu <= 8
+print("Rat molecule RSEM scaling, E2 shapes, all-read minimum and explicit floors PASS")
+
+with tempfile.TemporaryDirectory() as directory:
     bam = Path(directory) / "molecules.bam"
     for gib, floor, expected, scratch in ((0, 16, 16, 60), (4.73, 16, 22, 60), (4.73, 32, 32, 60), (15, 32, 38, 70),
                                          (35, 32, 70, 150), (37, 32, 74, 158), (15, 96, 96, 70)):
@@ -215,7 +236,7 @@ with tempfile.TemporaryDirectory() as directory:
     for gib, floor, expected in ((0, 20, 20), (4, 20, 22), (10, 20, 34), (11, 20, 38), (4, 64, 64)):
         with bam.open("wb") as handle:
             handle.truncate(round(gib * 2**30))
-        for release in ("gencode_v50", "gencode_v47", "rn8_v116"):
+        for release in ("gencode_v50", "gencode_v47", "rn8"):
             env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String(release))
             env = env.bind("umi_dup_ramGB", WDL.Value.Int(floor))
             env = env.bind("star_align.bam_file", WDL.Value.File(str(bam)))
@@ -223,6 +244,26 @@ with tempfile.TemporaryDirectory() as directory:
                 env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
             assert env.resolve("effective_umi_memory").value == (expected if release == "gencode_v50" else floor)
 print("UMI BAM-based memory, configured floors and release isolation PASS")
+
+task = WDL.load(str(repo / "wdl/umi_dup/umi_dup.wdl")).tasks[0]
+with tempfile.TemporaryDirectory() as directory:
+    bam = Path(directory) / "rat-genomic.bam"
+    for gib, floor, expected, cpu in ((0, 8, 9, 2), (1.23, 8, 10, 2), (3.18, 8, 12, 2),
+        (3.74, 8, 13, 2), (6, 8, 16, 2), (6.6, 8, 17, 4), (10, 8, 21, 4), (3, 32, 32, 4)):
+        with bam.open("wb") as handle:
+            handle.truncate(round(gib * 2**30))
+        env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String("rn8_v116"))
+        env = env.bind("umi_dup_ramGB", WDL.Value.Int(floor))
+        env = env.bind("star_align.bam_file", WDL.Value.File(str(bam)))
+        for decl in umi_memory:
+            env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+        assert env.resolve("effective_umi_memory").value == expected
+        env = WDL.values_from_json({"memory": expected, "ncpu": 2, "use_e2": True}, task.available_inputs)
+        for decl in task.postinputs:
+            env = env.bind(decl.name, decl.expr.eval(env, Files("1.0")))
+        assert task.runtime["gcp"].eval(env, Files("1.0")).json == {
+            "predefinedMachineType": f"e2-custom-{cpu}-{expected * 1024}"}
+print("Rat UMI small/failed/deep BAMs, explicit floors and E2 CPU growth PASS")
 for alias in ("rsem_quant", "umi_molecule_rsem"):
     env = WDL.Env.Bindings().bind("reference_release", WDL.Value.String("rn8_v116"))
     assert calls[alias].inputs["reference_release"].eval(env, Files("1.0")).value == "rn8_v116"

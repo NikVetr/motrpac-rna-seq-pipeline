@@ -50,8 +50,9 @@ isoform merging streams rows with a 4-GB minimum. Merge scratch grows with input
 bytes. Human v50 uses affine STAR scratch and UMI/molecule RSEM memory rules,
 with 56/20/16/12-GiB STAR/UMI/RSEM/RNA-QC profile floors;
 all-read RSEM retains its separate memory rule. Rat v116 uses
-40/11/18/3-GiB STAR/UMI/RSEM/RNA-QC floors and a separate BAM-based RSEM memory
-formula; these rounded working-memory buffers require deployment validation.
+38/8/6/3-GiB STAR/UMI/molecule-RSEM/RNA-QC floors, BAM-based UMI/RSEM memory
+rules and two-CPU UMI workers that grow when RAM requires it. Upper-tail buffers
+cover measured tissue variation; optional all-read RSEM retains an 18-GiB minimum.
 The human v47 full-depth, human v50 and rat v116 profiles select E2 for supported
 processing tasks; one-CPU reporting and merges retain backend selection. See
 [cohort provisioning](docs/cohort-provisioning.md) for rules and deployment.
@@ -64,7 +65,9 @@ resources, capture attempt-level evidence and estimate costs from frozen rates.
 Human release profiles select matched v47/v50 references in us-central1.
 Execution storage and workers must share a region; source references and FASTQs
 require explicit read permissions and placement decisions. Cohort submissions
-use persistent call caching and `ContinueWhilePossible`; the separate canary
+use persistent call caching, `ContinueWhilePossible` and one bounded failure
+retry in the cohort options example. UMI pipeline failures report producer and
+consumer exit codes before stopping output publication. The separate canary
 backend limits concurrency and disables caching for controlled measurements.
 
 Tests cover input and reference contracts, QC parsing, UMI grouping and molecule

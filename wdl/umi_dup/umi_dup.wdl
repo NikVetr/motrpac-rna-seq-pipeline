@@ -68,7 +68,11 @@ task UMI_dup {
                 --database representatives.tmp.sqlite3 \
                 --umi-length 8 \
                 --representation rx_v1 \
-                --container "~{docker}"
+                --container "~{docker}" || {
+                    pipeline_status=("${PIPESTATUS[@]}")
+                    printf 'UMI pipeline failed: umi_tools=%s propagation=%s\n' "${pipeline_status[@]}" >&2
+                    exit 1
+                }
             if [[ -e representatives.tmp.sqlite3 ]]; then
                 echo "Task-local representative database was not deleted" >&2
                 exit 2

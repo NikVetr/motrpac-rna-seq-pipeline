@@ -2,6 +2,7 @@
 import argparse
 from collections import Counter
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -85,6 +86,30 @@ def check_outputs(root):
     assert not list(root.glob("*.sqlite3*"))
 
 
+def check_pipeline_failures(root, command):
+    stubs = root / "stubs"
+    stubs.mkdir()
+    (stubs / "umi_tools").write_text(
+        '#!/bin/bash\nif [[ "$1" == --version ]]; then echo "UMI-tools version: 1.1.6"; '
+        'else echo incomplete-bam; exit "$UMI_EXIT"; fi\n')
+    (stubs / "python3").write_text(
+        '#!/bin/bash\ncase "$1" in\n*propagate_molecule_qnames.py) cat >/dev/null; exit "$PROPAGATION_EXIT";;\n'
+        '*summarize*) touch unexpected-summary; exit 0;;\nesac\n')
+    for path in stubs.iterdir():
+        path.chmod(0o755)
+    for upstream, downstream in ((137, 2), (137, 0), (0, 2)):
+        directory = root / f"failure-{upstream}-{downstream}"
+        directory.mkdir()
+        env = dict(os.environ, PATH=str(stubs) + os.pathsep + os.environ["PATH"],
+                   UMI_EXIT=str(upstream), PROPAGATION_EXIT=str(downstream))
+        result = subprocess.run(["bash", "-c", command], cwd=directory, env=env,
+                                capture_output=True, text=True)
+        assert result.returncode == 1, result.stderr
+        assert f"umi_tools={upstream} propagation={downstream}" in result.stderr, result.stderr
+        assert not (directory / "unexpected-summary").exists()
+        assert not list(directory.glob("*.umi_molecules.*"))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apptainer-image", type=Path, help="Local SIF of the pinned UMI base image")
@@ -109,7 +134,9 @@ def main():
                       "-v", f"{root}:{root}", "-w", str(root), image]
         subprocess.run(runner + ["bash", "-c", command], cwd=root, check=True)
         check_outputs(root)
+        check_pipeline_failures(root, command)
     print("UMI directional families, multimappers, transcript alternatives and denominators PASS")
+    print("UMI producer/consumer failures retain both statuses and prevent output publication PASS")
 
 
 if __name__ == "__main__":
