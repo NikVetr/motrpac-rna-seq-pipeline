@@ -17,6 +17,10 @@ Counting is forward-stranded. Directional UMI molecule expression is canonical
 when I1 reads are present. Missing UMIs fail unless `--allow-missing-umis` is
 enabled; permitted missing-I1 samples use all-read expression and record
 `not_deduplicated=1` and a skip reason in expression metadata.
+`--trim-trailing-i1-base` removes a fixed ninth base from nine-base I1 reads
+before UMI attachment; otherwise any non-eight-base I1 fails.
+Every nine-base record is trimmed; a whole-file check requires at least 90% A
+at the ninth position and reports the observed fraction.
 `--all-read-expression-only` selects all-read counting for every sample;
 `--retain-all-read-expression` adds a secondary all-read pass to molecule
 counting. Neither option changes strandedness.

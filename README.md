@@ -239,6 +239,12 @@ non-UMI-deduplicated matrices under `all_read_*` names, or pass
 To run without I1 files, combine `--no-index` with
 `--all-read-expression-only`; UMI QC is then omitted. For mixed availability,
 `--allow-missing-umis` preserves molecule expression wherever I1 is present.
+`--trim-trailing-i1-base` removes a fixed ninth base from nine-base I1 reads
+(an eight-base UMI plus one extra cycle) and adds an `i1_layout` column to the
+expression metadata. Eight-base I1 is passed through unchanged, so existing
+call-cache entries remain valid; without the flag, any other I1 length fails.
+All nine-base records are trimmed, regardless of their final base; the task
+reports the whole-file ninth-base A frequency and fails if it is below 90%.
 The v50 assets are in a private us-west2 bucket; the executing service account
 needs read access. For full-depth v50 calibration, select
 `--runtime-profile config/backends/gcp/runtime-human-v50-full-candidate-v1.json`;

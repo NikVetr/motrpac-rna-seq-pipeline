@@ -416,6 +416,7 @@ def main(command_args: argparse.Namespace):
         command_args, "umi_molecule_expression", True
     )
     allow_missing_umis = getattr(command_args, "allow_missing_umis", False)
+    trim_trailing_i1_base = getattr(command_args, "trim_trailing_i1_base", False)
     retain_all_read_expression = getattr(
         command_args, "retain_all_read_expression", False
     )
@@ -433,6 +434,8 @@ def main(command_args: argparse.Namespace):
     }
     if allow_missing_umis and (not command_args.index or not use_umi_molecule_expression):
         raise ValueError("--allow-missing-umis requires index discovery and molecule expression")
+    if trim_trailing_i1_base and not command_args.index:
+        raise ValueError("--trim-trailing-i1-base requires index discovery")
     if use_umi_molecule_expression and not command_args.index:
         raise ValueError(
             "directional UMI molecule expression requires matched I1 FASTQs"
@@ -539,6 +542,7 @@ def main(command_args: argparse.Namespace):
                 use_umi_molecule_expression=use_umi_molecule_expression,
                 retain_all_read_expression=retain_all_read_expression,
                 allow_missing_umis=allow_missing_umis,
+                trim_trailing_i1_base=trim_trailing_i1_base,
                 **qc_settings,
             )
         )
@@ -583,6 +587,7 @@ def make_json_dict(
     star_disk_type=None,
     umi_dup_disk_type=None,
     allow_missing_umis=False,
+    trim_trailing_i1_base=False,
 ):
     if r1 is None:
         r1 = []
@@ -753,6 +758,8 @@ def make_json_dict(
         use_umi_molecule_expression
     )
     filled_dict["rnaseq_pipeline.allow_missing_umis"] = allow_missing_umis
+    if trim_trailing_i1_base:
+        filled_dict["rnaseq_pipeline.trim_trailing_i1_base"] = True
     filled_dict["rnaseq_pipeline.reference_release"] = version
     filled_dict["rnaseq_pipeline.retain_all_read_expression"] = (
         retain_all_read_expression
@@ -909,6 +916,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--allow-missing-umis", action="store_true",
         help="deduplicate when I1 exists; otherwise quantify all reads and record the skip",
+    )
+    parser.add_argument(
+        "--trim-trailing-i1-base", action="store_true",
+        help="remove a fixed ninth base from nine-base I1 reads; eight-base I1 is unchanged",
     )
     parser.add_argument(
         "--retain-all-read-expression",

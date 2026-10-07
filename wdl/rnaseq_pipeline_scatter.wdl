@@ -23,6 +23,10 @@ workflow rnaseq_pipeline {
 
     meta {
         task_labels: {
+            trim_i1: {
+                task_name: "Trim I1",
+                description: "Optionally remove a fixed ninth base from nine-base index reads before UMI attachment"
+            },
             aumi: {
                 task_name: "AttachUMI",
                 description: "Append the UMI index from I1 file to the read names of R1 and R2 FASTQ files so that the UMI info for each read can be tracked for downstream analysis"
@@ -241,6 +245,8 @@ workflow rnaseq_pipeline {
         Boolean use_umi_molecule_expression = true
         Boolean retain_all_read_expression = false
         Boolean allow_missing_umis = false
+        # Opt in to removing a fixed ninth I1 base (eight-base UMI plus one extra cycle).
+        Boolean trim_trailing_i1_base = false
 
         # Samtools Parameters
         Int mapped_ncpu
@@ -304,9 +310,24 @@ workflow rnaseq_pipeline {
         Boolean run_all_read_expression = expression_policy_valid && (!use_sample_umi_expression || retain_all_read_expression)
         String expression_mode = if use_sample_umi_expression then "umi_molecules" else "all_read"
         String umi_status = if !use_index_reads then "skipped_no_umi" else if use_sample_umi_expression then "deduplicated" else "not_requested"
-        Array[String] expression_metadata_row = [sample_prefix[i], reference_release,
+        # Untrimmed samples pass the original I1 to aumi, preserving its call-cache key.
+        if (trim_trailing_i1_base && use_index_reads) {
+            call attach_umi.trimIndexRead as trim_i1 {
+                input:
+                    SID=sample_prefix[i],
+                    fastqi1=sample_index[0],
+                    use_e2=use_e2,
+                    preemptible=num_preemptible_attempts,
+                    docker=attach_umi_docker
+            }
+        }
+        Array[File] trimmed_index = select_first([trim_i1.trimmed_index, []])
+        String i1_layout = if !use_index_reads then "none"
+            else if length(trimmed_index) > 0 then "umi8_trailing_base_trimmed" else "umi8"
+
+        Array[String] expression_metadata_row = flatten([[sample_prefix[i], reference_release,
             if use_index_reads then "1" else "0", if use_sample_umi_expression then "0" else "1",
-            expression_mode, umi_status]
+            expression_mode, umi_status], if trim_trailing_i1_base then [i1_layout] else []])
         if (run_pretrim_fastqc) {
             call fastqc.fastQC as pretrim_fastqc {
                 input:
@@ -331,7 +352,7 @@ workflow rnaseq_pipeline {
                     SID=sample_prefix[i],
                     fastqr1=fastq1[i],
                     fastqr2=fastq2[i],
-                    fastqi1=sample_index[0],
+                    fastqi1=if length(trimmed_index) > 0 then trimmed_index[0] else sample_index[0],
                 # Runtime Parameters
                     ncpu=attach_umi_ncpu,
                     use_e2=use_e2,
@@ -728,7 +749,8 @@ workflow rnaseq_pipeline {
             feature_counts_files=primary_feature_counts,
             qc_report_files=qc_report.rnaseq_report,
             expression_metadata_rows=flatten([
-                [["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]],
+                [flatten([["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"],
+                    if trim_trailing_i1_base then ["i1_layout"] else []])],
                 expression_metadata_row]),
         # Runtime Parameters
             ncpu=merge_results_ncpu,

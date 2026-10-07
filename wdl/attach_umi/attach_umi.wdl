@@ -104,3 +104,62 @@ task attachUMI {
         description: "Attach synchronized eight-base index-read UMIs to paired FASTQ headers"
     }
 }
+
+task trimIndexRead {
+    input {
+        String SID
+        File fastqi1
+        Boolean use_e2 = false
+        Int preemptible
+        String docker
+    }
+
+    Int disk_gb = ceil(10.0 + 3.0 * size(fastqi1, "GiB"))
+
+    command <<<
+        set -euo pipefail
+        # Eight-base I1 passes through untouched; attachUMI validates every record.
+        # Every nine-base record is trimmed; validate the extra-A layout over the whole file.
+        gawk -v src="~{fastqi1}" -v out="~{SID}_I1.trimmed.fastq.gz" '
+            function fail(message) { print "trimIndexRead: " message > "/dev/stderr"; exit 1 }
+            function read_record() {
+                if ((reader | getline header) <= 0) return 0
+                if ((reader | getline seq) <= 0 || (reader | getline plus) <= 0 || (reader | getline qual) <= 0 ||
+                    substr(header, 1, 1) != "@" || substr(plus, 1, 1) != "+") fail("malformed record " n + 1)
+                return 1
+            }
+            BEGIN {
+                reader = "gzip -cd -- " src
+                if (!read_record()) fail("index FASTQ is empty")
+                if (length(seq) == 8) exit
+                if (length(seq) != 9) fail("unexpected UMI length " length(seq))
+                writer = "gzip -c > " out
+                do {
+                    if (length(seq) != 9 || length(qual) != 9) fail("record " n + 1 " is not nine bases")
+                    print header "\n" substr(seq, 1, 8) "\n+\n" substr(qual, 1, 8) | writer
+                    if (substr(seq, 9, 1) == "A") adenines++
+                    n++
+                } while (read_record())
+                if (close(reader) || close(writer)) fail("index decompression or compression failed")
+                printf "trimIndexRead: records=%d ninth_A_count=%d ninth_A_fraction=%.6f\n", n, adenines, adenines / n
+                if (adenines < 0.9 * n) fail("ninth-base A fraction is below 90%; not the expected extra-A layout")
+            }'
+    >>>
+
+    output {
+        Array[File] trimmed_index = glob("${SID}_I1.trimmed.fastq.gz")
+    }
+
+    runtime {
+        docker: docker
+        cpu: 1
+        memory: "2GB"
+        gcp: if use_e2 then object { predefinedMachineType: "e2-custom-2-2048" } else object {}
+        disks: "local-disk ${disk_gb} HDD"
+        preemptible: preemptible
+    }
+
+    meta {
+        description: "Optionally trim a fixed ninth base from nine-base I1 reads carrying an eight-base UMI"
+    }
+}

@@ -204,6 +204,12 @@ class InputJsonGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be HDD or SSD"):
             self.make_document(umi_dup_disk_type="LOCAL")
 
+    def test_trailing_i1_trim_is_opt_in(self) -> None:
+        options = {"include_index": True, "use_umi_molecule_expression": True}
+        self.assertNotIn("rnaseq_pipeline.trim_trailing_i1_base", self.make_document(**options))
+        document = self.make_document(**options, trim_trailing_i1_base=True)
+        self.assertTrue(document["rnaseq_pipeline.trim_trailing_i1_base"])
+
     def test_umi_molecule_expression_policy_requires_i1(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a matched I1"):
             self.make_document(use_umi_molecule_expression=True)

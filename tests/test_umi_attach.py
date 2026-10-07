@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import re
 import shutil
 import shlex
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ATTACH_SCRIPT = REPO_ROOT / "wdl" / "attach_umi" / "UMI_attach.awk"
+ATTACH_WDL = REPO_ROOT / "wdl" / "attach_umi" / "attach_umi.wdl"
 AWK = shutil.which("gawk") or shutil.which("awk")
 
 
@@ -183,6 +185,36 @@ trap - EXIT
             "COPY wdl/attach_umi/UMI_attach.awk /usr/local/src/UMI_attach.awk",
             dockerfile,
         )
+
+
+class TrimIndexReadTests(unittest.TestCase):
+    def run_trim(self, index: bytes) -> tuple[int, bytes | None]:
+        program = re.search(r"task trimIndexRead.*?gawk [^']*'(.*?)'", ATTACH_WDL.read_text(), re.S).group(1)
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            with gzip.open(temp / "I1.fastq.gz", "wb") as handle:
+                handle.write(index)
+            completed = subprocess.run([AWK, "-v", "src=I1.fastq.gz", "-v", "out=trimmed.fastq.gz", program],
+                                       cwd=temp, capture_output=True, check=False)
+            trimmed = temp / "trimmed.fastq.gz"
+            return completed.returncode, gzip.decompress(trimmed.read_bytes()) if trimmed.exists() else None
+
+    def test_only_a_fixed_ninth_base_is_trimmed(self) -> None:
+        self.assertEqual((0, None), self.run_trim(fastq_record("a", "ACGTACGT")))
+        self.assertEqual(
+            (0, fastq_record("a", "ACGTACGT", "ABCDEFGH") + fastq_record("b", "TTTTCCCC")),
+            self.run_trim(fastq_record("a", "ACGTACGTA", "ABCDEFGHI") + fastq_record("b", "TTTTCCCCA")),
+        )
+        bases = "CGTN" + "A" * 396
+        index = b"".join(fastq_record(str(i), "ACGTACGT" + base, "ABCDEFGHI")
+                         for i, base in enumerate(bases))
+        expected = b"".join(fastq_record(str(i), "ACGTACGT", "ABCDEFGH")
+                            for i in range(len(bases)))
+        self.assertEqual((0, expected), self.run_trim(index))
+        for index in (fastq_record("a", "ACGTACGTA") + fastq_record("b", "ACGTACGTC"),
+                      fastq_record("a", "ACGTACGTN"),
+                      fastq_record("a", "ACGTACGTAA")):
+            self.assertNotEqual(0, self.run_trim(index)[0])
 
 
 if __name__ == "__main__":
