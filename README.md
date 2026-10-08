@@ -418,7 +418,9 @@ listing the rest as `status=failed`; it can also re-merge finished cohorts while
 their per-sample results remain. Write its inputs with
 `scripts/make_merge_inputs.py --inputs SUBMITTED_INPUTS.json --run-root
 gs://.../rnaseq_pipeline/WORKFLOW_ID --output merge_inputs.json`, repeating
-`--run-root` for recovery runs (latest last).
+`--run-root` for recovery runs (latest last). It reads the `metadata.json` Caper
+writes to each workflow root, so call-cache hits resolve to the earlier run
+directory that holds their files; BAM sizes are left blank once BAMs are deleted.
 
 `scripts/gcp/capture_task_profiles.py METADATA.json OUTDIR [--skip-batch]` adds
 `task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,

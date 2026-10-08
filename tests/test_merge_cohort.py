@@ -55,36 +55,51 @@ class SampleSheetTests(unittest.TestCase):
 class MergeInputTests(unittest.TestCase):
     def test_latest_complete_results_and_failed_samples(self):
         run, retry = "gs://bucket/rnaseq_pipeline/run1", "gs://bucket/rnaseq_pipeline/run2"
-        def results(root, shard, sample, task, attempt=""):
-            prefix = f"{root}/call-{{}}/shard-{shard}/{attempt}"
-            rsem = "umi_molecule_rsem" if task == "umi" else "rsem_quant"
-            fc = "umi_molecule_feature_counts_task" if task == "umi" else "feature_counts"
-            return {prefix.format(rsem) + f"rsem_reference/{sample}.genes.results": 1,
-                    prefix.format(rsem) + f"rsem_reference/{sample}.isoforms.results": 1,
-                    prefix.format(fc) + f"{sample}.out": 1, prefix.format("qc_report") + f"{sample}_qc_info.csv": 1,
-                    prefix.format("qc_report") + f"{sample}.qc_diagnostics.json": 1,
-                    prefix.format("star_align") + f"star_out/{sample}.Aligned.sortedByCoord.out.bam": 2**31,
-                    prefix.format("star_align") + f"star_out/{sample}.Aligned.toTranscriptome.out.bam": 2**30}
-        listings = {run + "/": {**results(run, 0, "a", "umi"), **results(run, 1, "b", "all"),
-                                f"{run}/call-qc_report/shard-2/c_qc_info.csv": 1,
-                                f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam": 2**29},
-                    retry + "/": results(retry, 1, "b", "all", "attempt-2/")}
-        raw = {f"gs://raw/{s}_{m}.fastq.gz": 2**30 for s in "abc" for m in ("R1", "R2", "I1")}
-        list_sizes = lambda *urls: listings[urls[0]] if urls[0] in listings else {u: raw[u] for u in urls}
+        def metadata(samples, calls, release="rn8_v116"):
+            document = {"inputs": {"sample_prefix": samples, "reference_release": release}, "calls": {}}
+            for task, shard, status, files in calls:
+                document["calls"].setdefault("rnaseq_pipeline." + task, []).append(
+                    {"shardIndex": shard, "executionStatus": status, "outputs": {"files": files}})
+            return document
+        def results(root, shard, sample, mode, rsem_status="Done"):
+            rsem = "umi_molecule_rsem" if mode == "umi" else "rsem_quant"
+            fc = "umi_molecule_feature_counts_task" if mode == "umi" else "feature_counts"
+            path = lambda task, name: f"{root}/call-{task}/shard-{shard}/{sample}{name}"
+            return [(rsem, shard, rsem_status, [path(rsem, ".genes.results"), path(rsem, ".isoforms.results")]),
+                    (fc, shard, "Done", [path(fc, ".out")]),
+                    ("qc_report", shard, "Done", [path("qc_report", "_qc_info.csv"), path("qc_report", ".qc_diagnostics.json")]),
+                    ("star_align", shard, "Done", [path("star_align", ".Aligned.sortedByCoord.out.bam"),
+                                                   path("star_align", ".Aligned.toTranscriptome.out.bam")])]
+        runs = {run: metadata(["a", "b", "c"], results(run, 0, "a", "umi") + results(run, 1, "b", "all", "RetryableFailure") +
+                              [("udup", 0, "Done", [[f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam"]]),
+                               ("qc_report", 2, "Done", [f"{run}/call-qc_report/shard-2/c_qc_info.csv"])]),
+                retry: metadata(["b"], [call for call in results(retry, 0, "b", "all") if call[0] != "feature_counts"] +
+                                # cache hit: the featureCounts output stays in run1
+                                [("feature_counts", 0, "Done", [f"{run}/call-feature_counts/shard-1/b.out"])])}
+        sizes = {f"gs://raw/{s}_{m}.fastq.gz": 2**30 for s in "abc" for m in ("R1", "R2", "I1")}
+        sizes.update({f"{run}/call-star_align/shard-0/a.Aligned.sortedByCoord.out.bam": 2**31,
+                      f"{run}/call-star_align/shard-0/a.Aligned.toTranscriptome.out.bam": 2**30,
+                      f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam": 2**29,
+                      f"{retry}/call-star_align/shard-0/b.Aligned.sortedByCoord.out.bam": 2**30})
         inputs = {"rnaseq_pipeline." + key: value for key, value in {
             "sample_prefix": ["a", "b", "c"], "fastq1": [f"gs://raw/{s}_R1.fastq.gz" for s in "abc"],
             "fastq2": [f"gs://raw/{s}_R2.fastq.gz" for s in "abc"],
             "fastq_index": ["gs://raw/a_I1.fastq.gz", "", "gs://raw/c_I1.fastq.gz"],
             "reference_release": "rn8_v116", "output_report_name": "cohort", "merge_results_docker": "image"}.items()}
-        document = builder.build(inputs, [run, retry], list_sizes)
+        list_sizes = lambda *urls: {url: sizes[url] for url in urls if url in sizes}
+        document = builder.build(inputs, [run, retry], runs.get, list_sizes)
         get = lambda key: document["rnaseq_merge." + key]
         self.assertEqual((["a", "b"], ["c"]), (get("sample_prefix"), get("failed_samples")))
         self.assertEqual([["a", "rn8_v116", "1", "0", "umi_molecules", "deduplicated"],
                           ["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi"],
                           ["c", "rn8_v116", "1", "0", "umi_molecules", "deduplicated"]], get("expression_metadata_rows")[1:])
-        self.assertTrue(get("rsem_gene_results")[1].startswith(retry + "/call-rsem_quant/shard-1/attempt-2/"))
+        self.assertEqual(f"{retry}/call-rsem_quant/shard-0/b.genes.results", get("rsem_gene_results")[1])
+        self.assertEqual(f"{run}/call-feature_counts/shard-1/b.out", get("feature_counts_files")[1])
         self.assertEqual(["a", "3.000000", "2.000000", "1.000000", "0.500000"], get("sample_size_rows")[0])
-        self.assertEqual(["b", "2.000000", "2.000000", "1.000000", "1.000000"], get("sample_size_rows")[1])
+        self.assertEqual(["b", "2.000000", "1.000000", "", ""], get("sample_size_rows")[1])
+        runs[retry]["inputs"]["reference_release"] = "rn7"
+        with self.assertRaises(ValueError):
+            builder.build(inputs, [run, retry], runs.get, list_sizes)
 
 
 if __name__ == "__main__":

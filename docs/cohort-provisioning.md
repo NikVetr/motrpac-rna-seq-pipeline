@@ -101,5 +101,7 @@ Accepted results need not be rerun solely because CPU/RAM/disk allocations
 change. Reuse them through verified cache hits or exclude completed samples and
 gather their retained outputs. Retain failed-attempt evidence before repair.
 Delete bulky intermediates only after acceptance and planned comparisons;
-deletion invalidates cache/recovery references. Keep raw inputs and reference
+deletion invalidates cache/recovery references. Cache hits reference the
+original run's files instead of copying them, so collect per-sample outputs by
+the paths in workflow metadata, not by listing one run directory. Keep raw inputs and reference
 assets outside execution-data lifecycle rules.
