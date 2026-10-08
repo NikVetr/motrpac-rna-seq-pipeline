@@ -94,6 +94,10 @@ python3 scripts/prepare_sample_metadata.py \
 ```
 
 Study records may contain other samples; QC must match the matrix sample set.
+Pass `--expression-metadata expression_metadata.tsv` to carry the per-sample
+sheet along. A `RIN` study column appends `low_rin` (RIN < 6) to `qc_flags`;
+blank or NA values are not evaluated. GET's `sample_metadata_<date>.csv`
+uploads and the release QA/QC tables supply RIN keyed by `vial_label`.
 Duplicate IDs, overlapping QC columns, missing required values and existing
 outputs fail. Values remain strings and are not rescaled.
 

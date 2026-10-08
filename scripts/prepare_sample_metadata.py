@@ -3,6 +3,9 @@ import argparse
 import csv
 from pathlib import Path
 
+MISSING = ("", "NA", "NAN", "NULL")
+MIN_RIN = 6  # GET MOP section 9
+
 
 def read_table(path, delimiter=","):
     with path.open(newline="", encoding="utf-8") as handle:
@@ -41,12 +44,20 @@ def prepare(matrix, study, qc, output, required, expression_metadata=None):
         for sample in samples:
             qc_rows[sample].update(expression_rows[sample])
     for sample in samples:
-        if any(study_rows[sample][column].strip().upper() in ("", "NA", "NAN", "NULL") for column in required):
+        if any(study_rows[sample][column].strip().upper() in MISSING for column in required):
             raise ValueError(f"missing required study covariate: {sample}")
+    columns = study_columns + [column for column in qc_columns if column != "sample"]
+    rows = [{**study_rows[sample], **qc_rows[sample]} for sample in samples]
+    if "RIN" in study_columns:
+        columns += [] if "qc_flags" in columns else ["qc_flags"]
+        for row in rows:
+            rin = row["RIN"].strip()
+            if rin.upper() not in MISSING and float(rin) < MIN_RIN:
+                row["qc_flags"] = ";".join(filter(None, [row.get("qc_flags", ""), "low_rin"]))
     with output.open("x", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=study_columns + [column for column in qc_columns if column != "sample"])
+        writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
-        writer.writerows({**study_rows[sample], **qc_rows[sample]} for sample in samples)
+        writer.writerows(rows)
 
 
 def main():

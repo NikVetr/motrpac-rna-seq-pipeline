@@ -33,8 +33,9 @@ Merges also write effective-length matrices, a transcript map and a per-sample
 sheet (status, diagnostics, input sizes and review-only MOP QC flags), and stop
 if gene values differ from their isoform sums. `wdl/merge_cohort.wdl`, with
 inputs from `scripts/make_merge_inputs.py`, merges the completed samples of
-failed or recovered runs without recomputation. Study covariates are joined
-by sample ID using `scripts/prepare_sample_metadata.py`.
+failed or recovered runs without recomputation. Study covariates, including
+RIN (flagged below 6), are joined by sample ID using
+`scripts/prepare_sample_metadata.py`.
 
 ## QC and resources
 

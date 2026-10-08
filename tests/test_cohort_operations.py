@@ -75,9 +75,14 @@ class CohortOperationsTests(unittest.TestCase):
             study.write_text("sample,pid,RIN\na,001,9.40\nb,002,8.0\nc,003,7\n")
             qc.write_text("sample,pct_umi_dup\na,80\nb,90\n")
             metadata.prepare(matrix, study, qc, output, ["pid", "RIN"])
-            self.assertEqual("sample,pid,RIN,pct_umi_dup\nb,002,8.0,90\na,001,9.40,80\n", output.read_text())
+            self.assertEqual("sample,pid,RIN,pct_umi_dup,qc_flags\nb,002,8.0,90,\na,001,9.40,80,\n", output.read_text())
             with self.assertRaises(FileExistsError):
                 metadata.prepare(matrix, study, qc, output, ["pid"])
+            (root / "expression").write_text("sample\tqc_flags\na\t\nb\tlow_strand\n")
+            study.write_text("sample,pid,RIN\na,001,5.9\nb,002,NA\n")
+            metadata.prepare(matrix, study, qc, root / "flagged", ["pid"], root / "expression")
+            self.assertEqual("sample,pid,RIN,pct_umi_dup,qc_flags\nb,002,NA,90,low_strand\na,001,5.9,80,low_rin\n",
+                             (root / "flagged").read_text())
             study.write_text("sample,pid,RIN\na,001,NA\nb,002,8\n")
             with self.assertRaisesRegex(ValueError, "missing required"):
                 metadata.prepare(matrix, study, qc, root / "missing", ["RIN"])

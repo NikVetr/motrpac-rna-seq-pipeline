@@ -411,6 +411,8 @@ outside 20-80%, `high_rrna` > 20%, `low_mapped` unique plus multimapped < 60%,
 `low_exonic` coding plus UTR < 50%, `low_mapped_vs_cohort` < half the cohort mean),
 plus `low_strand` (correct strand < 0.9 for this forward-stranded kit) and
 `rsem_not_converged`. A flag is not evaluated when its inputs are unavailable.
+RIN is not a pipeline input: `scripts/prepare_sample_metadata.py` appends
+`low_rin` (RIN < 6) when it joins study metadata with a `RIN` column.
 
 A run with a failed sample never reaches its merges. `wdl/merge_cohort.wdl`
 merges the completed samples of one or more saved runs without recomputation,
