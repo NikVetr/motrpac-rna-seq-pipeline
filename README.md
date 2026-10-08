@@ -394,6 +394,36 @@ The pipeline also generates intermediate outputs for each sample (stored in Crom
 When `--run-multiqc` is selected, the pre- and post-alignment consolidated
 report archives are also published as top-level outputs.
 
+### Sample Sheet, Lengths and Failed Samples
+
+The merges also publish per-sample effective-length matrices
+(`rsem_genes_effective_length`, `rsem_isoforms_effective_length`) and
+`rsem_transcripts` (transcript, gene, length), which replace keeping per-sample
+RSEM files. The isoform merge stops if any gene's count, TPM or FPKM differs from
+the sum of its isoforms beyond rounding, or if gene TPMs do not sum to one million.
+
+`expression_metadata` is the per-sample sheet: expression mode and UMI columns,
+then `status`, RSEM convergence and iterations, correct-strand and featureCounts
+assigned fractions, input sizes in GiB (raw FASTQs, STAR genomic and transcriptome
+BAMs, the BAM entering RSEM) and `qc_flags`. Flags are for review, not exclusion:
+the GET MOP section 9 thresholds (`low_reads_after_trim` < 20M, `abnormal_gc`
+outside 20-80%, `high_rrna` > 20%, `low_mapped` unique plus multimapped < 60%,
+`low_exonic` coding plus UTR < 50%, `low_mapped_vs_cohort` < half the cohort mean),
+plus `low_strand` (correct strand < 0.9 for this forward-stranded kit) and
+`rsem_not_converged`. A flag is not evaluated when its inputs are unavailable.
+
+A run with a failed sample never reaches its merges. `wdl/merge_cohort.wdl`
+merges the completed samples of one or more saved runs without recomputation,
+listing the rest as `status=failed`; it can also re-merge finished cohorts while
+their per-sample results remain. Write its inputs with
+`scripts/make_merge_inputs.py --inputs SUBMITTED_INPUTS.json --run-root
+gs://.../rnaseq_pipeline/WORKFLOW_ID --output merge_inputs.json`, repeating
+`--run-root` for recovery runs (latest last).
+
+`scripts/gcp/capture_task_profiles.py METADATA.json OUTDIR [--skip-batch]` adds
+`task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,
+observed peaks and input GiB) to the capture, for later provisioning calibration.
+
 ### Retrieving Outputs
 
 Final merged outputs are written to the GCS bucket specified during pipeline submission. Individual sample outputs are organized in the Cromwell execution directory structure.

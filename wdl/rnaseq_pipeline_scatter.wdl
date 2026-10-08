@@ -685,6 +685,15 @@ workflow rnaseq_pipeline {
         File primary_rsem_gene_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.gene_convergence]) else select_first([rsem_quant.gene_convergence])
         File primary_feature_counts = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else select_first([feature_counts.fc_out])
         File primary_feature_counts_report = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else select_first([feature_counts.fc_summary])
+        # Input sizes recorded in the sample sheet for provisioning, before intermediates are deleted.
+        Array[File] molecule_transcriptome_bam = select_first([udup.molecule_transcriptome_bam, []])
+        Float raw_fastq_gib = size(fastq1[i], "GiB") + size(fastq2[i], "GiB") + size(sample_index, "GiB")
+        Float genomic_bam_gib = size(star_align.bam_file, "GiB")
+        Float transcriptome_bam_gib = size(star_align.transcriptome_bam, "GiB")
+        Float rsem_input_bam_gib = if length(molecule_transcriptome_bam) > 0
+            then size(molecule_transcriptome_bam[0], "GiB") else transcriptome_bam_gib
+        Array[String] sample_size_row = [sample_prefix[i], "~{raw_fastq_gib}", "~{genomic_bam_gib}",
+            "~{transcriptome_bam_gib}", "~{rsem_input_bam_gib}"]
 
         if (use_multiqc) {
             call mqc_postalign.multiQC_postalign as mqc_pa {
@@ -752,6 +761,8 @@ workflow rnaseq_pipeline {
                 [flatten([["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"],
                     if trim_trailing_i1_base then ["i1_layout"] else []])],
                 expression_metadata_row]),
+            qc_diagnostics=qc_report.diagnostics,
+            sample_size_rows=sample_size_row,
         # Runtime Parameters
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
@@ -764,6 +775,7 @@ workflow rnaseq_pipeline {
         input:
             sample_prefix=sample_prefix,
             rsem_files=primary_rsem_isoforms,
+            rsem_gene_files=primary_rsem_genes,
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,
             ncpu=merge_results_ncpu,
@@ -776,6 +788,7 @@ workflow rnaseq_pipeline {
             input:
                 sample_prefix=sample_prefix,
                 rsem_files=select_all(rsem_quant.isoforms),
+                rsem_gene_files=select_all(rsem_quant.genes),
                 memory=merge_results_ramGB,
                 disk_space=merge_results_disk,
                 ncpu=merge_results_ncpu,
@@ -802,10 +815,13 @@ workflow rnaseq_pipeline {
         File rsem_isoforms_count = merge_primary_isoforms.rsem_isoforms_count
         File rsem_isoforms_tpm = merge_primary_isoforms.rsem_isoforms_tpm
         File rsem_isoforms_fpkm = merge_primary_isoforms.rsem_isoforms_fpkm
+        File rsem_isoforms_effective_length = merge_primary_isoforms.rsem_isoforms_effective_length
+        File rsem_transcripts = merge_primary_isoforms.rsem_transcripts
         File expression_metadata = merge_results.expression_metadata
         File rsem_genes_count = merge_results.rsem_genes_count
         File rsem_genes_tpm = merge_results.rsem_genes_tpm
         File rsem_genes_fpkm = merge_results.rsem_genes_fpkm
+        File rsem_genes_effective_length = merge_results.rsem_genes_effective_length
         File feature_counts_file = merge_results.feature_counts
         File qc_report_file = merge_results.qc_report
         Array[File] qc_diagnostics = qc_report.diagnostics

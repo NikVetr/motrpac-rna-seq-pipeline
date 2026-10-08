@@ -1,6 +1,7 @@
 """Evaluate actual WDL resources and execute rendered merge commands locally."""
 import importlib.util
 import subprocess
+import json
 import tempfile
 from pathlib import Path
 import WDL
@@ -34,6 +35,12 @@ try:
             if name == "merge_results":
                 inputs.update(qc_report_files=list(map(str, fixture.qc.iterdir())), output_report_name="cohort")
                 inputs["expression_metadata_rows"] = [["sample", "not_deduplicated"]] + [[sample, "0"] for sample in fixture.samples]
+                diagnostics = []
+                for sample in fixture.samples:
+                    diagnostics.append(fixture.root / (sample + ".qc_diagnostics.json"))
+                    diagnostics[-1].write_text(json.dumps({"sample": sample, "rsem": {"converged": True, "iterations": 9},
+                        "picard_strand": None, "feature_counts": {"assigned_alignment_fraction": 0.8}}))
+                inputs.update(qc_diagnostics=list(map(str, diagnostics)), sample_size_rows=[], failed_samples=[])
             else:
                 inputs["output_prefix"] = "secondary"
             env = WDL.values_from_json(inputs, task.available_inputs)
@@ -47,7 +54,9 @@ try:
             if name == "merge_results":
                 assert (root / "cohort.csv").read_bytes() == (fixture.root / "cohort.csv").read_bytes()
                 metadata = task.outputs[-1].expr.eval(env, stdlib).value
-                assert (root / metadata).read_text() == "sample\tnot_deduplicated\n" + "".join(sample + "\t0\n" for sample in fixture.samples)
+                lines = (root / metadata).read_text().splitlines()
+                assert lines[0].startswith("sample\tnot_deduplicated\tstatus\t") and lines[0].endswith("\tqc_flags")
+                assert [line.split("\t")[:3] for line in lines[1:]] == [[sample, "0", "completed"] for sample in fixture.samples]
             assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
             for count, floor, expected in ((1, 4, 4), (75, 4, 4), (76, 4, 8), (297, 4, 16), (600, 4, 32), (297, 64, 64)):
                 env = env.bind("sample_prefix", WDL.Value.Array(WDL.Type.String(), [WDL.Value.String(str(i)) for i in range(count)]))
@@ -63,21 +72,27 @@ finally:
 task = WDL.load(str(repo / "wdl/merge_results/merge_isoforms.wdl")).tasks[0]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
-    source = root / "source"
+    source, genes = root / "source", root / "genes"
     source.mkdir()
+    genes.mkdir()
     for sample, count in (("a", "1.20"), ("b", "2.30")):
         (source / (sample + ".isoforms.results")).write_text(
-            "transcript_id\tgene_id\texpected_count\tTPM\tFPKM\n"
-            + "tx.1\tg.1\t" + count + "\t3.40\t5.60\n")
+            "transcript_id\tgene_id\tlength\teffective_length\texpected_count\tTPM\tFPKM\n"
+            + "tx.1\tg.1\t100\t70.5\t" + count + "\t1000000.00\t5.60\n")
+        (genes / (sample + ".genes.results")).write_text(
+            "gene_id\ttranscript_id(s)\tlength\teffective_length\texpected_count\tTPM\tFPKM\n"
+            + "g.1\ttx.1\t100.00\t70.50\t" + count + "\t1000000.00\t5.60\n")
     stdlib = Files("1.0", write_dir=directory)
     env = WDL.values_from_json({"sample_prefix": ["b", "a"],
-        "rsem_files": list(map(str, source.iterdir())), "memory": 1,
+        "rsem_files": list(map(str, source.iterdir())), "rsem_gene_files": list(map(str, genes.iterdir())), "memory": 1,
         "disk_space": 1, "ncpu": 1, "preemptible": 0, "docker": "unused"}, task.available_inputs)
     for decl in task.postinputs:
         env = env.bind(decl.name, decl.expr.eval(env, stdlib))
     command = task.command.eval(env, stdlib).value.replace("/usr/local/src/", str(repo / "wdl/merge_results") + "/")
     subprocess.run(["bash", "-c", command], cwd=root, check=True, capture_output=True)
     assert (root / "rsem_isoforms_count.txt").read_text() == "transcript_id\tb\ta\ntx.1\t2.30\t1.20\n"
+    assert (root / "rsem_transcripts.tsv").read_text() == "transcript_id\tgene_id\tlength\ntx.1\tg.1\t100\n"
+    assert (root / "rsem_isoforms_effective_length.txt").read_text() == "transcript_id\tb\ta\ntx.1\t70.5\t70.5\n"
     assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
     assert task.runtime["memory"].eval(env, stdlib).value == "4GB"
     assert env.resolve("effective_scratch_gb").value == 11

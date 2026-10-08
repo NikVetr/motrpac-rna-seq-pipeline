@@ -38,7 +38,7 @@ def file_uris(value):
             yield from file_uris(child)
 
 
-def collect(metadata_path, output, workers=8):
+def collect(metadata_path, output, workers=8, batch=True):
     metadata = json.loads(metadata_path.read_text())
     if not metadata.get("calls"):
         raise ValueError("metadata must include calls, inputs, outputs and runtime attributes")
@@ -56,6 +56,9 @@ def collect(metadata_path, output, workers=8):
                      and "VMPreemption(50001)" in json.dumps(attempt.get("failures", []))}
     preempted_logs -= {attempt.get("monitoringLog") for _, attempt in selected
                       if attempt.get("executionStatus") == "Done"}
+    # Cache hits copy outputs without running, so they have no monitoring log.
+    cached_logs = {attempt.get("monitoringLog") for _, attempt in selected
+                   if (attempt.get("callCaching") or {}).get("hit")}
     uris = sorted({uri for _, attempt in selected
                    for field in ("inputs", "outputs", "monitoringLog", "stdout", "stderr")
                    for uri in file_uris(attempt.get(field))})
@@ -75,9 +78,10 @@ def collect(metadata_path, output, workers=8):
                 key, value = future.result()
                 objects[key] = value
             except (ValueError, subprocess.CalledProcessError) as error:
+                missing = bool(re.search(r"not found:\s*404\b|\b404[:\s]+not found\b", str(error), re.I))
                 errors.append({"uri": uri, "error": str(error),
-                               "expected_after_preemption": uri in preempted_logs
-                               and bool(re.search(r"not found:\s*404\b|\b404[:\s]+not found\b", str(error), re.I))})
+                               "expected_after_preemption": uri in preempted_logs and missing,
+                               "expected_after_cache_hit": uri in cached_logs and missing})
     (output / "objects.json").write_text(json.dumps(objects, indent=2) + "\n")
 
     def download(uri, target, limit):
@@ -116,7 +120,7 @@ def collect(metadata_path, output, workers=8):
                                for key, value in inputs.items()
                                if set(file_uris(value)) and all(uri in objects for uri in file_uris(value))},
                "monitoring": None}
-        if attempt.get("jobId"):
+        if batch and attempt.get("jobId"):
             try:
                 job = json.loads(cloud("batch", "jobs", "describe", attempt["jobId"], "--format=json"))
                 (directory / "batch.json").write_text(json.dumps(job, indent=2) + "\n")
@@ -158,21 +162,42 @@ def collect(metadata_path, output, workers=8):
             return float(value)
         raise TypeError(type(value).__name__)
     (output / "profiles.json").write_text(json.dumps(result, indent=2, default=encode) + "\n")
+    write_table(rows, output / "task_profiles.tsv")
     manifest = [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  ./{path.relative_to(output)}"
                 for path in sorted(output.rglob("*")) if path.is_file()]
     (output / "evidence-manifest.sha256").write_text("\n".join(manifest) + "\n")
-    unexpected = [error for error in errors if not error.get("expected_after_preemption")]
+    unexpected = [error for error in errors
+                  if not (error.get("expected_after_preemption") or error.get("expected_after_cache_hit"))]
     if unexpected:
         raise ValueError(f"incomplete capture: {len(unexpected)} unexpected unavailable artifacts; see profiles.json")
     return result
+
+
+def write_table(rows, path):
+    """One line per attempt: resources requested, peaks observed and input sizes."""
+    peaks = ("mean_cores", "peak_working_set_gib", "peak_memory_anon_gib", "peak_disk_used_gib")
+    columns = ["call", "shard", "attempt", "sample", "status", "cache_hit", "preemptible", "machine_type",
+               "cpu", "memory", "disks", "start", "end", "input_gib", *peaks]
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write("\t".join(columns) + "\n")
+        for row in rows:
+            runtime, monitoring = row["runtime"] or {}, row["monitoring"] or {}
+            values = [row["call"], row["shard"], row["attempt"], row["sample"], row["status"],
+                      bool((row["cache"] or {}).get("hit")), runtime.get("preemptible"),
+                      runtime.get("predefinedMachineType"), runtime.get("cpu"), runtime.get("memory"),
+                      runtime.get("disks"), row["start"], row["end"],
+                      round(sum(row["input_bytes"].values()) / 2**30, 4)] + \
+                     [None if monitoring.get(key) is None else round(float(monitoring[key]), 4) for key in peaks]
+            handle.write("\t".join("" if value is None else str(value) for value in values) + "\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metadata", type=Path)
     parser.add_argument("output", type=Path, help="new directory for this capture")
+    parser.add_argument("--skip-batch", action="store_true", help="omit Batch job descriptions (needs batch.jobs.get)")
     args = parser.parse_args()
-    result = collect(args.metadata, args.output)
+    result = collect(args.metadata, args.output, batch=not args.skip_batch)
     print(f"Captured {len(result['attempts'])} terminal attempts; {len(result['not_terminal'])} still pending")
     if result["errors"]:
         print(f"WARNING: {len(result['errors'])} preempted-attempt monitoring logs unavailable; capture remains incomplete")

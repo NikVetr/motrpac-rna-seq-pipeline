@@ -8,6 +8,10 @@ task merge_results {
         Array[File] qc_report_files
         Array[Array[String]] expression_metadata_rows
         String output_report_name
+        # Per-sample diagnostics and input sizes for the sample sheet; failed samples have no results.
+        Array[File] qc_diagnostics = []
+        Array[Array[String]] sample_size_rows = []
+        Array[String] failed_samples = []
 
         Int memory
         Int disk_space
@@ -29,12 +33,13 @@ task merge_results {
 
     command <<<
         set -eou pipefail
-        cp "~{write_tsv(expression_metadata_rows)}" expression_metadata.tsv
+        cp "~{write_tsv(expression_metadata_rows)}" expression_metadata_rows.tsv
         echo "--- $(date "+[%b %d %H:%M:%S]") Beginning task, linking localized files ---"
 
         mkdir -p rsem_files
         mkdir -p qc_report_files
         mkdir -p feature_counts_files
+        mkdir -p qc_diagnostics
 
         while IFS= read -r input; do
             ln -s -- "$(realpath -- "$input")" rsem_files/
@@ -45,6 +50,9 @@ task merge_results {
         while IFS= read -r input; do
             ln -s -- "$(realpath -- "$input")" qc_report_files/
         done < "~{write_lines(qc_report_files)}"
+        while IFS= read -r input; do
+            ln -s -- "$(realpath -- "$input")" qc_diagnostics/
+        done < "~{write_lines(qc_diagnostics)}"
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Merging RSEM results ---"
         python3 /usr/local/src/merge_rsem.py \
@@ -62,13 +70,21 @@ task merge_results {
             --fc-dir feature_counts_files \
             --sample-order ~{sample_order}
 
-        echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging feature counts, finished task  ---"
+        echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging feature counts, writing the sample sheet ---"
+        python3 /usr/local/src/sample_sheet.py \
+            --metadata expression_metadata_rows.tsv \
+            --qc ~{output_report_name}.csv \
+            --diagnostics-dir qc_diagnostics \
+            --sizes "~{write_tsv(sample_size_rows)}" \
+            --failed "~{write_lines(failed_samples)}" \
+            --output expression_metadata.tsv
     >>>
 
     output {
         File rsem_genes_count = "rsem_genes_count.txt"
         File rsem_genes_tpm = "rsem_genes_tpm.txt"
         File rsem_genes_fpkm = "rsem_genes_fpkm.txt"
+        File rsem_genes_effective_length = "rsem_genes_effective_length.txt"
         File feature_counts = "featureCounts.txt"
         File qc_report = "${output_report_name}.csv"
         File expression_metadata = "expression_metadata.tsv"
