@@ -747,6 +747,15 @@ workflow rnaseq_pipeline {
                 preemptible=num_preemptible_attempts,
                 docker=collect_qc_docker,
         }
+        Array[Array[String]] sample_source_rows = [
+            [sample_prefix[i], "raw_r1", "~{fastq1[i]}"], [sample_prefix[i], "raw_r2", "~{fastq2[i]}"],
+            [sample_prefix[i], "raw_i1", index_uri],
+            [sample_prefix[i], "genes", "~{primary_rsem_genes}"],
+            [sample_prefix[i], "isoforms", "~{primary_rsem_isoforms}"],
+            [sample_prefix[i], "qc", "~{qc_report.rnaseq_report}"],
+            [sample_prefix[i], "diagnostics", "~{qc_report.diagnostics}"],
+            [sample_prefix[i], "convergence", "~{primary_rsem_convergence}"],
+            [sample_prefix[i], "gene_convergence", "~{primary_rsem_gene_convergence}"]]
     }
 
     call final_merge.merge_results as merge_results {
@@ -776,6 +785,10 @@ workflow rnaseq_pipeline {
             sample_prefix=sample_prefix,
             rsem_files=primary_rsem_isoforms,
             rsem_gene_files=primary_rsem_genes,
+            supporting_files=flatten([qc_report.diagnostics, primary_rsem_log,
+                primary_rsem_convergence, primary_rsem_gene_convergence, select_all(udup.umi_metrics),
+                flatten(select_all(udup.molecule_expression_metrics)), select_all(combined_contamination_qc.sampling_manifest)]),
+            source_rows=flatten([[["sample", "kind", "source_uri"]], flatten(sample_source_rows)]),
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,
             ncpu=merge_results_ncpu,
@@ -817,6 +830,7 @@ workflow rnaseq_pipeline {
         File rsem_isoforms_fpkm = merge_primary_isoforms.rsem_isoforms_fpkm
         File rsem_isoforms_effective_length = merge_primary_isoforms.rsem_isoforms_effective_length
         File rsem_transcripts = merge_primary_isoforms.rsem_transcripts
+        File sample_details = merge_primary_isoforms.sample_details
         File expression_metadata = merge_results.expression_metadata
         File rsem_genes_count = merge_results.rsem_genes_count
         File rsem_genes_tpm = merge_results.rsem_genes_tpm

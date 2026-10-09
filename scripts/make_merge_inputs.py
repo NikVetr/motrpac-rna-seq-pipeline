@@ -13,18 +13,29 @@ import re
 import subprocess
 from pathlib import Path
 
+from make_json_rnaseq import IMAGE_ROLES, MERGE_RESULTS_DOCKER, REFERENCE_ROLES
 
-KINDS = {  # (task, filename suffix after the sample ID) -> kind
-    ("umi_molecule_rsem", ".genes.results"): "genes_umi", ("rsem_quant", ".genes.results"): "genes_all",
-    ("umi_molecule_rsem", ".isoforms.results"): "isoforms_umi", ("rsem_quant", ".isoforms.results"): "isoforms_all",
-    ("umi_molecule_feature_counts_task", ".out"): "fc_umi", ("feature_counts", ".out"): "fc_all",
-    ("qc_report", "_qc_info.csv"): "qc", ("qc_report", ".qc_diagnostics.json"): "diagnostics",
-    ("star_align", ".Aligned.sortedByCoord.out.bam"): "genomic_bam",
-    ("star_align", ".Aligned.toTranscriptome.out.bam"): "transcriptome_bam",
-    ("udup", ".umi_molecules.transcriptome.bam"): "molecule_bam", ("trim_i1", "_I1.trimmed.fastq.gz"): "trimmed_i1",
+OUTPUTS = {
+    task: {field: field + "_" + mode for field in ("genes", "isoforms", "log", "convergence", "gene_convergence")}
+    for task, mode in (("umi_molecule_rsem", "umi"), ("rsem_quant", "all"))
 }
+OUTPUTS.update({
+    "umi_molecule_feature_counts_task": {"fc_out": "fc_umi"}, "feature_counts": {"fc_out": "fc_all"},
+    "qc_report": {"rnaseq_report": "qc", "diagnostics": "diagnostics"},
+    "star_align": {"bam_file": "genomic_bam", "transcriptome_bam": "transcriptome_bam"},
+    "udup": {"molecule_transcriptome_bam": "molecule_bam", "umi_metrics": "umi_metrics",
+             "molecule_expression_metrics": "umi_expression_metrics"},
+    "combined_contamination_qc": {"sampling_manifest": "sampling_manifest"},
+    "trim_i1": {"trimmed_index": "trimmed_i1"},
+})
 HEADER = ["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]
 BAMS = ("genomic_bam", "transcriptome_bam", "molecule_bam")
+SCIENTIFIC_INPUTS = (REFERENCE_ROLES | IMAGE_ROLES | {"minimumLength", "index_adapter", "univ_adapter"}) - {
+    "merge_results_docker", "multiqc_docker", "attach_umi_docker", "umi_dup_docker"}
+DEFAULTS = {"reference_release": "unspecified", "run_pretrim_fastqc": True, "run_posttrim_fastqc": True,
+            "run_contamination_qc": True, "combine_contamination_qc": False, "contamination_qc_pairs": 0,
+            "run_alignment_qc": True, "run_umi_qc": True, "trim_trailing_i1_base": False,
+            "use_umi_molecule_expression": True}
 
 
 def gcloud_metadata(root):
@@ -48,12 +59,30 @@ def gib(*sizes):
     return "" if None in sizes else "{:.6f}".format(sum(sizes) / 2**30)
 
 
-def uris(value):
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, list):
-        for item in value:
-            yield from uris(item)
+def resolved_inputs(inputs):
+    prefix = "rnaseq_pipeline."
+    return {**DEFAULTS, **{key[len(prefix):] if key.startswith(prefix) else key: value for key, value in inputs.items()}}
+
+
+def sample_inputs(inputs):
+    samples = inputs["sample_prefix"]
+    indexes = inputs.get("fastq_index") or [""] * len(samples)
+    arrays = (inputs["fastq1"], inputs["fastq2"], indexes)
+    if not samples or len(set(samples)) != len(samples) or any(len(array) != len(samples) for array in arrays):
+        raise ValueError("sample IDs must be unique and FASTQ arrays must match their length")
+    return {sample: (inputs["fastq1"][i], inputs["fastq2"][i], indexes[i] or "") for i, sample in enumerate(samples)}
+
+
+def check_compatible(requested, source, sample, raw, source_raw):
+    if raw != source_raw:
+        raise ValueError(f"raw FASTQs differ for {sample}")
+    keys = SCIENTIFIC_INPUTS | (DEFAULTS.keys() - {"use_umi_molecule_expression", "trim_trailing_i1_base"})
+    if raw[2]:
+        keys |= {"attach_umi_docker", "umi_dup_docker", "trim_trailing_i1_base", "use_umi_molecule_expression"}
+    missing = sorted(key for key in keys if key not in requested or key not in source)
+    different = sorted(key for key in keys if requested.get(key) != source.get(key))
+    if missing or different:
+        raise ValueError(f"incompatible results for {sample}: missing={missing}, different={different}")
 
 
 def run_results(metadata):
@@ -66,54 +95,69 @@ def run_results(metadata):
             if call["executionStatus"] != "Done" or call["shardIndex"] < 0:
                 continue
             sample = samples[call["shardIndex"]]
-            for uri in uris(list(call.get("outputs", {}).values())):
-                filename = uri.rsplit("/", 1)[-1]
-                kind = KINDS.get((task, filename[len(sample):])) if filename.startswith(sample) else None
-                if kind:
-                    results.setdefault(sample, {})[kind] = uri
+            for field, kind in OUTPUTS.get(task, {}).items():
+                value = call.get("outputs", {}).get(field)
+                if isinstance(value, list):
+                    if len(value) > 1:
+                        raise ValueError(f"expected at most one {field} for {sample}")
+                    value = value[0] if value else None
+                if value:
+                    results.setdefault(sample, {})[kind] = value
     return results
 
 
 def build(inputs, roots, read_metadata=gcloud_metadata, list_sizes=gcloud_sizes):
-    get = lambda name, default=None: inputs.get("rnaseq_pipeline." + name, inputs.get(name, default))
+    inputs = resolved_inputs(inputs)
+    get = inputs.get
     samples = get("sample_prefix")
-    indexes = [path or "" for path in (get("fastq_index") or [""] * len(samples))]
-    raw_paths = {sample: [path for path in (get("fastq1")[i], get("fastq2")[i], indexes[i]) if path]
-                 for i, sample in enumerate(samples)}
+    raw = sample_inputs(inputs)
+    raw_paths = {sample: [path for path in paths if path] for sample, paths in raw.items()}
     release = get("reference_release", "unspecified")
     trim = get("trim_trailing_i1_base", False)
     found = {}
     for root in roots:
         metadata = read_metadata(root)
-        if metadata["inputs"].get("reference_release", "unspecified") != release:
-            raise ValueError(f"{root} did not use reference_release {release}")
+        if metadata.get("status") not in ("Succeeded", "Failed", "Aborted"):
+            raise ValueError(f"{root} must be a finished workflow")
+        source = resolved_inputs(metadata["inputs"])
+        source_raw = sample_inputs(source)
+        metadata = {**metadata, "inputs": source}
         for sample, record in run_results(metadata).items():
-            mode = "umi" if "genes_umi" in record else "all"
-            if sample in raw_paths and all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics")):
+            if sample not in raw:
+                continue
+            check_compatible(inputs, source, sample, raw[sample], source_raw[sample])
+            mode = "umi" if get("use_umi_molecule_expression") and raw[sample][2] else "all"
+            if all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics")):
                 found[sample] = (mode, record)
 
     if not found:
         raise ValueError("no completed samples found under the given run roots")
     sizes = list_sizes(*[uri for sample, (_, record) in found.items()
                          for uri in raw_paths[sample] + [record[kind] for kind in BAMS if kind in record]])
-    missing = [path for sample in found for path in raw_paths[sample] if path not in sizes]
-    if missing:
-        raise ValueError(f"raw FASTQs not found: {missing}")
     rows, failed, size_rows = [HEADER + (["i1_layout"] if trim else [])], [], []
     files = {key: [] for key in ("genes", "isoforms", "fc", "qc", "diagnostics")}
-    for shard, sample in enumerate(samples):
-        has_index = bool(indexes[shard])
+    supporting_files, source_rows = [], [["sample", "kind", "source_uri"]]
+    for sample in samples:
+        has_index = bool(raw[sample][2])
         mode, record = found.get(sample, (None, {}))
         if mode is None:
             failed.append(sample)
             umi = get("use_umi_molecule_expression", True) and has_index
         else:
             umi = mode == "umi"
+            source_rows.extend([sample, kind, uri]
+                               for kind, uri in zip(("raw_r1", "raw_r2", "raw_i1"), raw[sample]) if uri)
             for key, kind in (("genes", f"genes_{mode}"), ("isoforms", f"isoforms_{mode}"), ("fc", f"fc_{mode}"),
                               ("qc", "qc"), ("diagnostics", "diagnostics")):
                 files[key].append(record[kind])
+                source_rows.append([sample, key, record[kind]])
+            for kind in (f"log_{mode}", f"convergence_{mode}", f"gene_convergence_{mode}",
+                         "umi_metrics", "umi_expression_metrics", "sampling_manifest"):
+                if kind in record:
+                    supporting_files.append(record[kind])
+                    source_rows.append([sample, kind, record[kind]])
             bam = lambda kind: sizes.get(record.get(kind))
-            size_rows.append([sample, gib(*[sizes[path] for path in raw_paths[sample]]),
+            size_rows.append([sample, gib(*[sizes.get(path) for path in raw_paths[sample]]),
                               gib(bam("genomic_bam")), gib(bam("transcriptome_bam")),
                               gib(bam("molecule_bam") if umi else bam("transcriptome_bam"))])
         status = "skipped_no_umi" if not has_index else "deduplicated" if umi else "not_requested"
@@ -128,8 +172,9 @@ def build(inputs, roots, read_metadata=gcloud_metadata, list_sizes=gcloud_sizes)
             prefix + "rsem_gene_results": files["genes"], prefix + "rsem_isoform_results": files["isoforms"],
             prefix + "feature_counts_files": files["fc"], prefix + "qc_report_files": files["qc"],
             prefix + "qc_diagnostics": files["diagnostics"], prefix + "sample_size_rows": size_rows,
+            prefix + "supporting_files": supporting_files, prefix + "source_rows": source_rows,
             prefix + "output_report_name": get("output_report_name"),
-            prefix + "merge_results_docker": get("merge_results_docker")}
+            prefix + "merge_results_docker": MERGE_RESULTS_DOCKER}
 
 
 def main(argv=None):

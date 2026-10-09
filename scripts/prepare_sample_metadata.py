@@ -38,7 +38,8 @@ def prepare(matrix, study, qc, output, required, expression_metadata=None):
         raise ValueError("study or QC samples do not match expression columns")
     if expression_metadata is not None:
         expression_columns, expression_rows = read_table(expression_metadata, delimiter="\t")
-        if set(samples) != set(expression_rows) or set(expression_columns) & set(study_columns + qc_columns) != {"sample"}:
+        completed = {sample for sample, row in expression_rows.items() if row.get("status") != "failed"}
+        if set(samples) != completed or set(expression_columns) & set(study_columns + qc_columns) != {"sample"}:
             raise ValueError("expression metadata samples differ or columns overlap")
         qc_columns += [column for column in expression_columns if column != "sample"]
         for sample in samples:

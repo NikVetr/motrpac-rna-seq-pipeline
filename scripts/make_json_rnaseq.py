@@ -13,6 +13,7 @@ I1_SUFFIX = "_I1.fastq.gz"
 OUTPUT_REPORT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 GENERATED_JSON_PATTERN = re.compile(r"set[1-9][0-9]*_rnaseq\.json")
 IMMUTABLE_IMAGE_PATTERN = re.compile(r".+@sha256:[0-9a-f]{64}")
+MERGE_RESULTS_DOCKER = "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:de0b881deeb2e7b9b1b1cfc3a6857fa9e01864570020a291780b8880913fecdf"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_ROLES = {
     "star_index",
@@ -752,7 +753,7 @@ def make_json_dict(
         "rnaseq_pipeline.merge_results_ncpu": 4,
         "rnaseq_pipeline.merge_results_ramGB": 16,
         "rnaseq_pipeline.merge_results_disk": 200,
-        "rnaseq_pipeline.merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:6ef26dcd5979c80f49f16b0896db7f794dbeac8001798d2538ff878bcbc0e126",
+        "rnaseq_pipeline.merge_results_docker": MERGE_RESULTS_DOCKER,
     }
     filled_dict["rnaseq_pipeline.use_umi_molecule_expression"] = (
         use_umi_molecule_expression

@@ -83,6 +83,12 @@ class CohortOperationsTests(unittest.TestCase):
             metadata.prepare(matrix, study, qc, root / "flagged", ["pid"], root / "expression")
             self.assertEqual("sample,pid,RIN,pct_umi_dup,qc_flags\nb,002,NA,90,low_strand\na,001,5.9,80,low_rin\n",
                              (root / "flagged").read_text())
+            (root / "expression").write_text("sample\tstatus\na\tcompleted\nb\tcompleted\nc\tfailed\n")
+            metadata.prepare(matrix, study, qc, root / "partial", ["pid"], root / "expression")
+            self.assertEqual(["b", "a"], [line.split(",")[0] for line in (root / "partial").read_text().splitlines()[1:]])
+            (root / "expression").write_text("sample\tstatus\na\tcompleted\nb\tcompleted\nc\tcompleted\n")
+            with self.assertRaisesRegex(ValueError, "expression metadata"):
+                metadata.prepare(matrix, study, qc, root / "bad-extra", ["pid"], root / "expression")
             study.write_text("sample,pid,RIN\na,001,NA\nb,002,8\n")
             with self.assertRaisesRegex(ValueError, "missing required"):
                 metadata.prepare(matrix, study, qc, root / "missing", ["RIN"])

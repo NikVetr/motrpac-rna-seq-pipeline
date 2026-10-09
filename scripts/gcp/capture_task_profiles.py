@@ -177,7 +177,7 @@ def write_table(rows, path):
     """One line per attempt: resources requested, peaks observed and input sizes."""
     peaks = ("mean_cores", "peak_working_set_gib", "peak_memory_anon_gib", "peak_disk_used_gib")
     columns = ["call", "shard", "attempt", "sample", "status", "cache_hit", "preemptible", "machine_type",
-               "cpu", "memory", "disks", "start", "end", "input_gib", *peaks]
+               "cpu", "memory", "disks", "start", "end", "reference_release", "input_gib", "input_gib_by_name", *peaks]
     with path.open("w", encoding="utf-8") as handle:
         handle.write("\t".join(columns) + "\n")
         for row in rows:
@@ -185,8 +185,9 @@ def write_table(rows, path):
             values = [row["call"], row["shard"], row["attempt"], row["sample"], row["status"],
                       bool((row["cache"] or {}).get("hit")), runtime.get("preemptible"),
                       runtime.get("predefinedMachineType"), runtime.get("cpu"), runtime.get("memory"),
-                      runtime.get("disks"), row["start"], row["end"],
-                      round(sum(row["input_bytes"].values()) / 2**30, 4)] + \
+                      runtime.get("disks"), row["start"], row["end"], row["reference_release"],
+                      round(sum(row["input_bytes"].values()) / 2**30, 4),
+                      json.dumps({key: round(value / 2**30, 4) for key, value in row["input_bytes"].items()}, sort_keys=True)] + \
                      [None if monitoring.get(key) is None else round(float(monitoring[key]), 4) for key in peaks]
             handle.write("\t".join("" if value is None else str(value) for value in values) + "\n")
 

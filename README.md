@@ -398,8 +398,12 @@ report archives are also published as top-level outputs.
 
 The merges also publish per-sample effective-length matrices
 (`rsem_genes_effective_length`, `rsem_isoforms_effective_length`) and
-`rsem_transcripts` (transcript, gene, length), which replace keeping per-sample
-RSEM files. The isoform merge stops if any gene's count, TPM or FPKM differs from
+`rsem_transcripts` (transcript, gene, length). For the compact cohort handoff,
+keep the matrices, transcript map, QC CSV, expression metadata and `sample_details.tar.gz`.
+The archive retains original RSEM gene/isoform files, QC JSONs, available RSEM
+logs and convergence tables, UMI/sampling metrics, and a source-URI table;
+these files need not be copied individually. It contains no FASTQs or BAMs.
+The isoform merge stops if any gene's count, TPM or FPKM differs from
 the sum of its isoforms beyond rounding, or if gene TPMs do not sum to one million.
 
 `expression_metadata` is the per-sample sheet: expression mode and UMI columns,
@@ -422,18 +426,25 @@ their per-sample results remain. Write its inputs with
 gs://.../rnaseq_pipeline/WORKFLOW_ID --output merge_inputs.json`, repeating
 `--run-root` for recovery runs (latest last). It reads the `metadata.json` Caper
 writes to each workflow root, so call-cache hits resolve to the earlier run
-directory that holds their files; BAM sizes are left blank once BAMs are deleted.
+directory that holds their files. It checks raw paths, references and scientific
+settings, permits changed resource allocations, and uses the current merge image.
+Missing FASTQ/BAM size information is left blank; those files are not merge inputs.
+The merge-only workflow gathers primary expression; optional secondary all-read
+outputs must be retained separately. Verify the compact handoff in final storage
+before deleting execution data.
 
 `scripts/gcp/capture_task_profiles.py METADATA.json OUTDIR [--skip-batch]` adds
 `task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,
-observed peaks and input GiB) to the capture, for later provisioning calibration.
+observed peaks, reference release and input GiB by input name) to the capture,
+for later provisioning calibration.
 
 ### Retrieving Outputs
 
 Final merged outputs are written to the GCS bucket specified during pipeline submission. Individual sample outputs are organized in the Cromwell execution directory structure.
 
 Merge tasks size scratch from their actual inputs: three times the total
-input GiB plus 10 GiB, rounded up, preserving `merge_results_disk` as a floor.
+input GiB plus 10 GiB (four times for isoforms, including the preservation archive),
+rounded up, preserving `merge_results_disk` as a floor.
 Inputs are linked rather than copied. Gene and secondary expression merges
 request at least 4 GB RAM per 75 libraries, rounded up (16 GB for 297 libraries).
 The streaming isoform merge needs at least 4 GB. Both rules preserve

@@ -7,8 +7,8 @@
   "provenance": {
     "reference_manifest": "../references/rat-grcr8-ensembl-v116.json",
     "tool_manifest": "../tool-images-gencode-v47.json",
-    "helper_source_revision": "0fc452f2d7ae8cb12eb0e85ae7ef0af82e9f88e3",
-    "merge_rsem_source_sha256": "32bb91fb347ff958d8ea7d8390dfd7a77b69196bcb469fc1e2a538c2c7246e5d"
+    "helper_source_revision": "18c229e20839931a03524815046f926f46294450",
+    "merge_rsem_source_sha256": "490322a02031d1fd798c254e97b9b17141bb482a52df7ac18a29f2a883ed47ea"
   },
   "compatibility": {
     "star_index_builder": "2.7.11b",
@@ -38,6 +38,6 @@
     "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:7e467d09f2beb6c2484486dcc671186ac39c359600072a56c089a01e00714ad9",
     "samtools_docker": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561",
     "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:d4180349cae47041cf003aa960151d0342da2c1207fe77f30a8cdc673f9cabdf",
-    "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:6ef26dcd5979c80f49f16b0896db7f794dbeac8001798d2538ff878bcbc0e126"
+    "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:de0b881deeb2e7b9b1b1cfc3a6857fa9e01864570020a291780b8880913fecdf"
   }
 }

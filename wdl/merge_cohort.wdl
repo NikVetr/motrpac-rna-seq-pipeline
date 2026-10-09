@@ -17,6 +17,8 @@ workflow rnaseq_merge {
         Array[File] feature_counts_files
         Array[File] qc_report_files
         Array[File] qc_diagnostics
+        Array[File] supporting_files = []
+        Array[Array[String]] source_rows = []
         Array[Array[String]] sample_size_rows = []
         String output_report_name
         Int merge_results_ncpu = 1
@@ -49,6 +51,8 @@ workflow rnaseq_merge {
             sample_prefix=sample_prefix,
             rsem_files=rsem_isoform_results,
             rsem_gene_files=rsem_gene_results,
+            supporting_files=flatten([qc_diagnostics, supporting_files]),
+            source_rows=source_rows,
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,
@@ -69,5 +73,6 @@ workflow rnaseq_merge {
         File feature_counts_file = merge_results.feature_counts
         File qc_report_file = merge_results.qc_report
         File expression_metadata = merge_results.expression_metadata
+        File sample_details = merge_isoforms.sample_details
     }
 }

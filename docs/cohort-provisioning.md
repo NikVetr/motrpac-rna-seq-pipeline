@@ -94,6 +94,8 @@ python3 scripts/prepare_sample_metadata.py \
 ```
 
 Study records may contain other samples; QC must match the matrix sample set.
+Expression metadata may additionally include explicitly failed samples, which
+are omitted from the matrix-ordered study join.
 Pass `--expression-metadata expression_metadata.tsv` to carry the per-sample
 sheet along. A `RIN` study column appends `low_rin` (RIN < 6) to `qc_flags`;
 blank or NA values are not evaluated. GET's `sample_metadata_<date>.csv`
@@ -104,7 +106,10 @@ outputs fail. Values remain strings and are not rescaled.
 Accepted results need not be rerun solely because CPU/RAM/disk allocations
 change. Reuse them through verified cache hits or exclude completed samples and
 gather their retained outputs. Retain failed-attempt evidence before repair.
-Delete bulky intermediates only after acceptance and planned comparisons;
+Preserve merged matrices, the transcript map, QC CSV, expression metadata and
+the cohort's `sample_details.tar.gz` (original RSEM results and detailed QC).
+Capture task profiles before cleanup when provisioning evidence is needed.
+Delete bulky intermediates only after verifying this handoff and planned comparisons;
 deletion invalidates cache/recovery references. Cache hits reference the
 original run's files instead of copying them, so collect per-sample outputs by
 the paths in workflow metadata, not by listing one run directory. Keep raw inputs and reference

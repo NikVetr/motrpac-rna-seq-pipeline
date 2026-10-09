@@ -33,6 +33,7 @@ class TaskProfileTests(unittest.TestCase):
                 self.assertEqual("rn8_v116", row["reference_release"])
                 table = (root / "capture/task_profiles.tsv").read_text().splitlines()
                 self.assertEqual(["rnaseq_pipeline.star_align", "1", "1", "rat_b", "Done"], table[1].split("\t")[:5])
+                self.assertEqual("rn8_v116", dict(zip(table[0].split("\t"), table[1].split("\t")))["reference_release"])
 
     def test_working_memory_uses_simultaneous_samples_and_accepts_old_logs(self):
         with tempfile.TemporaryDirectory() as directory:

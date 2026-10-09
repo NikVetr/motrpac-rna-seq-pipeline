@@ -3,6 +3,7 @@ import importlib.util
 import subprocess
 import json
 import tempfile
+import tarfile
 from pathlib import Path
 import WDL
 
@@ -83,8 +84,11 @@ with tempfile.TemporaryDirectory() as directory:
             "gene_id\ttranscript_id(s)\tlength\teffective_length\texpected_count\tTPM\tFPKM\n"
             + "g.1\ttx.1\t100.00\t70.50\t" + count + "\t1000000.00\t5.60\n")
     stdlib = Files("1.0", write_dir=directory)
+    diagnostics = root / "a.qc_diagnostics.json"
+    diagnostics.write_text('{"sample": "a"}\n')
     env = WDL.values_from_json({"sample_prefix": ["b", "a"],
         "rsem_files": list(map(str, source.iterdir())), "rsem_gene_files": list(map(str, genes.iterdir())), "memory": 1,
+        "supporting_files": [str(diagnostics)], "source_rows": [["sample", "kind", "source_uri"]],
         "disk_space": 1, "ncpu": 1, "preemptible": 0, "docker": "unused"}, task.available_inputs)
     for decl in task.postinputs:
         env = env.bind(decl.name, decl.expr.eval(env, stdlib))
@@ -93,6 +97,10 @@ with tempfile.TemporaryDirectory() as directory:
     assert (root / "rsem_isoforms_count.txt").read_text() == "transcript_id\tb\ta\ntx.1\t2.30\t1.20\n"
     assert (root / "rsem_transcripts.tsv").read_text() == "transcript_id\tgene_id\tlength\ntx.1\tg.1\t100\n"
     assert (root / "rsem_isoforms_effective_length.txt").read_text() == "transcript_id\tb\ta\ntx.1\t70.5\t70.5\n"
+    with tarfile.open(root / "sample_details.tar.gz") as archive:
+        assert archive.extractfile("rsem_files/a.isoforms.results").read() == (source / "a.isoforms.results").read_bytes()
+        assert archive.extractfile("sample_diagnostics/a.qc_diagnostics.json").read() == diagnostics.read_bytes()
+        assert not any(member.issym() for member in archive)
     assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
     assert task.runtime["memory"].eval(env, stdlib).value == "4GB"
     assert env.resolve("effective_scratch_gb").value == 11
