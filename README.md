@@ -424,10 +424,15 @@ listing the rest as `status=failed`; it can also re-merge finished cohorts while
 their per-sample results remain. Write its inputs with
 `scripts/make_merge_inputs.py --inputs SUBMITTED_INPUTS.json --run-root
 gs://.../rnaseq_pipeline/WORKFLOW_ID --output merge_inputs.json`, repeating
-`--run-root` for recovery runs (latest last). It reads the `metadata.json` Caper
-writes to each workflow root, so call-cache hits resolve to the earlier run
-directory that holds their files. It checks raw paths, references and scientific
-settings, permits changed resource allocations, and uses the current merge image.
+`--run-root` for recovery runs (latest last). It reads each root's `metadata.json`;
+if missing, it retrieves metadata with `caper metadata WORKFLOW_ID` using the
+configured controller. Run it where Caper can access the original workflows.
+Recovery reads metadata without writing to GCS or rerunning tasks. All source
+workflows may be failed, provided at least one sample has complete expression
+and QC outputs; otherwise the script stops because there is nothing to merge.
+Call-cache hits resolve to the earlier run directory that holds their files.
+It checks raw paths, references and scientific settings, permits changed resource
+allocations, and uses the current merge image.
 Missing FASTQ/BAM size information is left blank; those files are not merge inputs.
 The merge-only workflow gathers primary expression; optional secondary all-read
 outputs must be retained separately. Verify the compact handoff in final storage

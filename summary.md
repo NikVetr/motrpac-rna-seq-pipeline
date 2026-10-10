@@ -34,6 +34,8 @@ sheet (status, diagnostics, input sizes and review-only MOP QC flags), and stop
 if gene values differ from their isoform sums. `wdl/merge_cohort.wdl`, with
 inputs from `scripts/make_merge_inputs.py`, merges the completed samples of
 failed or recovered runs after checking raw inputs and scientific settings.
+Missing GCS metadata exports are retrieved through the configured Caper
+controller; no tasks are rerun. At least one complete sample is required.
 Merged tables plus one `sample_details.tar.gz` archive preserve original RSEM
 results, detailed QC/convergence records and source URIs without a large file
 list for transfer. Study covariates, including

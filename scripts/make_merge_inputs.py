@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Write wdl/merge_cohort.wdl inputs from the per-sample outputs of one or more finished runs.
 
-Output paths come from the metadata.json that Caper writes to each workflow root, so call-cache
-hits resolve to the earlier run directory that holds their files. Samples without complete
-per-sample results are merged as failed: they are absent from the matrices and marked
+Output paths come from workflow metadata, recovered through Caper if the GCS export is missing,
+so call-cache hits resolve to the earlier run directory that holds their files. Samples without
+complete per-sample results are merged as failed: they are absent from the matrices and marked
 status=failed in the sample sheet. Later run roots take precedence.
 """
 
@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from make_json_rnaseq import IMAGE_ROLES, MERGE_RESULTS_DOCKER, REFERENCE_ROLES
@@ -38,9 +39,27 @@ DEFAULTS = {"reference_release": "unspecified", "run_pretrim_fastqc": True, "run
             "use_umi_molecule_expression": True}
 
 
-def gcloud_metadata(root):
-    return json.loads(subprocess.run(["gcloud", "storage", "cat", root.rstrip("/") + "/metadata.json"],
-                                     check=True, capture_output=True, text=True).stdout)
+def workflow_metadata(root):
+    root = root.rstrip("/")
+    uri = root + "/metadata.json"
+    result = subprocess.run(["gcloud", "storage", "cat", uri], capture_output=True, text=True)
+    if result.returncode == 0:
+        return json.loads(result.stdout)
+    if "matched no objects" not in result.stderr and not re.search(r"\b404\b", result.stderr):
+        raise RuntimeError(f"cannot read {uri}: {result.stderr.strip()}")
+
+    workflow_id = root.rsplit("/", 1)[-1]
+    print(f"Missing {uri}; retrieving metadata from Caper for {workflow_id}", file=sys.stderr)
+    try:
+        result = subprocess.run(["caper", "metadata", workflow_id], capture_output=True, text=True)
+    except FileNotFoundError:
+        raise RuntimeError("metadata recovery requires caper; run on the controller with access to this workflow") from None
+    if result.returncode:
+        raise RuntimeError(f"cannot recover metadata for {workflow_id}: {result.stderr.strip()}")
+    metadata = json.loads(result.stdout)
+    if metadata.get("id") != workflow_id or metadata.get("workflowRoot", "").rstrip("/") != root:
+        raise ValueError(f"recovered metadata does not match run root {root}")
+    return metadata
 
 
 def gcloud_sizes(*urls):
@@ -106,7 +125,7 @@ def run_results(metadata):
     return results
 
 
-def build(inputs, roots, read_metadata=gcloud_metadata, list_sizes=gcloud_sizes):
+def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_sizes):
     inputs = resolved_inputs(inputs)
     get = inputs.get
     samples = get("sample_prefix")

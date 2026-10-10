@@ -2,9 +2,11 @@ import csv
 import importlib.util
 import json
 import copy
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +58,27 @@ class SampleSheetTests(unittest.TestCase):
 
 
 class MergeInputTests(unittest.TestCase):
+    def test_metadata_lookup_and_recovery_errors(self):
+        root = "gs://bucket/rnaseq_pipeline/run1"
+        metadata = {"id": "run1", "workflowRoot": root + "/", "status": "Failed"}
+        saved = subprocess.CompletedProcess([], 0, json.dumps(metadata), "")
+        missing = subprocess.CompletedProcess([], 1, "", "URLs matched no objects or files")
+        denied = subprocess.CompletedProcess([], 1, "", "403 Permission denied")
+        with mock.patch.object(builder.subprocess, "run", return_value=saved) as run:
+            self.assertEqual(metadata, builder.workflow_metadata(root))
+            run.assert_called_once_with(["gcloud", "storage", "cat", root + "/metadata.json"],
+                                        capture_output=True, text=True)
+        wrong = subprocess.CompletedProcess([], 0, json.dumps({**metadata, "workflowRoot": "gs://other/run1"}), "")
+        cases = [([denied], RuntimeError, "403 Permission denied"),
+                 ([missing, denied], RuntimeError, "cannot recover metadata"),
+                 ([missing, FileNotFoundError()], RuntimeError, "recovery requires caper"),
+                 ([missing, wrong], ValueError, "does not match run root")]
+        for responses, error, message in cases:
+            with self.subTest(message=message), mock.patch.object(builder.subprocess, "run", side_effect=responses) as run:
+                with self.assertRaisesRegex(error, message):
+                    builder.workflow_metadata(root)
+                self.assertEqual(len(responses), run.call_count)
+
     def test_latest_complete_results_and_failed_samples(self):
         run, retry = "gs://bucket/rnaseq_pipeline/run1", "gs://bucket/rnaseq_pipeline/run2"
         def metadata(samples, calls, release="rn8_v116"):
@@ -102,6 +125,18 @@ class MergeInputTests(unittest.TestCase):
         runs[retry]["inputs"]["star_ramGB"] = 72  # Resource changes remain compatible.
         list_sizes = lambda *urls: {url: sizes[url] for url in urls if url in sizes}
         document = builder.build(inputs, [run, retry], runs.get, list_sizes)
+        responses = []
+        for root in (run, retry):
+            metadata = {**runs[root], "id": root.rsplit("/", 1)[-1], "workflowRoot": root}
+            responses.extend([subprocess.CompletedProcess([], 1, "", "URLs matched no objects or files"),
+                              subprocess.CompletedProcess([], 0, json.dumps(metadata), "")])
+        with mock.patch.object(builder.subprocess, "run", side_effect=responses) as commands:
+            self.assertEqual(document, builder.build(inputs, [run, retry], list_sizes=list_sizes))
+            self.assertEqual(["caper", "metadata", "run1"], commands.call_args_list[1].args[0])
+            self.assertEqual(["caper", "metadata", "run2"], commands.call_args_list[3].args[0])
+        empty = {root: {**record, "calls": {}} for root, record in runs.items()}
+        with self.assertRaisesRegex(ValueError, "no completed samples"):
+            builder.build(inputs, [run, retry], empty.get, list_sizes)
         get = lambda key: document["rnaseq_merge." + key]
         self.assertEqual((["a", "b"], ["c"]), (get("sample_prefix"), get("failed_samples")))
         self.assertEqual([["a", "rn8_v116", "1", "0", "umi_molecules", "deduplicated"],
