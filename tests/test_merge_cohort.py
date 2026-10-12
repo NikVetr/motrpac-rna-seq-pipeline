@@ -97,7 +97,10 @@ class MergeInputTests(unittest.TestCase):
                     ("qc_report", shard, "Done", {"rnaseq_report": path("qc_report", "_qc_info.csv"),
                                                  "diagnostics": path("qc_report", ".qc_diagnostics.json")}),
                     ("star_align", shard, "Done", {"bam_file": path("star_align", ".Aligned.sortedByCoord.out.bam"),
-                                                   "transcriptome_bam": path("star_align", ".Aligned.toTranscriptome.out.bam")})]
+                                                   "transcriptome_bam": path("star_align", ".Aligned.toTranscriptome.out.bam"),
+                                                   "junctions": path("star_align", ".SJ.out.tab"),
+                                                   "logs": [path("star_align", ".Log.final.out"), path("star_align", ".Log.out")]}),
+                    ("pretrim_fastqc", shard, "Done", {"fastQC_report": f"{root}/call-pretrim_fastqc/shard-{shard}/fastqc_raw.tar.gz"})]
         runs = {run: metadata(["a", "b", "c"], results(run, 0, "a", "umi") + results(run, 1, "b", "all", "RetryableFailure") +
                               [("udup", 0, "Done", {"molecule_transcriptome_bam": [f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam"]}),
                                ("qc_report", 2, "Done", {"rnaseq_report": f"{run}/call-qc_report/shard-2/c_qc_info.csv"})]),
@@ -149,6 +152,9 @@ class MergeInputTests(unittest.TestCase):
         self.assertEqual(builder.MERGE_RESULTS_DOCKER, get("merge_results_docker"))
         self.assertIn(["b", "fc", f"{run}/call-feature_counts/shard-1/b.out"], get("source_rows"))
         self.assertIn(f"{retry}/call-rsem_quant/shard-0/b.rsem_convergence.tsv", get("supporting_files"))
+        self.assertLess({f"{run}/call-star_align/shard-0/a.Log.final.out", f"{run}/call-star_align/shard-0/a.Log.out",
+                         f"{run}/call-star_align/shard-0/a.SJ.out.tab"}, set(get("supporting_files")))
+        self.assertIn(["b", "fastqc_pretrim", f"{retry}/call-pretrim_fastqc/shard-0/fastqc_raw.tar.gz"], get("source_rows"))
         unknown_sizes = builder.build(inputs, [run, retry], runs.get, lambda *urls: {})
         self.assertEqual(["a", "", "", "", ""], unknown_sizes["rnaseq_merge.sample_size_rows"][0])
         for key, value in (("reference_release", "rn7"), ("fastq1", ["gs://other/a", "b", "c"]),

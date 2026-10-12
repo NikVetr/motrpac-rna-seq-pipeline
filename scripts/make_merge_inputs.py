@@ -16,19 +16,28 @@ from pathlib import Path
 
 from make_json_rnaseq import IMAGE_ROLES, MERGE_RESULTS_DOCKER, REFERENCE_ROLES
 
+RSEM_SUPPORTING = ("log", "convergence", "gene_convergence", "stat_cnt", "stat_model")
 OUTPUTS = {
-    task: {field: field + "_" + mode for field in ("genes", "isoforms", "log", "convergence", "gene_convergence")}
+    task: {field: field + "_" + mode for field in ("genes", "isoforms") + RSEM_SUPPORTING}
     for task, mode in (("umi_molecule_rsem", "umi"), ("rsem_quant", "all"))
 }
 OUTPUTS.update({
     "umi_molecule_feature_counts_task": {"fc_out": "fc_umi"}, "feature_counts": {"fc_out": "fc_all"},
     "qc_report": {"rnaseq_report": "qc", "diagnostics": "diagnostics"},
-    "star_align": {"bam_file": "genomic_bam", "transcriptome_bam": "transcriptome_bam"},
+    "star_align": {"bam_file": "genomic_bam", "transcriptome_bam": "transcriptome_bam",
+                   "junctions": "star_junctions", "logs": "star_logs"},
     "udup": {"molecule_transcriptome_bam": "molecule_bam", "umi_metrics": "umi_metrics",
              "molecule_expression_metrics": "umi_expression_metrics"},
     "combined_contamination_qc": {"sampling_manifest": "sampling_manifest"},
     "trim_i1": {"trimmed_index": "trimmed_i1"},
+    "md": {"metrics": "dup_metrics"}, "rnaqc": {"rnaseqmetrics": "rna_metrics"}, "chrinfo": {"aligned_chrinfo": "chr_info"},
+    "cutadapt_umi": {"report": "cutadapt_report"}, "cutadapt_noumi": {"report": "cutadapt_report"},
+    "pretrim_fastqc": {"fastQC_report": "fastqc_pretrim"}, "posttrim_fastqc": {"fastQC_report": "fastqc_posttrim"},
 })
+# Small per-sample records archived in sample_details.tar.gz alongside the primary RSEM supporting files.
+SUPPORTING = ("umi_metrics", "umi_expression_metrics", "sampling_manifest", "star_junctions", "star_logs",
+              "dup_metrics", "rna_metrics", "chr_info", "cutadapt_report", "fastqc_pretrim", "fastqc_posttrim")
+MULTI_FILE = {"star_logs"}
 HEADER = ["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]
 BAMS = ("genomic_bam", "transcriptome_bam", "molecule_bam")
 SCIENTIFIC_INPUTS = (REFERENCE_ROLES | IMAGE_ROLES | {"minimumLength", "index_adapter", "univ_adapter"}) - {
@@ -116,7 +125,7 @@ def run_results(metadata):
             sample = samples[call["shardIndex"]]
             for field, kind in OUTPUTS.get(task, {}).items():
                 value = call.get("outputs", {}).get(field)
-                if isinstance(value, list):
+                if isinstance(value, list) and kind not in MULTI_FILE:
                     if len(value) > 1:
                         raise ValueError(f"expected at most one {field} for {sample}")
                     value = value[0] if value else None
@@ -170,11 +179,11 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
                               ("qc", "qc"), ("diagnostics", "diagnostics")):
                 files[key].append(record[kind])
                 source_rows.append([sample, key, record[kind]])
-            for kind in (f"log_{mode}", f"convergence_{mode}", f"gene_convergence_{mode}",
-                         "umi_metrics", "umi_expression_metrics", "sampling_manifest"):
-                if kind in record:
-                    supporting_files.append(record[kind])
-                    source_rows.append([sample, kind, record[kind]])
+            for kind in [f"{field}_{mode}" for field in RSEM_SUPPORTING] + list(SUPPORTING):
+                uris = record.get(kind, [])
+                for uri in [uris] if isinstance(uris, str) else uris:
+                    supporting_files.append(uri)
+                    source_rows.append([sample, kind, uri])
             bam = lambda kind: sizes.get(record.get(kind))
             size_rows.append([sample, gib(*[sizes.get(path) for path in raw_paths[sample]]),
                               gib(bam("genomic_bam")), gib(bam("transcriptome_bam")),

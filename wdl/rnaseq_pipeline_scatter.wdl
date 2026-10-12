@@ -680,6 +680,7 @@ workflow rnaseq_pipeline {
         File primary_rsem_genes = if use_sample_umi_expression then select_first([umi_molecule_rsem.genes]) else select_first([rsem_quant.genes])
         File primary_rsem_isoforms = if use_sample_umi_expression then select_first([umi_molecule_rsem.isoforms]) else select_first([rsem_quant.isoforms])
         File primary_rsem_report = if use_sample_umi_expression then select_first([umi_molecule_rsem.stat_cnt]) else select_first([rsem_quant.stat_cnt])
+        File primary_rsem_model = if use_sample_umi_expression then select_first([umi_molecule_rsem.stat_model]) else select_first([rsem_quant.stat_model])
         File primary_rsem_log = if use_sample_umi_expression then select_first([umi_molecule_rsem.log]) else select_first([rsem_quant.log])
         File primary_rsem_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.convergence]) else select_first([rsem_quant.convergence])
         File primary_rsem_gene_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.gene_convergence]) else select_first([rsem_quant.gene_convergence])
@@ -786,8 +787,11 @@ workflow rnaseq_pipeline {
             rsem_files=primary_rsem_isoforms,
             rsem_gene_files=primary_rsem_genes,
             supporting_files=flatten([qc_report.diagnostics, primary_rsem_log,
-                primary_rsem_convergence, primary_rsem_gene_convergence, select_all(udup.umi_metrics),
-                flatten(select_all(udup.molecule_expression_metrics)), select_all(combined_contamination_qc.sampling_manifest)]),
+                primary_rsem_convergence, primary_rsem_gene_convergence, primary_rsem_report, primary_rsem_model,
+                select_all(udup.umi_metrics), flatten(select_all(udup.molecule_expression_metrics)),
+                select_all(combined_contamination_qc.sampling_manifest), star_align.junctions, flatten(star_align.logs),
+                select_all(md.metrics), select_all(rnaqc.rnaseqmetrics), select_all(chrinfo.aligned_chrinfo),
+                cutadapt_report, select_all(pretrim_fastqc.fastQC_report), select_all(posttrim_fastqc.fastQC_report)]),
             source_rows=flatten([[["sample", "kind", "source_uri"]], flatten(sample_source_rows)]),
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,

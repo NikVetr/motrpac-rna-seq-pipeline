@@ -31,8 +31,12 @@ task merge_isoforms {
         while IFS= read -r input; do
             ln -s -- "$(realpath -- "$input")" rsem_gene_files/
         done < "~{write_lines(rsem_gene_files)}"
+        # FastQC archives share one name across samples, so unpack their sample-named reports instead.
         while IFS= read -r input; do
-            ln -s -- "$(realpath -- "$input")" sample_diagnostics/
+            case "$input" in
+                *.tar.gz) tar -xzkf "$input" -C sample_diagnostics ;;
+                *) ln -s -- "$(realpath -- "$input")" sample_diagnostics/ ;;
+            esac
         done < "~{write_lines(supporting_files)}"
         cp "~{write_tsv(source_rows)}" source_files.tsv
         python3 /usr/local/src/merge_rsem.py \

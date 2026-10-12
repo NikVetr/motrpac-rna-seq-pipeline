@@ -107,7 +107,7 @@ Accepted results need not be rerun solely because CPU/RAM/disk allocations
 change. Reuse them through verified cache hits or exclude completed samples and
 gather their retained outputs. Retain failed-attempt evidence before repair.
 Preserve merged matrices, the transcript map, QC CSV, expression metadata and
-the cohort's `sample_details.tar.gz` (original RSEM results and detailed QC).
+the cohort's `sample_details.tar.gz` (original RSEM results, STAR junctions and detailed QC).
 Capture task profiles before cleanup when provisioning evidence is needed.
 Delete bulky intermediates only after verifying this handoff and planned comparisons;
 deletion invalidates cache/recovery references. Cache hits reference the

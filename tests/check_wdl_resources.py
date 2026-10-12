@@ -86,9 +86,16 @@ with tempfile.TemporaryDirectory() as directory:
     stdlib = Files("1.0", write_dir=directory)
     diagnostics = root / "a.qc_diagnostics.json"
     diagnostics.write_text('{"sample": "a"}\n')
+    fastqc = []  # FastQC archives share a basename across samples; members are sample-named.
+    for sample in ("a", "b"):
+        (root / sample / "fastqc_raw").mkdir(parents=True)
+        (root / sample / "fastqc_raw" / f"{sample}_R1_fastqc.zip").write_text(sample)
+        fastqc.append(root / sample / "fastqc_raw.tar.gz")
+        with tarfile.open(fastqc[-1], "w:gz") as archive:
+            archive.add(root / sample / "fastqc_raw", "fastqc_raw")
     env = WDL.values_from_json({"sample_prefix": ["b", "a"],
         "rsem_files": list(map(str, source.iterdir())), "rsem_gene_files": list(map(str, genes.iterdir())), "memory": 1,
-        "supporting_files": [str(diagnostics)], "source_rows": [["sample", "kind", "source_uri"]],
+        "supporting_files": [str(diagnostics), *map(str, fastqc)], "source_rows": [["sample", "kind", "source_uri"]],
         "disk_space": 1, "ncpu": 1, "preemptible": 0, "docker": "unused"}, task.available_inputs)
     for decl in task.postinputs:
         env = env.bind(decl.name, decl.expr.eval(env, stdlib))
@@ -100,6 +107,7 @@ with tempfile.TemporaryDirectory() as directory:
     with tarfile.open(root / "sample_details.tar.gz") as archive:
         assert archive.extractfile("rsem_files/a.isoforms.results").read() == (source / "a.isoforms.results").read_bytes()
         assert archive.extractfile("sample_diagnostics/a.qc_diagnostics.json").read() == diagnostics.read_bytes()
+        assert archive.extractfile("sample_diagnostics/fastqc_raw/b_R1_fastqc.zip").read() == b"b"
         assert not any(member.issym() for member in archive)
     assert all(path.is_symlink() for path in (root / "rsem_files").iterdir())
     assert task.runtime["memory"].eval(env, stdlib).value == "4GB"

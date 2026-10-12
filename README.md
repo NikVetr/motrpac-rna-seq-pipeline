@@ -401,8 +401,10 @@ The merges also publish per-sample effective-length matrices
 `rsem_transcripts` (transcript, gene, length). For the compact cohort handoff,
 keep the matrices, transcript map, QC CSV, expression metadata and `sample_details.tar.gz`.
 The archive retains original RSEM gene/isoform files, QC JSONs, available RSEM
-logs and convergence tables, UMI/sampling metrics, and a source-URI table;
-these files need not be copied individually. It contains no FASTQs or BAMs.
+logs, convergence tables and count/model files, STAR junctions and logs, FastQC
+reports, Picard RNA and duplicate metrics, Cutadapt reports, per-chromosome counts,
+UMI/sampling metrics, and a source-URI table; these files need not be copied
+individually. It contains no FASTQs or BAMs.
 The isoform merge stops if any gene's count, TPM or FPKM differs from
 the sum of its isoforms beyond rounding, or if gene TPMs do not sum to one million.
 
