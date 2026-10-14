@@ -12,8 +12,8 @@ Pulling the repository does not update already-generated input JSONs.
 The shared workflow performs directional UMI deduplication and forward-stranded
 RSEM/featureCounts quantification by default. Canonical outputs include raw RSEM
 gene and isoform results, gene/transcript matrices and expression metadata.
-`--allow-missing-umis` explicitly permits mixed I1 availability and records the
-skip reason per sample; `--retain-all-read-expression` adds optional all-read
+`--allow-missing-umis` with `--allow-mixed-expression-modes` explicitly permits
+samples without a UMI and records the skip reason per sample; `--retain-all-read-expression` adds optional all-read
 outputs. Rat uses the same combined, sampled contamination QC, native QC parsers,
 cohort merge sizing, step-input profiling and E2 selection as human runs.
 

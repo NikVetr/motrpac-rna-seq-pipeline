@@ -23,13 +23,15 @@ def descendants(node):
 declarations = {node.name: node for node in descendants(workflow) if isinstance(node, WDL.Tree.Decl)}
 attach = next(node for node in descendants(workflow) if isinstance(node, WDL.Tree.Call) and node.name == "aumi")
 global_names = ("index_uris", "has_fastq_index", "index_length_contract", "index_length_valid",
+                "read_name_umi_length_contract", "read_name_umi_length_valid",
                 "expression_policy_contract", "expression_policy_valid")
-sample_names = ("index_uri", "sample_index", "umi_expression_input_contract", "umi_expression_inputs_valid",
-                "use_index_reads", "use_sample_umi_expression", "run_all_read_expression",
-                "expression_mode", "umi_status", "trimmed_index", "i1_layout", "expression_metadata_row")
+sample_names = ("index_uri", "sample_index", "read_name_umi", "umi_source_contract", "umi_source_valid",
+                "umi_expression_input_contract", "umi_expression_inputs_valid", "use_index_reads",
+                "use_read_name_umi", "sample_has_umi", "use_sample_umi_expression", "run_all_read_expression",
+                "expression_mode", "umi_status", "umi_source", "trimmed_index", "i1_layout", "expression_metadata_row")
 with tempfile.TemporaryDirectory() as directory:
     stdlib = WDL.StdLib.Base("1.0", write_dir=directory)
-    for indexes, allow, molecule, retain, expected, trimmed in (
+    for indexes, allow, molecule, retain, expected, trimmed, *read_names in (
         (["a.I1", "b.I1"], False, True, False, ["umi_molecules", "umi_molecules"], None),
         (["a.I1", ""], True, True, False, ["umi_molecules", "all_read"], None),
         (["", ""], True, True, False, ["all_read", "all_read"], None),
@@ -41,17 +43,24 @@ with tempfile.TemporaryDirectory() as directory:
         (["a.I1"], True, True, False, None, None),
         (["a.I1", "b.I1", ""], True, True, False,
          ["umi_molecules", "umi_molecules", "all_read"], [[], ["b.trimmed.I1"], None]),
+        (["a.I1", ""], False, True, False, ["umi_molecules", "umi_molecules"], None, [False, True]),
+        (None, True, True, False, ["umi_molecules", "all_read"], None, [True, False]),
+        (None, False, False, False, ["all_read", "all_read"], None, [True, True]),
+        (["a.I1", ""], False, True, False, None, None, [True, False]),
+        (["a.I1", "b.I1"], False, True, False, None, None, [True]),
     ):
+        read_names = read_names[0] if read_names else []
         samples = [chr(97 + i) for i in range(len(expected) if expected else 2)]
         inputs = {"fastq1": [sample + ".R1" for sample in samples], "fastq2": [sample + ".R2" for sample in samples],
                   "sample_prefix": samples, "fastq_index": indexes, "allow_missing_umis": allow,
                   "use_umi_molecule_expression": molecule, "retain_all_read_expression": retain,
-                  "reference_release": "gencode_v50", "trim_trailing_i1_base": trimmed is not None}
+                  "reference_release": "gencode_v50", "trim_trailing_i1_base": trimmed is not None,
+                  "umi_in_read_name": read_names}
         env = WDL.values_from_json(inputs, workflow.available_inputs)
         try:
             for name in global_names:
                 env = env.bind(name, declarations[name].expr.eval(env, stdlib))
-            rows = []
+            rows, sources = [], []
             for index in range(len(samples)):
                 sample_env = env.bind("i", WDL.Value.Int(index))
                 result = trimmed[index] if trimmed is not None else None
@@ -67,7 +76,13 @@ with tempfile.TemporaryDirectory() as directory:
                 if sample_env.resolve("use_index_reads").value:
                     assert attach.inputs["fastqi1"].eval(sample_env, stdlib).value == (result[0] if result else indexes[index])
                 assert row.json[3] == ("0" if mode == "umi_molecules" else "1")
+                source = ("i1" if indexes and indexes[index] else
+                          "read_name" if read_names and read_names[index] else "none")
+                assert row.json[2] == ("0" if source == "none" else "1") and row.json[6] == source
+                assert sample_env.resolve("umi_status").value == (
+                    "skipped_no_umi" if source == "none" else "deduplicated" if molecule else "not_requested")
                 rows.append(row)
+                sources.append(source)
         except WDL.Error.EvalError:
             assert expected is None
             continue
@@ -82,11 +97,12 @@ with tempfile.TemporaryDirectory() as directory:
             actual = list(csv.DictReader(handle, delimiter="\t"))
         assert [row["sample"] for row in actual] == samples
         assert [row["expression_mode"] for row in actual] == expected
+        assert [row["umi_source"] for row in actual] == sources
         if trimmed is not None:
             assert [row["i1_layout"] for row in actual] == ["umi8", "umi8_trailing_base_trimmed", "none"]
         else:
             assert "i1_layout" not in actual[0]
-print("Mixed, absent, strict, all-read and retained-secondary WDL policies PASS")
+print("Mixed, absent, strict, read-name, all-read and retained-secondary WDL policies PASS")
 
 # Static validation does not expose Cromwell's nullable-array evaluation bugs.
 parser = argparse.ArgumentParser()
@@ -104,15 +120,17 @@ if args.cromwell_jar:
     probe_names = [name for name in sample_names if name not in ("trimmed_index", "i1_layout", "expression_metadata_row")]
     probe += "\nscatter (i in range(length(fastq1))) {\n" + "\n".join(declaration(name) for name in probe_names)
     probe += "\n}\noutput { Array[String] modes = expression_mode }\n}\n"
-    for indexes, allow, expected in ((["/etc/hosts", ""], True, ["umi_molecules", "all_read"]),
-                                     (None, True, ["all_read", "all_read"]),
-                                     (["/etc/hosts", ""], False, None)):
+    for indexes, allow, read_names, expected in ((["/etc/hosts", ""], True, [], ["umi_molecules", "all_read"]),
+                                                 (None, True, [], ["all_read", "all_read"]),
+                                                 (["/etc/hosts", ""], False, [False, True],
+                                                  ["umi_molecules", "umi_molecules"]),
+                                                 (["/etc/hosts", ""], False, [], None)):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "policy.wdl").write_text(probe)
             values = dict(inputs, fastq1=["/etc/hosts"] * 2, fastq2=["/etc/hosts"] * 2,
                           sample_prefix=["a", "b"], fastq_index=indexes, allow_missing_umis=allow,
-                          trim_trailing_i1_base=False)
+                          trim_trailing_i1_base=False, umi_in_read_name=read_names)
             (root / "input.json").write_text(json.dumps({"policy." + key: value for key, value in values.items()}))
             command = [args.java, "-Xmx1g", "-Dbackend.default=Local", "-jar", str(args.cromwell_jar.resolve()),
                        "run", "policy.wdl", "-i", "input.json", "-m", "metadata.json"]
@@ -123,4 +141,4 @@ if args.cromwell_jar:
             else:
                 assert completed.returncode == 0, completed.stdout + completed.stderr
                 assert metadata["outputs"]["policy.modes"] == expected
-    print("Cromwell mixed, absent, and strict expression evaluation PASS (no worker tasks)")
+    print("Cromwell mixed, absent, read-name, and strict expression evaluation PASS (no worker tasks)")

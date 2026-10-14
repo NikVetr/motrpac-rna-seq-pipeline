@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import io
 import json
 import re
 import runpy
@@ -19,10 +21,19 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import make_json_rnaseq as generator  # noqa: E402
 
 
+def fastq(header: bytes, records: int = 30) -> bytes:
+    return b"".join(header % index + b" 1:N:0:ATTCGCAG+CTTGTGGN\nACGT\n+\nFFFF\n" for index in range(records))
+
+
+PLAIN_READS = fastq(b"@LH00131:422:22TNLFLT4:6:1101:%d:1028")
+UMI_READS = fastq(b"@LH00131:283:22HCGYLT4:4:1101:%d:1014:CTATTGTT")
+
+
 class FakeGcsFileSystem:
-    def __init__(self, paths: list[str], existing: set[str]) -> None:
+    def __init__(self, paths: list[str], existing: set[str], reads: dict[str, bytes] | None = None) -> None:
         self.paths = paths
         self.existing = existing
+        self.reads = reads or {}
         self.project = None
 
     def glob(self, pattern: str) -> list[str]:
@@ -36,6 +47,9 @@ class FakeGcsFileSystem:
         if path not in self.existing:
             raise FileNotFoundError(path)
         return {"name": path}
+
+    def open(self, path: str, mode: str = "rb") -> io.BytesIO:
+        return io.BytesIO(gzip.compress(self.reads[path]))
 
 
 class InputJsonGeneratorTests(unittest.TestCase):
@@ -211,7 +225,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertTrue(document["rnaseq_pipeline.trim_trailing_i1_base"])
 
     def test_umi_molecule_expression_policy_requires_i1(self) -> None:
-        with self.assertRaisesRegex(ValueError, "requires a matched I1"):
+        with self.assertRaisesRegex(ValueError, "requires an I1 FASTQ or read-name UMIs"):
             self.make_document(use_umi_molecule_expression=True)
 
         document = self.make_document(
@@ -236,6 +250,31 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertFalse(self.make_document()["rnaseq_pipeline.use_umi_molecule_expression"])
         with self.assertRaisesRegex(ValueError, "requires UMI molecule expression"):
             self.make_document(retain_all_read_expression=True)
+
+    def test_read_name_umis_replace_i1_and_mixed_modes_are_opt_in(self) -> None:
+        document = self.make_document(use_umi_molecule_expression=True, umi_in_read_name=[True])
+        self.assertEqual([True], document["rnaseq_pipeline.umi_in_read_name"])
+        self.assertIsNone(document["rnaseq_pipeline.fastq_index"])
+        default = self.make_document(include_index=True, use_umi_molecule_expression=True)
+        self.assertNotIn("rnaseq_pipeline.umi_in_read_name", default)
+        self.assertNotIn("rnaseq_pipeline.allow_mixed_expression_modes", default)
+        mixed = self.make_document(include_index=True, use_umi_molecule_expression=True,
+                                   allow_mixed_expression_modes=True)
+        self.assertTrue(mixed["rnaseq_pipeline.allow_mixed_expression_modes"])
+        with self.assertRaisesRegex(ValueError, "both I1 and read names"):
+            self.make_document(include_index=True, use_umi_molecule_expression=True, umi_in_read_name=[True])
+        with self.assertRaisesRegex(ValueError, "booleans aligned"):
+            self.make_document(use_umi_molecule_expression=True, umi_in_read_name=[True, True])
+
+    def test_read_name_umi_detection_requires_consistent_headers(self) -> None:
+        path = "gs://example/a_R1.fastq.gz"
+        self.assertTrue(generator.read_name_umi(FakeGcsFileSystem([], set(), {path: UMI_READS}), path))
+        self.assertFalse(generator.read_name_umi(FakeGcsFileSystem([], set(), {path: PLAIN_READS}), path))
+        mixed = fastq(b"@LH00131:283:22HCGYLT4:4:1101:%d:1014:CTATTGTT", 10) + PLAIN_READS
+        with self.assertRaisesRegex(ValueError, "10 of 25 sampled read names"):
+            generator.read_name_umi(FakeGcsFileSystem([], set(), {path: mixed}), path)
+        with self.assertRaisesRegex(ValueError, "cannot read FASTQ records"):
+            generator.read_name_umi(FakeGcsFileSystem([], set(), {path: b""}), path)
 
     def test_qc_toggles_are_default_on_and_only_disabled_values_are_emitted(self) -> None:
         default_document = self.make_document()
@@ -463,6 +502,7 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertEqual(["sample"], document["rnaseq_pipeline.sample_prefix"])
         self.assertEqual([i1], document["rnaseq_pipeline.fastq_index"])
         self.assertTrue(document["rnaseq_pipeline.use_umi_molecule_expression"])
+        self.assertNotIn("rnaseq_pipeline.umi_in_read_name", document)
         self.assertEqual("local-test-only", filesystem.project)
 
         (self.temp / "set1_rnaseq.json").unlink()
@@ -475,9 +515,13 @@ class InputJsonGeneratorTests(unittest.TestCase):
     def test_missing_umi_opt_in_preserves_samples_and_access_errors(self) -> None:
         r1 = ["gs://example/a_R1.fastq.gz", "gs://example/b_R1.fastq.gz"]
         existing = {"gs://example/a_R2.fastq.gz", "gs://example/b_R2.fastq.gz", "gs://example/a_I1.fastq.gz"}
-        filesystem = FakeGcsFileSystem(r1, existing)
+        filesystem = FakeGcsFileSystem(r1, existing, {r1[1]: PLAIN_READS})
         arguments = self.arguments()
         arguments.allow_missing_umis = True
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            with self.assertRaisesRegex(ValueError, "1 of 2 samples lack UMIs"):
+                generator.main(arguments)
+        arguments.allow_mixed_expression_modes = True
         with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
             generator.main(arguments)
         output = self.temp / "set1_rnaseq.json"
@@ -485,6 +529,8 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertEqual(["a", "b"], document["rnaseq_pipeline.sample_prefix"])
         self.assertEqual(["gs://example/a_I1.fastq.gz", ""], document["rnaseq_pipeline.fastq_index"])
         self.assertTrue(document["rnaseq_pipeline.allow_missing_umis"])
+        self.assertTrue(document["rnaseq_pipeline.allow_mixed_expression_modes"])
+        self.assertNotIn("rnaseq_pipeline.umi_in_read_name", document)
         output.unlink()
         with mock.patch.object(filesystem, "info", side_effect=PermissionError("denied")), \
              mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
@@ -493,8 +539,20 @@ class InputJsonGeneratorTests(unittest.TestCase):
         self.assertFalse(output.exists())
         arguments.allow_missing_umis = False
         with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
-            with self.assertRaisesRegex(ValueError, "objects are missing"):
+            with self.assertRaisesRegex(ValueError, "b: no I1 FASTQ and no UMI in read names"):
                 generator.main(arguments)
+        self.assertFalse(output.exists())
+
+    def test_main_uses_read_name_umis_by_default_when_i1_is_absent(self) -> None:
+        r1 = ["gs://example/a_R1.fastq.gz", "gs://example/b_R1.fastq.gz"]
+        existing = {"gs://example/a_R2.fastq.gz", "gs://example/b_R2.fastq.gz", "gs://example/a_I1.fastq.gz"}
+        filesystem = FakeGcsFileSystem(r1, existing, {r1[1]: UMI_READS})
+        with mock.patch.dict(sys.modules, {"gcsfs": self.fake_gcsfs(filesystem)}):
+            self.assertEqual(0, generator.main(self.arguments()))
+        document = json.loads((self.temp / "set1_rnaseq.json").read_text())
+        self.assertEqual(["gs://example/a_I1.fastq.gz", ""], document["rnaseq_pipeline.fastq_index"])
+        self.assertEqual([False, True], document["rnaseq_pipeline.umi_in_read_name"])
+        self.assertFalse(document["rnaseq_pipeline.allow_missing_umis"])
 
     def test_cli_index_selection_and_umi_disk_default(self) -> None:
         script = str(REPO_ROOT / "scripts" / "make_json_rnaseq.py")

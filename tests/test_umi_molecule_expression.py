@@ -194,7 +194,8 @@ class UmiMoleculeExpressionTests(unittest.TestCase):
             "if (use_umi_molecule_expression && retain_all_read_expression)",
             'output_prefix="all_read"',
             "rsem_files=select_all(rsem_quant.genes)",
-            "feature_counts_files=select_all(feature_counts.fc_out)",
+            "feature_counts_files=feature_counts.fc_out",
+            "all_read_feature_counts_files=if use_umi_molecule_expression then feature_counts.fc_out else []",
         ):
             self.assertIn(expected, workflow)
         molecule_calls = workflow[

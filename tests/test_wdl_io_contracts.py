@@ -180,7 +180,7 @@ class WdlIoContractTests(unittest.TestCase):
         self.assertIn("if (use_combined_contamination_qc)", wdl)
         self.assertIn("if (run_alignment_qc)", wdl)
         self.assertIn(
-            "if (use_index_reads && (run_umi_qc || use_sample_umi_expression))",
+            "if (sample_has_umi && (run_umi_qc || use_sample_umi_expression))",
             wdl,
         )
 

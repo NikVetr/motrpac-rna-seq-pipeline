@@ -12,6 +12,9 @@ task merge_results {
         Array[File] qc_diagnostics = []
         Array[Array[String]] sample_size_rows = []
         Array[String] failed_samples = []
+        # All-read featureCounts for every completed sample; with featureCounts.txt this gives gene-level duplication.
+        Array[File] all_read_feature_counts_files = []
+        Boolean allow_mixed_expression_modes = false
 
         Int memory
         Int disk_space
@@ -25,7 +28,8 @@ task merge_results {
     Int inferred_merge_memory_gb = 4 * ceil(length(sample_prefix) / 75.0)
     Int effective_merge_memory_gb =
         if memory > inferred_merge_memory_gb then memory else inferred_merge_memory_gb
-    Float merge_input_gib = size(rsem_files, "GiB") + size(feature_counts_files, "GiB") + size(qc_report_files, "GiB")
+    Float merge_input_gib = size(rsem_files, "GiB") + size(feature_counts_files, "GiB") + size(qc_report_files, "GiB") +
+        size(all_read_feature_counts_files, "GiB")
     # Retain the cohort-validated allowance for localization, outputs, and scratch.
     Int inferred_merge_scratch_gb = ceil(3.0 * merge_input_gib + 10.0)
     Int effective_merge_scratch_gb =
@@ -69,6 +73,16 @@ task merge_results {
         python3 /usr/local/src/merge_fc.py \
             --fc-dir feature_counts_files \
             --sample-order ~{sample_order}
+        if [[ -s "~{write_lines(all_read_feature_counts_files)}" ]]; then
+            mkdir all_read_feature_counts_files
+            while IFS= read -r input; do
+                ln -s -- "$(realpath -- "$input")" all_read_feature_counts_files/
+            done < "~{write_lines(all_read_feature_counts_files)}"
+            python3 /usr/local/src/merge_fc.py \
+                --fc-dir all_read_feature_counts_files \
+                --sample-order ~{sample_order} \
+                --output featureCounts_all_reads.txt
+        fi
 
         echo "--- $(date "+[%b %d %H:%M:%S]") Finished merging feature counts, writing the sample sheet ---"
         python3 /usr/local/src/sample_sheet.py \
@@ -77,7 +91,7 @@ task merge_results {
             --diagnostics-dir qc_diagnostics \
             --sizes "~{write_tsv(sample_size_rows)}" \
             --failed "~{write_lines(failed_samples)}" \
-            --output expression_metadata.tsv
+            --output expression_metadata.tsv ~{if allow_mixed_expression_modes then "--allow-mixed-expression-modes" else ""}
     >>>
 
     output {
@@ -86,6 +100,7 @@ task merge_results {
         File rsem_genes_fpkm = "rsem_genes_fpkm.txt"
         File rsem_genes_effective_length = "rsem_genes_effective_length.txt"
         File feature_counts = "featureCounts.txt"
+        Array[File] feature_counts_all_reads = glob("featureCounts_all_reads.txt")
         File qc_report = "${output_report_name}.csv"
         File expression_metadata = "expression_metadata.tsv"
     }

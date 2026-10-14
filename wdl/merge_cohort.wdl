@@ -20,6 +20,9 @@ workflow rnaseq_merge {
         Array[File] supporting_files = []
         Array[Array[String]] source_rows = []
         Array[Array[String]] sample_size_rows = []
+        # All-read featureCounts for every completed sample (gene-level duplication); empty to omit.
+        Array[File] all_read_feature_counts_files = []
+        Boolean allow_mixed_expression_modes = false
         String output_report_name
         Int merge_results_ncpu = 1
         Int merge_results_ramGB = 4
@@ -39,6 +42,8 @@ workflow rnaseq_merge {
             qc_diagnostics=qc_diagnostics,
             sample_size_rows=sample_size_rows,
             failed_samples=failed_samples,
+            all_read_feature_counts_files=all_read_feature_counts_files,
+            allow_mixed_expression_modes=allow_mixed_expression_modes,
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
             disk_space=merge_results_disk,
@@ -71,6 +76,7 @@ workflow rnaseq_merge {
         File rsem_isoforms_effective_length = merge_isoforms.rsem_isoforms_effective_length
         File rsem_transcripts = merge_isoforms.rsem_transcripts
         File feature_counts_file = merge_results.feature_counts
+        Array[File] feature_counts_all_reads = merge_results.feature_counts_all_reads
         File qc_report_file = merge_results.qc_report
         File expression_metadata = merge_results.expression_metadata
         File sample_details = merge_isoforms.sample_details

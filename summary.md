@@ -14,9 +14,16 @@ are pinned by digest. The rn6, rn7, rn8/Ensembl 115 and human v39 configurations
 remain selectable. Reference selection is independent of execution region.
 
 Counting is forward-stranded. Directional UMI molecule expression is canonical
-when I1 reads are present. Missing UMIs fail unless `--allow-missing-umis` is
-enabled; permitted missing-I1 samples use all-read expression and record
-`not_deduplicated=1` and a skip reason in expression metadata.
+when a UMI is present: from I1 reads, or from read names that already end in an
+eight-base UMI, which the input generator detects when I1 is absent and records
+as `umi_in_read_name`. Read-name samples skip attachment and keep the all-read
+trimming and alignment calls, so resubmitting them reuses cached results.
+Missing UMIs fail unless `--allow-missing-umis` is enabled; permitted samples use
+all-read expression and record `not_deduplicated=1`, a skip reason and
+`umi_source=none` in expression metadata. Merges refuse cohorts mixing
+deduplicated and all-read samples unless explicitly allowed, then flag the
+all-read samples `not_deduplicated`. Molecule runs also merge all-read
+featureCounts, giving gene-level duplication at little cost.
 `--trim-trailing-i1-base` removes a fixed ninth base from nine-base I1 reads
 before UMI attachment; otherwise any non-eight-base I1 fails.
 Every nine-base record is trimmed; a whole-file check requires at least 90% A
@@ -36,6 +43,7 @@ inputs from `scripts/make_merge_inputs.py`, merges the completed samples of
 failed or recovered runs after checking raw inputs and scientific settings.
 Missing GCS metadata exports are retrieved through the configured Caper
 controller; no tasks are rerun. At least one complete sample is required.
+`--all-read` gathers retained all-read results as a sensitivity set.
 Merged tables plus one `sample_details.tar.gz` archive preserve original RSEM
 results, detailed QC/convergence records and source URIs without a large file
 list for transfer. Study covariates, including

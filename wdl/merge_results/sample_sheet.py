@@ -43,7 +43,7 @@ def read_tsv(path, header=True):
     return rows if not header else (rows[0], rows[1:]) if rows else ([], [])
 
 
-def build(metadata, qc_report, diagnostics_dir, sizes, failed, output):
+def build(metadata, qc_report, diagnostics_dir, sizes, failed, output, allow_mixed_modes=False):
     header, rows = read_tsv(metadata)
     samples = [row[0] for row in rows]
     failed = {line.strip() for line in failed.read_text(encoding="utf-8").splitlines() if line.strip()}
@@ -63,6 +63,14 @@ def build(metadata, qc_report, diagnostics_dir, sizes, failed, output):
                       any(len(values) != len(SIZE_COLUMNS) for values in size_rows.values())):
         raise ValueError("size rows must cover exactly the completed samples")
 
+    mode_column = header.index("expression_mode") if "expression_mode" in header else None
+    modes = {row[0]: row[mode_column] for row in rows if mode_column is not None and row[0] not in failed}
+    mixed = len(set(modes.values())) > 1
+    if mixed and not allow_mixed_modes:
+        counts = {mode: list(modes.values()).count(mode) for mode in sorted(set(modes.values()))}
+        raise ValueError(f"cohort mixes expression modes {counts}; quantify every sample the same way "
+                         "or pass --allow-mixed-expression-modes")
+
     operands = [[number(qc[s].get(key)) for key in ("reads", "pct_uniquely_mapped", "pct_multimapped")] for s in completed]
     mapped = [reads * (unique + multi) / 100 for reads, unique, multi in operands if None not in (reads, unique, multi)]
     cohort_mean_mapped = sum(mapped) / len(mapped) if mapped else None
@@ -78,11 +86,14 @@ def build(metadata, qc_report, diagnostics_dir, sizes, failed, output):
             strand = (record.get("picard_strand") or {}).get("correct_strand_fraction")
             sizes_text = ["" if value == "" else "{:.3f}".format(float(value))
                           for value in size_rows.get(sample, [""] * len(SIZE_COLUMNS))]
+            flags = qc_flags(qc[sample], record, cohort_mean_mapped)
+            if mixed and modes[sample] == "all_read":
+                flags = ";".join(filter(None, [flags, "not_deduplicated"]))
             writer.writerow(row + [
                 "completed", str(record["rsem"]["converged"]).lower(), record["rsem"]["iterations"],
                 "" if strand is None else "{:.6f}".format(strand),
                 "{:.6f}".format(record["feature_counts"]["assigned_alignment_fraction"]),
-                *sizes_text, qc_flags(qc[sample], record, cohort_mean_mapped)])
+                *sizes_text, flags])
 
 
 def main(argv=None):
@@ -93,8 +104,11 @@ def main(argv=None):
     parser.add_argument("--sizes", type=Path, required=True, help="headerless rows: sample + SIZE_COLUMNS; may be empty")
     parser.add_argument("--failed", type=Path, required=True, help="failed sample IDs, one per line; may be empty")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--allow-mixed-expression-modes", action="store_true",
+                        help="accept deduplicated and all-read samples in one cohort; all-read samples are flagged")
     args = parser.parse_args(argv)
-    build(args.metadata, args.qc, args.diagnostics_dir, args.sizes, args.failed, args.output)
+    build(args.metadata, args.qc, args.diagnostics_dir, args.sizes, args.failed, args.output,
+          args.allow_mixed_expression_modes)
     return 0
 
 

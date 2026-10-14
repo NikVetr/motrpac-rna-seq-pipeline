@@ -44,7 +44,8 @@ The pipeline uses:
 
 The pipeline generates:
 - Gene expression quantification (counts, TPM, FPKM) from RSEM
-- Gene counts from featureCounts
+- Gene counts from featureCounts; with molecule expression, also all-read gene counts
+  (`featureCounts_all_reads.txt`) for gene-level duplication (1 - molecule / all-read)
 - Raw RSEM gene/isoform results and transcript counts, TPM, and FPKM matrices
 - Ordered expression metadata including the `not_deduplicated` technical covariate
 - Comprehensive QC metrics for outlier detection and covariate adjustment
@@ -52,13 +53,20 @@ The pipeline generates:
 
 ## Quick Start
 
-UMI molecule expression is the default. Use `--allow-missing-umis` to explicitly
-permit samples without I1: those samples retain all-read expression in the
-canonical matrices. Missing R2 files and access errors still fail. The workflow
-logs each sample's expression mode and UMI status and publishes
-`expression_metadata` with reference release, UMI availability and
-`not_deduplicated` (1 for all-read, 0 for molecule expression). Include that
-metadata when modeling a cohort with mixed UMI availability.
+UMI molecule expression is the default. A sample's UMI comes from its I1 FASTQ or,
+when I1 is absent, from read names that already end in an eight-base UMI field
+(`@instrument:run:flowcell:lane:tile:x:y:UMI`). The generator samples 25 R1 records
+and records `umi_in_read_name` for such samples; headers that only partly carry a
+UMI fail. Read-name samples skip attachment, so their trimming and STAR calls are
+those of an all-read run. Use `--allow-missing-umis` to explicitly permit samples
+with neither source: those samples retain all-read expression in the canonical
+matrices. Missing R2 files and access errors still fail. The workflow logs each
+sample's expression mode and UMI status and publishes `expression_metadata` with
+reference release, UMI availability, `not_deduplicated` (1 for all-read, 0 for
+molecule expression) and `umi_source` (`i1`, `read_name` or `none`).
+The generator and merges refuse cohorts that mix deduplicated and all-read samples
+unless `--allow-mixed-expression-modes` is given; all-read samples in an accepted mix
+carry the `not_deduplicated` QC flag. Include that metadata when modeling such a cohort.
 Generated JSON uses an empty string for each absent I1 slot; present I1 URIs
 remain typed file inputs at the task boundary.
 
@@ -238,7 +246,8 @@ non-UMI-deduplicated matrices under `all_read_*` names, or pass
 `--all-read-expression-only` to run only the forward-stranded all-read branch.
 To run without I1 files, combine `--no-index` with
 `--all-read-expression-only`; UMI QC is then omitted. For mixed availability,
-`--allow-missing-umis` preserves molecule expression wherever I1 is present.
+`--allow-missing-umis` preserves molecule expression wherever a UMI is present;
+add `--allow-mixed-expression-modes` so the merge accepts the mix.
 `--trim-trailing-i1-base` removes a fixed ninth base from nine-base I1 reads
 (an eight-base UMI plus one extra cycle) and adds an `i1_layout` column to the
 expression metadata. Eight-base I1 is passed through unchanged, so existing
@@ -436,9 +445,21 @@ Call-cache hits resolve to the earlier run directory that holds their files.
 It checks raw paths, references and scientific settings, permits changed resource
 allocations, and uses the current merge image.
 Missing FASTQ/BAM size information is left blank; those files are not merge inputs.
-The merge-only workflow gathers primary expression; optional secondary all-read
-outputs must be retained separately. Verify the compact handoff in final storage
-before deleting execution data.
+The merge-only workflow gathers primary expression, and `featureCounts_all_reads.txt`
+when every merged sample has all-read featureCounts (runs before that output lack it
+for UMI samples). `--all-read` instead gathers all-read results as a sensitivity set
+named `<report>_all_read`, holding only the samples that have them.
+`--allow-mixed-expression-modes` accepts a cohort that mixes deduplicated and
+all-read samples. The merge image must include the mode check and all-read matrix
+(see `MERGE_RESULTS_DOCKER`); older images reject the new inputs.
+Verify the compact handoff in final storage before deleting execution data.
+
+To deduplicate samples first run all-read, resubmit only those samples with
+`--sample-list` and the original runtime profile: trimming, STAR and all-read
+featureCounts are call-cache hits, and UMI grouping and molecule RSEM run. Then
+merge the original and new run roots (new last) using inputs regenerated for the
+whole cohort, which carry the `umi_in_read_name` flags. Keep the original run's
+trimmed FASTQs and STAR BAMs until the resubmission finishes.
 
 `scripts/gcp/capture_task_profiles.py METADATA.json OUTDIR [--skip-batch]` adds
 `task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,

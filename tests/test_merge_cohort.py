@@ -25,6 +25,50 @@ builder = load("make_merge_inputs", "scripts/make_merge_inputs.py")
 QC_FIELDS = ["sample", "reads", "pct_GC", "pct_rRNA", "pct_uniquely_mapped", "pct_multimapped", "pct_coding", "pct_utr"]
 
 
+def run_metadata(samples, calls, release="rn8_v116"):
+    document = {"status": "Failed", "inputs": {"sample_prefix": samples, "reference_release": release}, "calls": {}}
+    for task, shard, status, outputs in calls:
+        document["calls"].setdefault("rnaseq_pipeline." + task, []).append(
+            {"shardIndex": shard, "executionStatus": status, "outputs": outputs})
+    return document
+
+
+def sample_results(root, shard, sample, mode, rsem_status="Done"):
+    rsem = "umi_molecule_rsem" if mode == "umi" else "rsem_quant"
+    fc = "umi_molecule_feature_counts_task" if mode == "umi" else "feature_counts"
+    path = lambda task, name: f"{root}/call-{task}/shard-{shard}/{sample}{name}"
+    return [(rsem, shard, rsem_status, {"genes": path(rsem, ".genes.results"), "isoforms": path(rsem, ".isoforms.results"),
+                                       "convergence": path(rsem, ".rsem_convergence.tsv")}),
+            (fc, shard, "Done", {"fc_out": path(fc, ".out")}),
+            ("qc_report", shard, "Done", {"rnaseq_report": path("qc_report", "_qc_info.csv"),
+                                         "diagnostics": path("qc_report", ".qc_diagnostics.json")}),
+            ("star_align", shard, "Done", {"bam_file": path("star_align", ".Aligned.sortedByCoord.out.bam"),
+                                           "transcriptome_bam": path("star_align", ".Aligned.toTranscriptome.out.bam"),
+                                           "junctions": path("star_align", ".SJ.out.tab"),
+                                           "logs": [path("star_align", ".Log.final.out"), path("star_align", ".Log.out")]}),
+            ("pretrim_fastqc", shard, "Done", {"fastQC_report": f"{root}/call-pretrim_fastqc/shard-{shard}/fastqc_raw.tar.gz"})]
+
+
+def cohort_inputs(runs, **options):
+    """Requested inputs for samples a-c; each run's recorded inputs match them for its own samples."""
+    inputs = {"rnaseq_pipeline." + key: value for key, value in {
+        "sample_prefix": ["a", "b", "c"], "fastq1": [f"gs://raw/{s}_R1.fastq.gz" for s in "abc"],
+        "fastq2": [f"gs://raw/{s}_R2.fastq.gz" for s in "abc"],
+        "fastq_index": ["gs://raw/a_I1.fastq.gz", "", "gs://raw/c_I1.fastq.gz"],
+        "reference_release": "rn8_v116", "output_report_name": "cohort", "merge_results_docker": "image",
+        **options}.items()}
+    for key in builder.SCIENTIFIC_INPUTS | {"attach_umi_docker", "umi_dup_docker"}:
+        inputs["rnaseq_pipeline." + key] = "same-" + key
+    for record in runs.values():
+        selected = record["inputs"]["sample_prefix"]
+        record["inputs"].update(builder.resolved_inputs(inputs))
+        record["inputs"]["sample_prefix"] = selected
+        for key in ("fastq1", "fastq2", "fastq_index", "umi_in_read_name"):
+            if "rnaseq_pipeline." + key in inputs:
+                record["inputs"][key] = [inputs["rnaseq_pipeline." + key]["abc".index(sample)] for sample in selected]
+    return inputs
+
+
 class SampleSheetTests(unittest.TestCase):
     def test_flags_failed_samples_and_sizes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -43,18 +87,23 @@ class SampleSheetTests(unittest.TestCase):
                     "feature_counts": {"assigned_alignment_fraction": 0.8}}))
             (root / "sizes.tsv").write_text("a\t3\t2\t1.5\t0.5\nb\t1\t1\t1\t1\n")
             (root / "failed.txt").write_text("c\n")
-            sheet.build(root / "metadata.tsv", root / "qc.csv", root / "diagnostics", root / "sizes.tsv",
-                        root / "failed.txt", root / "sheet.tsv")
+            arguments = (root / "metadata.tsv", root / "qc.csv", root / "diagnostics", root / "sizes.tsv", root / "failed.txt")
+            with self.assertRaisesRegex(ValueError, r"mixes expression modes \{'all_read': 1, 'umi_molecules': 1\}"):
+                sheet.build(*arguments, root / "refused.tsv")
+            sheet.build(*arguments, root / "sheet.tsv", allow_mixed_modes=True)
             rows = {row["sample"]: row for row in csv.DictReader((root / "sheet.tsv").read_text().splitlines(), delimiter="\t")}
             self.assertEqual(["a", "b", "c"], list(rows))
             self.assertEqual(("completed", "", "3.000"), (rows["a"]["status"], rows["a"]["qc_flags"], rows["a"]["raw_fastq_gib"]))
-            self.assertEqual("low_reads_after_trim;high_rrna;low_mapped;low_exonic;low_mapped_vs_cohort;low_strand;rsem_not_converged",
-                             rows["b"]["qc_flags"])
+            self.assertEqual("low_reads_after_trim;high_rrna;low_mapped;low_exonic;low_mapped_vs_cohort;low_strand;rsem_not_converged;"
+                             "not_deduplicated", rows["b"]["qc_flags"])
+            (root / "metadata.tsv").write_text("sample\texpression_mode\na\tall_read\nb\tall_read\nc\tumi_molecules\n")
+            sheet.build(*arguments, root / "uniform.tsv")
+            rows = {row["sample"]: row for row in csv.DictReader((root / "uniform.tsv").read_text().splitlines(), delimiter="\t")}
+            self.assertNotIn("not_deduplicated", rows["b"]["qc_flags"])
             self.assertEqual(("failed", ""), (rows["c"]["status"], rows["c"]["rsem_iterations"]))
             (root / "failed.txt").write_text("")
-            with self.assertRaises(ValueError):
-                sheet.build(root / "metadata.tsv", root / "qc.csv", root / "diagnostics", root / "sizes.tsv",
-                            root / "failed.txt", root / "sheet2.tsv")
+            with self.assertRaisesRegex(ValueError, "must cover exactly the completed samples"):
+                sheet.build(*arguments, root / "sheet2.tsv")
 
 
 class MergeInputTests(unittest.TestCase):
@@ -81,26 +130,7 @@ class MergeInputTests(unittest.TestCase):
 
     def test_latest_complete_results_and_failed_samples(self):
         run, retry = "gs://bucket/rnaseq_pipeline/run1", "gs://bucket/rnaseq_pipeline/run2"
-        def metadata(samples, calls, release="rn8_v116"):
-            document = {"status": "Failed", "inputs": {"sample_prefix": samples, "reference_release": release}, "calls": {}}
-            for task, shard, status, outputs in calls:
-                document["calls"].setdefault("rnaseq_pipeline." + task, []).append(
-                    {"shardIndex": shard, "executionStatus": status, "outputs": outputs})
-            return document
-        def results(root, shard, sample, mode, rsem_status="Done"):
-            rsem = "umi_molecule_rsem" if mode == "umi" else "rsem_quant"
-            fc = "umi_molecule_feature_counts_task" if mode == "umi" else "feature_counts"
-            path = lambda task, name: f"{root}/call-{task}/shard-{shard}/{sample}{name}"
-            return [(rsem, shard, rsem_status, {"genes": path(rsem, ".genes.results"), "isoforms": path(rsem, ".isoforms.results"),
-                                               "convergence": path(rsem, ".rsem_convergence.tsv")}),
-                    (fc, shard, "Done", {"fc_out": path(fc, ".out")}),
-                    ("qc_report", shard, "Done", {"rnaseq_report": path("qc_report", "_qc_info.csv"),
-                                                 "diagnostics": path("qc_report", ".qc_diagnostics.json")}),
-                    ("star_align", shard, "Done", {"bam_file": path("star_align", ".Aligned.sortedByCoord.out.bam"),
-                                                   "transcriptome_bam": path("star_align", ".Aligned.toTranscriptome.out.bam"),
-                                                   "junctions": path("star_align", ".SJ.out.tab"),
-                                                   "logs": [path("star_align", ".Log.final.out"), path("star_align", ".Log.out")]}),
-                    ("pretrim_fastqc", shard, "Done", {"fastQC_report": f"{root}/call-pretrim_fastqc/shard-{shard}/fastqc_raw.tar.gz"})]
+        metadata, results = run_metadata, sample_results
         runs = {run: metadata(["a", "b", "c"], results(run, 0, "a", "umi") + results(run, 1, "b", "all", "RetryableFailure") +
                               [("udup", 0, "Done", {"molecule_transcriptome_bam": [f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam"]}),
                                ("qc_report", 2, "Done", {"rnaseq_report": f"{run}/call-qc_report/shard-2/c_qc_info.csv"})]),
@@ -112,19 +142,7 @@ class MergeInputTests(unittest.TestCase):
                       f"{run}/call-star_align/shard-0/a.Aligned.toTranscriptome.out.bam": 2**30,
                       f"{run}/call-udup/shard-0/a.umi_molecules.transcriptome.bam": 2**29,
                       f"{retry}/call-star_align/shard-0/b.Aligned.sortedByCoord.out.bam": 2**30})
-        inputs = {"rnaseq_pipeline." + key: value for key, value in {
-            "sample_prefix": ["a", "b", "c"], "fastq1": [f"gs://raw/{s}_R1.fastq.gz" for s in "abc"],
-            "fastq2": [f"gs://raw/{s}_R2.fastq.gz" for s in "abc"],
-            "fastq_index": ["gs://raw/a_I1.fastq.gz", "", "gs://raw/c_I1.fastq.gz"],
-            "reference_release": "rn8_v116", "output_report_name": "cohort", "merge_results_docker": "image"}.items()}
-        for key in builder.SCIENTIFIC_INPUTS | {"attach_umi_docker", "umi_dup_docker"}:
-            inputs["rnaseq_pipeline." + key] = "same-" + key
-        for record in runs.values():
-            selected = record["inputs"]["sample_prefix"]
-            record["inputs"].update(builder.resolved_inputs(inputs))
-            record["inputs"]["sample_prefix"] = selected
-            for key in ("fastq1", "fastq2", "fastq_index"):
-                record["inputs"][key] = [inputs["rnaseq_pipeline." + key]["abc".index(sample)] for sample in selected]
+        inputs = cohort_inputs(runs)
         runs[retry]["inputs"]["star_ramGB"] = 72  # Resource changes remain compatible.
         list_sizes = lambda *urls: {url: sizes[url] for url in urls if url in sizes}
         document = builder.build(inputs, [run, retry], runs.get, list_sizes)
@@ -142,9 +160,10 @@ class MergeInputTests(unittest.TestCase):
             builder.build(inputs, [run, retry], empty.get, list_sizes)
         get = lambda key: document["rnaseq_merge." + key]
         self.assertEqual((["a", "b"], ["c"]), (get("sample_prefix"), get("failed_samples")))
-        self.assertEqual([["a", "rn8_v116", "1", "0", "umi_molecules", "deduplicated"],
-                          ["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi"],
-                          ["c", "rn8_v116", "1", "0", "umi_molecules", "deduplicated"]], get("expression_metadata_rows")[1:])
+        self.assertEqual([["a", "rn8_v116", "1", "0", "umi_molecules", "deduplicated", "i1"],
+                          ["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"],
+                          ["c", "rn8_v116", "1", "0", "umi_molecules", "deduplicated", "i1"]], get("expression_metadata_rows")[1:])
+        self.assertEqual(([], False), (get("all_read_feature_counts_files"), get("allow_mixed_expression_modes")))
         self.assertEqual(f"{retry}/call-rsem_quant/shard-0/b.genes.results", get("rsem_gene_results")[1])
         self.assertEqual(f"{run}/call-feature_counts/shard-1/b.out", get("feature_counts_files")[1])
         self.assertEqual(["a", "3.000000", "2.000000", "1.000000", "0.500000"], get("sample_size_rows")[0])
@@ -167,6 +186,49 @@ class MergeInputTests(unittest.TestCase):
         runs[retry]["status"] = "Running"
         with self.assertRaisesRegex(ValueError, "finished workflow"):
             builder.build(inputs, [run, retry], runs.get, list_sizes)
+
+    def test_read_name_resubmission_and_all_read_sensitivity_set(self):
+        # run1 quantified b (read-name UMIs) and c (no UMI) by all reads; run2 resubmits b with umi_in_read_name.
+        run, retry = "gs://bucket/rnaseq_pipeline/run1", "gs://bucket/rnaseq_pipeline/run2"
+        cached_fc = f"{run}/call-feature_counts/shard-1/b.out"
+        runs = {run: run_metadata(["a", "b", "c"], sample_results(run, 0, "a", "umi") + sample_results(run, 1, "b", "all") +
+                                  sample_results(run, 2, "c", "all")),
+                retry: run_metadata(["b"], sample_results(retry, 0, "b", "umi") +
+                                    [("feature_counts", 0, "Done", {"fc_out": cached_fc})])}
+        inputs = cohort_inputs(runs, fastq_index=["gs://raw/a_I1.fastq.gz", "", ""],
+                               umi_in_read_name=[False, True, False], allow_mixed_expression_modes=True)
+        del runs[run]["inputs"]["umi_in_read_name"]
+        no_sizes = lambda *urls: {}
+        document = builder.build(inputs, [run, retry], runs.get, no_sizes)
+        get = lambda key: document["rnaseq_merge." + key]
+        self.assertEqual(([], True), (get("failed_samples"), get("allow_mixed_expression_modes")))
+        self.assertEqual([["a", "rn8_v116", "1", "0", "umi_molecules", "deduplicated", "i1"],
+                          ["b", "rn8_v116", "1", "0", "umi_molecules", "deduplicated", "read_name"],
+                          ["c", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"]], get("expression_metadata_rows")[1:])
+        self.assertEqual(f"{retry}/call-umi_molecule_rsem/shard-0/b.genes.results", get("rsem_gene_results")[1])
+        # a predates unconditional all-read featureCounts, so the duplication matrix is omitted.
+        self.assertEqual([], get("all_read_feature_counts_files"))
+        runs[run]["calls"]["rnaseq_pipeline.feature_counts"].append(
+            {"shardIndex": 0, "executionStatus": "Done", "outputs": {"fc_out": f"{run}/call-feature_counts/shard-0/a.out"}})
+        complete = builder.build(inputs, [run, retry], runs.get, no_sizes)
+        self.assertEqual([f"{run}/call-feature_counts/shard-0/a.out", cached_fc, f"{run}/call-feature_counts/shard-2/c.out"],
+                         complete["rnaseq_merge.all_read_feature_counts_files"])
+
+        # Without the read-name flag, b keeps its earlier all-read result.
+        legacy = builder.build({**inputs, "rnaseq_pipeline.umi_in_read_name": None}, [run, retry], runs.get, no_sizes)
+        self.assertEqual(["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"],
+                         legacy["rnaseq_merge.expression_metadata_rows"][2])
+
+        sensitivity = builder.build(inputs, [run, retry], runs.get, no_sizes, all_read=True)
+        get = lambda key: sensitivity["rnaseq_merge." + key]
+        self.assertEqual((["b", "c"], []), (get("sample_prefix"), get("failed_samples")))
+        self.assertEqual([["b", "rn8_v116", "1", "1", "all_read", "not_requested", "read_name"],
+                          ["c", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"]], get("expression_metadata_rows")[1:])
+        self.assertEqual([f"{run}/call-rsem_quant/shard-1/b.genes.results", f"{run}/call-rsem_quant/shard-2/c.genes.results"],
+                         get("rsem_gene_results"))
+        self.assertEqual(("cohort_all_read", []), (get("output_report_name"), get("all_read_feature_counts_files")))
+        with self.assertRaisesRegex(ValueError, "umi_in_read_name must match"):
+            builder.build({**inputs, "rnaseq_pipeline.umi_in_read_name": [True]}, [run, retry], runs.get, no_sizes)
 
 
 if __name__ == "__main__":

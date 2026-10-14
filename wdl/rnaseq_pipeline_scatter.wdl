@@ -134,6 +134,8 @@ workflow rnaseq_pipeline {
         Array[File]+ fastq2
         # Empty entries mark missing I1; present entries become File task inputs.
         Array[String]? fastq_index
+        # Per sample: true when R1/R2 read names already end in the UMI, so no I1 is attached.
+        Array[Boolean] umi_in_read_name = []
         Array[String]+ sample_prefix
         String reference_release = "unspecified"
         # One Spot attempt before on-demand fallback; set to 0 for on-demand only.
@@ -245,6 +247,8 @@ workflow rnaseq_pipeline {
         Boolean use_umi_molecule_expression = true
         Boolean retain_all_read_expression = false
         Boolean allow_missing_umis = false
+        # Merges refuse cohorts mixing deduplicated and all-read samples unless this is set.
+        Boolean allow_mixed_expression_modes = false
         # Opt in to removing a fixed ninth I1 base (eight-base UMI plus one extra cycle).
         Boolean trim_trailing_i1_base = false
 
@@ -278,6 +282,9 @@ workflow rnaseq_pipeline {
     Array[Boolean] index_length_contract =
         if !has_fastq_index || length(index_uris) == length(fastq1) then [true] else []
     Boolean index_length_valid = index_length_contract[0]
+    Array[Boolean] read_name_umi_length_contract =
+        if length(umi_in_read_name) == 0 || length(umi_in_read_name) == length(fastq1) then [true] else []
+    Boolean read_name_umi_length_valid = read_name_umi_length_contract[0]
     Array[Boolean] expression_policy_contract =
         if !retain_all_read_expression || use_umi_molecule_expression then [true] else []
     Boolean expression_policy_valid = expression_policy_contract[0]
@@ -302,14 +309,21 @@ workflow rnaseq_pipeline {
     scatter (i in range(length(fastq1))) {
         String index_uri = if has_fastq_index then index_uris[i] else ""
         Array[File] sample_index = if index_uri != "" then [index_uri] else []
+        Boolean read_name_umi = if read_name_umi_length_valid && length(umi_in_read_name) > 0 then umi_in_read_name[i] else false
+        Array[Boolean] umi_source_contract = if !(read_name_umi && length(sample_index) > 0) then [true] else []
+        Boolean umi_source_valid = umi_source_contract[0]
         Array[Boolean] umi_expression_input_contract =
-            if !use_umi_molecule_expression || allow_missing_umis || length(sample_index) > 0 then [true] else []
+            if !use_umi_molecule_expression || allow_missing_umis || length(sample_index) > 0 || read_name_umi then [true] else []
         Boolean umi_expression_inputs_valid = umi_expression_input_contract[0]
         Boolean use_index_reads = index_length_valid && umi_expression_inputs_valid && length(sample_index) > 0
-        Boolean use_sample_umi_expression = use_umi_molecule_expression && use_index_reads
+        # Read-name UMIs skip attachment and keep the no-I1 trimming and STAR calls (and their cache keys).
+        Boolean use_read_name_umi = umi_source_valid && umi_expression_inputs_valid && read_name_umi
+        Boolean sample_has_umi = use_index_reads || use_read_name_umi
+        Boolean use_sample_umi_expression = use_umi_molecule_expression && sample_has_umi
         Boolean run_all_read_expression = expression_policy_valid && (!use_sample_umi_expression || retain_all_read_expression)
         String expression_mode = if use_sample_umi_expression then "umi_molecules" else "all_read"
-        String umi_status = if !use_index_reads then "skipped_no_umi" else if use_sample_umi_expression then "deduplicated" else "not_requested"
+        String umi_status = if !sample_has_umi then "skipped_no_umi" else if use_sample_umi_expression then "deduplicated" else "not_requested"
+        String umi_source = if use_index_reads then "i1" else if use_read_name_umi then "read_name" else "none"
         # Untrimmed samples pass the original I1 to aumi, preserving its call-cache key.
         if (trim_trailing_i1_base && use_index_reads) {
             call attach_umi.trimIndexRead as trim_i1 {
@@ -326,8 +340,8 @@ workflow rnaseq_pipeline {
             else if length(trimmed_index) > 0 then "umi8_trailing_base_trimmed" else "umi8"
 
         Array[String] expression_metadata_row = flatten([[sample_prefix[i], reference_release,
-            if use_index_reads then "1" else "0", if use_sample_umi_expression then "0" else "1",
-            expression_mode, umi_status], if trim_trailing_i1_base then [i1_layout] else []])
+            if sample_has_umi then "1" else "0", if use_sample_umi_expression then "0" else "1",
+            expression_mode, umi_status, umi_source], if trim_trailing_i1_base then [i1_layout] else []])
         if (run_pretrim_fastqc) {
             call fastqc.fastQC as pretrim_fastqc {
                 input:
@@ -472,22 +486,23 @@ workflow rnaseq_pipeline {
                 docker=star_docker,
         }
 
-        if (run_all_read_expression) {
-            call fc.feature_counts as feature_counts {
-                input:
-                # Inputs
-                    SID=sample_prefix[i],
-                    input_bam=star_align.bam_file,
-                    gtf_file=gtf_file,
-                # Runtime Parameters
-                    ncpu=feature_counts_ncpu,
-                    use_e2=use_e2,
-                    memory=feature_counts_ramGB,
-                    disk_space=feature_counts_disk,
-                    preemptible=num_preemptible_attempts,
-                    docker=feature_counts_docker
-            }
+        # All-read featureCounts runs for UMI samples too: with molecule counts it gives gene-level duplication.
+        call fc.feature_counts as feature_counts {
+            input:
+            # Inputs
+                SID=sample_prefix[i],
+                input_bam=star_align.bam_file,
+                gtf_file=gtf_file,
+            # Runtime Parameters
+                ncpu=feature_counts_ncpu,
+                use_e2=use_e2,
+                memory=feature_counts_ramGB,
+                disk_space=feature_counts_disk,
+                preemptible=num_preemptible_attempts,
+                docker=feature_counts_docker
+        }
 
+        if (run_all_read_expression) {
             call rsem.rsem as rsem_quant {
                 input:
                 # Inputs
@@ -617,7 +632,7 @@ workflow rnaseq_pipeline {
             }
         }
 
-        if (use_index_reads && (run_umi_qc || use_sample_umi_expression)) {
+        if (sample_has_umi && (run_umi_qc || use_sample_umi_expression)) {
             Int inferred_umi_memory = if reference_release == "gencode_v50" then
                 2 * ceil((12.0 + 2.2 * size(star_align.bam_file, "GiB")) / 2.0)
                 else if reference_release == "rn8_v116" then ceil(8.1 + 1.2 * size(star_align.bam_file, "GiB"))
@@ -684,8 +699,8 @@ workflow rnaseq_pipeline {
         File primary_rsem_log = if use_sample_umi_expression then select_first([umi_molecule_rsem.log]) else select_first([rsem_quant.log])
         File primary_rsem_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.convergence]) else select_first([rsem_quant.convergence])
         File primary_rsem_gene_convergence = if use_sample_umi_expression then select_first([umi_molecule_rsem.gene_convergence]) else select_first([rsem_quant.gene_convergence])
-        File primary_feature_counts = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else select_first([feature_counts.fc_out])
-        File primary_feature_counts_report = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else select_first([feature_counts.fc_summary])
+        File primary_feature_counts = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_out]) else feature_counts.fc_out
+        File primary_feature_counts_report = if use_sample_umi_expression then select_first([umi_molecule_feature_counts_task.fc_summary]) else feature_counts.fc_summary
         # Input sizes recorded in the sample sheet for provisioning, before intermediates are deleted.
         Array[File] molecule_transcriptome_bam = select_first([udup.molecule_transcriptome_bam, []])
         Float raw_fastq_gib = size(fastq1[i], "GiB") + size(fastq2[i], "GiB") + size(sample_index, "GiB")
@@ -768,11 +783,13 @@ workflow rnaseq_pipeline {
             feature_counts_files=primary_feature_counts,
             qc_report_files=qc_report.rnaseq_report,
             expression_metadata_rows=flatten([
-                [flatten([["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"],
+                [flatten([["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status", "umi_source"],
                     if trim_trailing_i1_base then ["i1_layout"] else []])],
                 expression_metadata_row]),
             qc_diagnostics=qc_report.diagnostics,
             sample_size_rows=sample_size_row,
+            all_read_feature_counts_files=if use_umi_molecule_expression then feature_counts.fc_out else [],
+            allow_mixed_expression_modes=allow_mixed_expression_modes,
         # Runtime Parameters
             ncpu=merge_results_ncpu,
             memory=merge_results_ramGB,
@@ -817,7 +834,7 @@ workflow rnaseq_pipeline {
                 sample_prefix=sample_prefix,
                 output_prefix="all_read",
                 rsem_files=select_all(rsem_quant.genes),
-                feature_counts_files=select_all(feature_counts.fc_out),
+                feature_counts_files=feature_counts.fc_out,
                 ncpu=merge_results_ncpu,
                 memory=merge_results_ramGB,
                 disk_space=merge_results_disk,
@@ -841,6 +858,7 @@ workflow rnaseq_pipeline {
         File rsem_genes_fpkm = merge_results.rsem_genes_fpkm
         File rsem_genes_effective_length = merge_results.rsem_genes_effective_length
         File feature_counts_file = merge_results.feature_counts
+        Array[File] feature_counts_all_reads = merge_results.feature_counts_all_reads
         File qc_report_file = merge_results.qc_report
         Array[File] qc_diagnostics = qc_report.diagnostics
         Array[File] rsem_logs = primary_rsem_log

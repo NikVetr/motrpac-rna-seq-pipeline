@@ -34,7 +34,8 @@ try:
                       "feature_counts_files": list(map(str, fixture.fc.iterdir())),
                       "memory": 4, "disk_space": 10, "ncpu": 1, "preemptible": 0, "docker": "unused"}
             if name == "merge_results":
-                inputs.update(qc_report_files=list(map(str, fixture.qc.iterdir())), output_report_name="cohort")
+                inputs.update(qc_report_files=list(map(str, fixture.qc.iterdir())), output_report_name="cohort",
+                              all_read_feature_counts_files=inputs["feature_counts_files"], allow_mixed_expression_modes=False)
                 inputs["expression_metadata_rows"] = [["sample", "not_deduplicated"]] + [[sample, "0"] for sample in fixture.samples]
                 diagnostics = []
                 for sample in fixture.samples:
@@ -54,6 +55,7 @@ try:
                 assert actual.read_bytes() == (fixture.root / filename).read_bytes()
             if name == "merge_results":
                 assert (root / "cohort.csv").read_bytes() == (fixture.root / "cohort.csv").read_bytes()
+                assert (root / "featureCounts_all_reads.txt").read_bytes() == (fixture.root / "featureCounts.txt").read_bytes()
                 metadata = task.outputs[-1].expr.eval(env, stdlib).value
                 lines = (root / metadata).read_text().splitlines()
                 assert lines[0].startswith("sample\tnot_deduplicated\tstatus\t") and lines[0].endswith("\tqc_flags")

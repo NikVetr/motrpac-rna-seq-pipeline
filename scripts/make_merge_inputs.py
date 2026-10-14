@@ -4,7 +4,8 @@
 Output paths come from workflow metadata, recovered through Caper if the GCS export is missing,
 so call-cache hits resolve to the earlier run directory that holds their files. Samples without
 complete per-sample results are merged as failed: they are absent from the matrices and marked
-status=failed in the sample sheet. Later run roots take precedence.
+status=failed in the sample sheet. Later run roots take precedence. With --all-read, the merge is a
+sensitivity set of the samples that have all-read results; the others are left out, not failed.
 """
 
 import argparse
@@ -38,7 +39,7 @@ OUTPUTS.update({
 SUPPORTING = ("umi_metrics", "umi_expression_metrics", "sampling_manifest", "star_junctions", "star_logs",
               "dup_metrics", "rna_metrics", "chr_info", "cutadapt_report", "fastqc_pretrim", "fastqc_posttrim")
 MULTI_FILE = {"star_logs"}
-HEADER = ["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status"]
+HEADER = ["sample", "reference_release", "umi_available", "not_deduplicated", "expression_mode", "umi_status", "umi_source"]
 BAMS = ("genomic_bam", "transcriptome_bam", "molecule_bam")
 SCIENTIFIC_INPUTS = (REFERENCE_ROLES | IMAGE_ROLES | {"minimumLength", "index_adapter", "univ_adapter"}) - {
     "merge_results_docker", "multiqc_docker", "attach_umi_docker", "umi_dup_docker"}
@@ -101,11 +102,19 @@ def sample_inputs(inputs):
     return {sample: (inputs["fastq1"][i], inputs["fastq2"][i], indexes[i] or "") for i, sample in enumerate(samples)}
 
 
-def check_compatible(requested, source, sample, raw, source_raw):
+def read_name_umis(inputs):
+    samples = inputs["sample_prefix"]
+    flags = inputs.get("umi_in_read_name") or [False] * len(samples)
+    if len(flags) != len(samples):
+        raise ValueError("umi_in_read_name must match sample_prefix")
+    return dict(zip(samples, map(bool, flags)))
+
+
+def check_compatible(requested, source, sample, raw, source_raw, has_umi):
     if raw != source_raw:
         raise ValueError(f"raw FASTQs differ for {sample}")
     keys = SCIENTIFIC_INPUTS | (DEFAULTS.keys() - {"use_umi_molecule_expression", "trim_trailing_i1_base"})
-    if raw[2]:
+    if has_umi:
         keys |= {"attach_umi_docker", "umi_dup_docker", "trim_trailing_i1_base", "use_umi_molecule_expression"}
     missing = sorted(key for key in keys if key not in requested or key not in source)
     different = sorted(key for key in keys if requested.get(key) != source.get(key))
@@ -134,11 +143,16 @@ def run_results(metadata):
     return results
 
 
-def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_sizes):
+def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_sizes, all_read=False,
+          allow_mixed_modes=False):
+    """all_read gathers non-deduplicated results instead of primary expression."""
     inputs = resolved_inputs(inputs)
     get = inputs.get
     samples = get("sample_prefix")
     raw = sample_inputs(inputs)
+    read_names = read_name_umis(inputs)
+    has_umi = {sample: bool(raw[sample][2]) or read_names[sample] for sample in samples}
+    molecule = get("use_umi_molecule_expression") and not all_read
     raw_paths = {sample: [path for path in paths if path] for sample, paths in raw.items()}
     release = get("reference_release", "unspecified")
     trim = get("trim_trailing_i1_base", False)
@@ -153,25 +167,30 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
         for sample, record in run_results(metadata).items():
             if sample not in raw:
                 continue
-            check_compatible(inputs, source, sample, raw[sample], source_raw[sample])
-            mode = "umi" if get("use_umi_molecule_expression") and raw[sample][2] else "all"
+            check_compatible(inputs, source, sample, raw[sample], source_raw[sample], has_umi[sample])
+            # Earlier all-read results for a sample now quantified by molecules lack genes_umi and are not chosen.
+            mode = "umi" if molecule and has_umi[sample] else "all"
             if all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics")):
                 found[sample] = (mode, record)
 
     if not found:
         raise ValueError("no completed samples found under the given run roots")
+    if all_read:
+        print(f"{len(samples) - len(found)} samples lack all-read results and are left out", file=sys.stderr)
+        samples = [sample for sample in samples if sample in found]
     sizes = list_sizes(*[uri for sample, (_, record) in found.items()
                          for uri in raw_paths[sample] + [record[kind] for kind in BAMS if kind in record]])
     rows, failed, size_rows = [HEADER + (["i1_layout"] if trim else [])], [], []
-    files = {key: [] for key in ("genes", "isoforms", "fc", "qc", "diagnostics")}
+    files = {key: [] for key in ("genes", "isoforms", "fc", "qc", "diagnostics", "fc_all")}
     supporting_files, source_rows = [], [["sample", "kind", "source_uri"]]
     for sample in samples:
         has_index = bool(raw[sample][2])
         mode, record = found.get(sample, (None, {}))
         if mode is None:
             failed.append(sample)
-            umi = get("use_umi_molecule_expression", True) and has_index
+            umi = molecule and has_umi[sample]
         else:
+            files["fc_all"].append(record.get("fc_all"))
             umi = mode == "umi"
             source_rows.extend([sample, kind, uri]
                                for kind, uri in zip(("raw_r1", "raw_r2", "raw_i1"), raw[sample]) if uri)
@@ -188,12 +207,17 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             size_rows.append([sample, gib(*[sizes.get(path) for path in raw_paths[sample]]),
                               gib(bam("genomic_bam")), gib(bam("transcriptome_bam")),
                               gib(bam("molecule_bam") if umi else bam("transcriptome_bam"))])
-        status = "skipped_no_umi" if not has_index else "deduplicated" if umi else "not_requested"
-        row = [sample, release, "1" if has_index else "0", "0" if umi else "1",
-               "umi_molecules" if umi else "all_read", status]
+        status = "skipped_no_umi" if not has_umi[sample] else "deduplicated" if umi else "not_requested"
+        source = "i1" if has_index else "read_name" if read_names[sample] else "none"
+        row = [sample, release, "1" if has_umi[sample] else "0", "0" if umi else "1",
+               "umi_molecules" if umi else "all_read", status, source]
         if trim:
             row.append("none" if not has_index else "umi8_trailing_base_trimmed" if "trimmed_i1" in record else "umi8")
         rows.append(row)
+    # Gene-level duplication needs all-read counts for every merged sample; older runs lack them for UMI samples.
+    all_read_counts = files["fc_all"] if molecule and None not in files["fc_all"] else []
+    if molecule and not all_read_counts:
+        print("all-read featureCounts missing for some samples; omitting featureCounts_all_reads", file=sys.stderr)
     prefix = "rnaseq_merge."
     return {prefix + "sample_prefix": [sample for sample in samples if sample in found],
             prefix + "expression_metadata_rows": rows, prefix + "failed_samples": failed,
@@ -201,7 +225,9 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             prefix + "feature_counts_files": files["fc"], prefix + "qc_report_files": files["qc"],
             prefix + "qc_diagnostics": files["diagnostics"], prefix + "sample_size_rows": size_rows,
             prefix + "supporting_files": supporting_files, prefix + "source_rows": source_rows,
-            prefix + "output_report_name": get("output_report_name"),
+            prefix + "all_read_feature_counts_files": all_read_counts,
+            prefix + "allow_mixed_expression_modes": allow_mixed_modes or bool(get("allow_mixed_expression_modes")),
+            prefix + "output_report_name": get("output_report_name") + ("_all_read" if all_read else ""),
             prefix + "merge_results_docker": MERGE_RESULTS_DOCKER}
 
 
@@ -211,8 +237,13 @@ def main(argv=None):
     parser.add_argument("--run-root", action="append", required=True,
                         help="gs://.../rnaseq_pipeline/WORKFLOW_ID; repeat for recovery runs, latest last")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--all-read", action="store_true",
+                        help="gather all-read (non-deduplicated) results, e.g. as a sensitivity set")
+    parser.add_argument("--allow-mixed-expression-modes", action="store_true",
+                        help="merge deduplicated and all-read samples together; all-read samples are flagged")
     args = parser.parse_args(argv)
-    document = build(json.loads(args.inputs.read_text()), args.run_root)
+    document = build(json.loads(args.inputs.read_text()), args.run_root, all_read=args.all_read,
+                     allow_mixed_modes=args.allow_mixed_expression_modes)
     with args.output.open("x") as handle:
         json.dump(document, handle, indent=2)
         handle.write("\n")

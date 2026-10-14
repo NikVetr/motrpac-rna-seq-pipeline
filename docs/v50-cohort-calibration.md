@@ -44,8 +44,9 @@ python3 scripts/make_json_rnaseq.py \
   --combine-contamination-qc --contamination-qc-pairs 1000000 -i
 ```
 
-Add `--allow-missing-umis` for mixed I1 availability; those samples are explicitly
-marked as not deduplicated. Default counting produces molecule-level gene and
+Samples without I1 use UMIs already in their read names when present. Add
+`--allow-missing-umis --allow-mixed-expression-modes` for samples with neither;
+those samples are explicitly marked as not deduplicated. Default counting produces molecule-level gene and
 isoform results in one RSEM pass. A secondary all-read pass is optional.
 
 For v47, select `-v gencode_v47` and

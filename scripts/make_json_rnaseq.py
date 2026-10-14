@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import zlib
 from pathlib import Path
 
 
@@ -13,6 +14,8 @@ I1_SUFFIX = "_I1.fastq.gz"
 OUTPUT_REPORT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 GENERATED_JSON_PATTERN = re.compile(r"set[1-9][0-9]*_rnaseq\.json")
 IMMUTABLE_IMAGE_PATTERN = re.compile(r".+@sha256:[0-9a-f]{64}")
+# Illumina read name (instrument:run:flowcell:lane:tile:x:y) followed by an eight-base UMI field.
+READ_NAME_UMI_PATTERN = re.compile(rb"@[^\s:]+(?::[^\s:]+){6}:[ACGTN]{8}(?:\s|$)")
 MERGE_RESULTS_DOCKER = "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:de0b881deeb2e7b9b1b1cfc3a6857fa9e01864570020a291780b8880913fecdf"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_ROLES = {
@@ -174,6 +177,20 @@ def split_batches(values, count):
         batches.append(values[start : start + size])
         start += size
     return batches
+
+
+def read_name_umi(fs, r1_path, records=25):
+    """True when every sampled R1 read name ends in an eight-base UMI, False when none does."""
+    with fs.open(r1_path, "rb") as handle:
+        data = handle.read(65536)
+    lines = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data).split(b"\n")[:-1]
+    headers = lines[0::4][:records]
+    if not headers or any(not header.startswith(b"@") for header in headers):
+        raise ValueError("cannot read FASTQ records from {}".format(r1_path))
+    hits = sum(bool(READ_NAME_UMI_PATTERN.fullmatch(header.split(b" ")[0])) for header in headers)
+    if 0 < hits < len(headers):
+        raise ValueError("{}: {} of {} sampled read names end in a UMI".format(r1_path, hits, len(headers)))
+    return hits == len(headers)
 
 
 def build_batches(r1_paths, num_chunks, include_undetermined=False, include_index=False):
@@ -501,27 +518,30 @@ def main(command_args: argparse.Namespace):
         include_undetermined=command_args.undetermined,
         include_index=command_args.index,
     )
-    if allow_missing_umis:
-        for batch in batches:
-            for index, path in enumerate(batch["i1"]):
-                try:
-                    fs.info(path)
-                except FileNotFoundError:
-                    batch["i1"][index] = None
-                    print("{}: UMI deduplication skipped (I1 absent); using all-read expression".format(
-                        batch["sample_prefix"][index]), file=sys.stderr)
-    expected_inputs = [
-        path
-        for batch in batches
-        for key in ("r2", "i1")
-        for path in (batch[key] or [])
-        if path is not None
-    ]
-    missing = [path for path in expected_inputs if not fs.exists(path)]
+    missing = [path for batch in batches for path in batch["r2"] if not fs.exists(path)]
     if missing:
         raise ValueError(
             "required mate/index objects are missing: {}".format(", ".join(missing))
         )
+    # Without an I1 FASTQ, use a UMI already in the read names; otherwise all-read needs explicit opt-in.
+    for batch in batches:
+        batch["umi_in_read_name"] = [False] * len(batch["r1"])
+        for index, path in enumerate(batch["i1"] or []):
+            try:
+                fs.info(path)
+                continue
+            except FileNotFoundError:
+                batch["i1"][index] = None
+            sample = batch["sample_prefix"][index]
+            if read_name_umi(fs, batch["r1"][index]):
+                batch["umi_in_read_name"][index] = True
+                print("{}: I1 absent; using the UMI in read names".format(sample), file=sys.stderr)
+            elif allow_missing_umis:
+                print("{}: UMI deduplication skipped (no I1 or read-name UMI); using all-read expression".format(
+                    sample), file=sys.stderr)
+            else:
+                raise ValueError("{}: no I1 FASTQ and no UMI in read names; pass --allow-missing-umis "
+                                 "to quantify all reads".format(sample))
 
     print("Number of batches to split:\t{}".format(command_args.num_chunks))
     documents = []
@@ -544,6 +564,8 @@ def main(command_args: argparse.Namespace):
                 retain_all_read_expression=retain_all_read_expression,
                 allow_missing_umis=allow_missing_umis,
                 trim_trailing_i1_base=trim_trailing_i1_base,
+                umi_in_read_name=batch["umi_in_read_name"],
+                allow_mixed_expression_modes=getattr(command_args, "allow_mixed_expression_modes", False),
                 **qc_settings,
             )
         )
@@ -589,6 +611,8 @@ def make_json_dict(
     umi_dup_disk_type=None,
     allow_missing_umis=False,
     trim_trailing_i1_base=False,
+    umi_in_read_name=None,
+    allow_mixed_expression_modes=False,
 ):
     if r1 is None:
         r1 = []
@@ -600,9 +624,22 @@ def make_json_dict(
         raise ValueError("R1, R2, and sample-prefix arrays must be nonempty and aligned")
     if i1 is not None and len(i1) != len(r1):
         raise ValueError("I1 array must be absent or aligned with R1 and R2")
-    if use_umi_molecule_expression and not allow_missing_umis and (not i1 or any(path in (None, "") for path in i1)):
+    read_names = list(umi_in_read_name) if umi_in_read_name is not None else [False] * len(r1)
+    if len(read_names) != len(r1) or any(type(flag) is not bool for flag in read_names):
+        raise ValueError("umi_in_read_name must be booleans aligned with R1 and R2")
+    indexes = i1 if i1 is not None else [None] * len(r1)
+    if any(flag and path not in (None, "") for flag, path in zip(read_names, indexes)):
+        raise ValueError("a sample cannot take its UMI from both I1 and read names")
+    has_umi = [flag or path not in (None, "") for flag, path in zip(read_names, indexes)]
+    if use_umi_molecule_expression and not allow_missing_umis and not all(has_umi):
         raise ValueError(
-            "UMI molecule expression requires a matched I1 FASTQ for every sample"
+            "UMI molecule expression requires an I1 FASTQ or read-name UMIs for every sample"
+        )
+    # Fail before computing a cohort whose merge would refuse the mix.
+    if use_umi_molecule_expression and any(has_umi) and not all(has_umi) and not allow_mixed_expression_modes:
+        raise ValueError(
+            "{} of {} samples lack UMIs and would be quantified by all reads beside deduplicated samples; "
+            "pass --allow-mixed-expression-modes".format(has_umi.count(False), len(has_umi))
         )
     if retain_all_read_expression and not use_umi_molecule_expression:
         raise ValueError(
@@ -759,6 +796,10 @@ def make_json_dict(
         use_umi_molecule_expression
     )
     filled_dict["rnaseq_pipeline.allow_missing_umis"] = allow_missing_umis
+    if any(read_names):
+        filled_dict["rnaseq_pipeline.umi_in_read_name"] = read_names
+    if allow_mixed_expression_modes:
+        filled_dict["rnaseq_pipeline.allow_mixed_expression_modes"] = True
     if trim_trailing_i1_base:
         filled_dict["rnaseq_pipeline.trim_trailing_i1_base"] = True
     filled_dict["rnaseq_pipeline.reference_release"] = version
@@ -896,7 +937,8 @@ if __name__ == "__main__":
     index_options.add_argument(
         "-i",
         "--index",
-        help="add matched I1 FASTQs for UMI processing (enabled by default)",
+        help="add matched I1 FASTQs for UMI processing, or use read-name UMIs when I1 is absent "
+        "(enabled by default)",
         default=True,
         action="store_true",
     )
@@ -916,7 +958,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--allow-missing-umis", action="store_true",
-        help="deduplicate when I1 exists; otherwise quantify all reads and record the skip",
+        help="deduplicate when I1 or read-name UMIs exist; otherwise quantify all reads and record the skip",
+    )
+    parser.add_argument(
+        "--allow-mixed-expression-modes", action="store_true",
+        help="let merges combine deduplicated and all-read samples (all-read samples are flagged)",
     )
     parser.add_argument(
         "--trim-trailing-i1-base", action="store_true",
