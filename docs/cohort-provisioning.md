@@ -108,7 +108,8 @@ change. Reuse them through verified cache hits or exclude completed samples and
 gather their retained outputs. Retain failed-attempt evidence before repair.
 Preserve merged matrices, the transcript map, QC CSV, expression metadata and
 the cohort's `sample_details.tar.gz` (original RSEM results, STAR junctions and detailed QC).
-Capture task profiles before cleanup when provisioning evidence is needed.
+Capture task profiles before cleanup with `scripts/gcp/capture_cohort_profiles.py`
+and store the bundle with the operations records, not in the data handoff.
 Delete bulky intermediates only after verifying this handoff and planned comparisons;
 deletion invalidates cache/recovery references. Cache hits reference the
 original run's files instead of copying them, so collect per-sample outputs by

@@ -465,6 +465,11 @@ trimmed FASTQs and STAR BAMs until the resubmission finishes.
 `task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,
 observed peaks, reference release and input GiB by input name) to the capture,
 for later provisioning calibration.
+`scripts/gcp/capture_cohort_profiles.py OUTDIR --merge-inputs merge_inputs.json
+[--run-root ...] [--destination gs://...]` captures every workflow behind a cohort
+(including call-cache origins) into `OUTDIR.tar.gz` and copies it without replacing
+an existing object. Run it on the controller before deleting execution data; it
+writes no bundle if any capture fails.
 
 ### Retrieving Outputs
 

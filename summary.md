@@ -85,6 +85,8 @@ processing tasks; one-CPU reporting and merges retain backend selection. See
 `scripts/make_json_rnaseq.py` validates paired inputs, release/runtime profiles,
 and exact include/exclude sample lists. GCP helpers check locality, monitor
 resources, capture attempt-level evidence and estimate costs from frozen rates.
+`scripts/gcp/capture_cohort_profiles.py` bundles that evidence for every workflow
+behind a cohort before execution data are deleted.
 Human release profiles select matched v47/v50 references in us-central1.
 Execution storage and workers must share a region; source references and FASTQs
 require explicit read permissions and placement decisions. Cohort submissions

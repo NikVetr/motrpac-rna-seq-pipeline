@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,10 +11,44 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts/gcp"))
 import capture_task_profiles as profiles
+import capture_cohort_profiles as cohort
 from summarize_workflow_cost import monitor, verify_evidence
 
 
 class TaskProfileTests(unittest.TestCase):
+    def test_cohort_bundle_captures_each_run_once_and_refuses_failed_captures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run1, run2 = "gs://bucket/caper/rnaseq_pipeline/w1", "gs://bucket/caper/rnaseq_pipeline/w2"
+            merge = root / "merge.json"
+            merge.write_text(json.dumps({"rnaseq_merge.source_rows": [
+                ["sample", "kind", "source_uri"], ["a", "raw_r1", "gs://raw/a_R1.fastq.gz"],
+                ["a", "genes", run1 + "/call-rsem_quant/shard-0/a.genes.results"],
+                ["b", "genes", run2 + "/call-umi_molecule_rsem/shard-0/b.genes.results"],
+                ["b", "fc", run1 + "/call-feature_counts/shard-1/b.out"]]}))
+            self.assertEqual([run1, run2, run1], cohort.merge_run_roots(merge))
+            captured = []
+
+            def collect(metadata, output, batch):
+                captured.append((json.loads(metadata.read_text())["id"], output.name, batch))
+                output.mkdir()
+                (output / "profiles.json").write_text("{}")
+
+            read = lambda run: {"id": run.rsplit("/", 1)[-1]}
+            bundle = cohort.capture([run1 + "/"] + cohort.merge_run_roots(merge), root / "profiles", False, read, collect)
+            self.assertEqual([("w1", "w1", False), ("w2", "w2", False)], captured)
+            with tarfile.open(bundle) as archive:
+                self.assertEqual({"profiles/runs.json", "profiles/w1/profiles.json", "profiles/w2/profiles.json"},
+                                 {member.name for member in archive.getmembers() if member.isfile()})
+
+            def incomplete(metadata, output, batch):
+                raise ValueError("incomplete capture")
+
+            with self.assertRaisesRegex(RuntimeError, "2 of 2 captures failed"):
+                cohort.capture([run1, run2], root / "failed", True, read, incomplete)
+            self.assertFalse((root / "failed.tar.gz").exists())
+            self.assertEqual("incomplete capture", json.loads((root / "failed/runs.json").read_text())["failures"][run1])
+
     def test_sample_and_release_labels_accept_resolved_and_submitted_inputs(self):
         for qualified, submitted in ((False, False), (True, False), (True, True)):
             with self.subTest(qualified=qualified, submitted=submitted), tempfile.TemporaryDirectory() as directory:
