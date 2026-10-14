@@ -38,6 +38,6 @@
     "umi_dup_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/umi_dup@sha256:7e467d09f2beb6c2484486dcc671186ac39c359600072a56c089a01e00714ad9",
     "samtools_docker": "quay.io/biocontainers/samtools@sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561",
     "collect_qc_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/collect_qc@sha256:d4180349cae47041cf003aa960151d0342da2c1207fe77f30a8cdc673f9cabdf",
-    "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:de0b881deeb2e7b9b1b1cfc3a6857fa9e01864570020a291780b8880913fecdf"
+    "merge_results_docker": "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:a938e9bc568d41ffb118f37836837a78233c00853ea368769c1514cf0ddf719c"
   }
 }

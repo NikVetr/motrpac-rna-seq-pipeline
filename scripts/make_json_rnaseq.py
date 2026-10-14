@@ -16,7 +16,7 @@ GENERATED_JSON_PATTERN = re.compile(r"set[1-9][0-9]*_rnaseq\.json")
 IMMUTABLE_IMAGE_PATTERN = re.compile(r".+@sha256:[0-9a-f]{64}")
 # Illumina read name (instrument:run:flowcell:lane:tile:x:y) followed by an eight-base UMI field.
 READ_NAME_UMI_PATTERN = re.compile(rb"@[^\s:]+(?::[^\s:]+){6}:[ACGTN]{8}(?:\s|$)")
-MERGE_RESULTS_DOCKER = "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:de0b881deeb2e7b9b1b1cfc3a6857fa9e01864570020a291780b8880913fecdf"
+MERGE_RESULTS_DOCKER = "us-docker.pkg.dev/motrpac-portal/rnaseq/merge_results@sha256:a938e9bc568d41ffb118f37836837a78233c00853ea368769c1514cf0ddf719c"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_ROLES = {
     "star_index",
