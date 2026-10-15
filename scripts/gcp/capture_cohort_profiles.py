@@ -4,8 +4,9 @@
 Run on the controller before execution directories are deleted: metadata comes from each run's
 metadata.json, or from Caper when that export is missing, and Batch job descriptions need
 batch.jobs.get. Workflows are named with --run-root and/or taken from a merge inputs JSON (the
-run directories its source files resolve to, including call-cache origins). Each workflow gets
-its own capture_task_profiles.py snapshot; the bundle is written only if every capture succeeds.
+run directories its source files resolve to). Every cache hit's source workflow is added in turn,
+since only that workflow measured the task. Each workflow gets its own capture_task_profiles.py
+snapshot; the bundle is written only if every capture succeeds.
 """
 
 import argparse
@@ -22,11 +23,19 @@ import capture_task_profiles  # noqa: E402
 from make_merge_inputs import workflow_metadata  # noqa: E402
 
 RUN_ROOT = re.compile(r"(gs://.+?/rnaseq_pipeline/[^/]+)/call-")
+CACHE_HIT = re.compile(r"Cache Hit: ([0-9a-f-]{36}):")
 
 
 def merge_run_roots(merge_inputs):
     rows = json.loads(merge_inputs.read_text())["rnaseq_merge.source_rows"][1:]
     return [match[1] for match in (RUN_ROOT.match(uri) for _, _, uri in rows) if match]
+
+
+def cache_origins(metadata, root):
+    """Run roots of the workflows whose outputs this workflow's cache hits reused (same Caper output prefix)."""
+    hits = (CACHE_HIT.match((call.get("callCaching") or {}).get("result", ""))
+            for calls in metadata.get("calls", {}).values() for call in calls)
+    return [root.rsplit("/", 1)[0] + "/" + workflow for workflow in sorted({hit[1] for hit in hits if hit})]
 
 
 def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=capture_task_profiles.collect):
@@ -35,12 +44,14 @@ def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=
         raise ValueError("no workflow run roots to capture")
     output.mkdir(parents=True, exist_ok=False)
     failures = {}
-    for root in roots:
+    for root in roots:  # grows as cache origins are found
         try:
+            metadata = read_metadata(root)
+            roots.extend(origin for origin in cache_origins(metadata, root) if origin not in roots)
             with tempfile.TemporaryDirectory() as directory:
-                metadata = Path(directory) / "metadata.json"
-                metadata.write_text(json.dumps(read_metadata(root)))
-                collect(metadata, output / root.rsplit("/", 1)[-1], batch=batch)
+                path = Path(directory) / "metadata.json"
+                path.write_text(json.dumps(metadata))
+                collect(path, output / root.rsplit("/", 1)[-1], batch=batch)
         except (RuntimeError, ValueError) as error:
             failures[root] = str(error)
     (output / "runs.json").write_text(json.dumps({"run_roots": roots, "failures": failures}, indent=2) + "\n")
