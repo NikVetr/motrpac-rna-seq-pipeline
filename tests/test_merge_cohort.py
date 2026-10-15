@@ -208,6 +208,7 @@ class MergeInputTests(unittest.TestCase):
         self.assertEqual(f"{retry}/call-umi_molecule_rsem/shard-0/b.genes.results", get("rsem_gene_results")[1])
         # a predates unconditional all-read featureCounts, so the duplication matrix is omitted.
         self.assertEqual([], get("all_read_feature_counts_files"))
+        self.assertFalse(any(kind == "fc_all" for _, kind, _ in get("source_rows")))
         # A later backfill run supplies a's all-read featureCounts; a's primary results stay with run1.
         backfill = "gs://bucket/rnaseq_pipeline/run3"
         runs[backfill] = run_metadata(["a"], [("feature_counts", 0, "Done", {"fc_out": f"{backfill}/call-feature_counts/shard-0/a.out"})])
@@ -217,6 +218,7 @@ class MergeInputTests(unittest.TestCase):
         self.assertEqual([f"{backfill}/call-feature_counts/shard-0/a.out", cached_fc, f"{run}/call-feature_counts/shard-2/c.out"],
                          complete["rnaseq_merge.all_read_feature_counts_files"])
         self.assertEqual(f"{run}/call-umi_molecule_rsem/shard-0/a.genes.results", complete["rnaseq_merge.rsem_gene_results"][0])
+        self.assertIn(["a", "fc_all", f"{backfill}/call-feature_counts/shard-0/a.out"], complete["rnaseq_merge.source_rows"])
         runs[run]["calls"]["rnaseq_pipeline.feature_counts"].append(
             {"shardIndex": 0, "executionStatus": "Done", "outputs": {"fc_out": f"{run}/call-feature_counts/shard-0/a.out"}})
 

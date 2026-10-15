@@ -221,6 +221,8 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
         rows.append(row)
     # Gene-level duplication needs all-read counts for every merged sample; older runs lack them for UMI samples.
     all_read_counts = files["fc_all"] if molecule and None not in files["fc_all"] else []
+    source_rows.extend([sample, "fc_all", uri]
+                       for sample, uri in zip([s for s in samples if s in found], all_read_counts))
     if molecule and not all_read_counts:
         print("all-read featureCounts missing for some samples; omitting featureCounts_all_reads", file=sys.stderr)
     prefix = "rnaseq_merge."
