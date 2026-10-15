@@ -362,6 +362,17 @@ denominators.
      - Percentage of reads mapping to coding/intronic/intergenic regions
      - Chromosome mapping percentages
 
+   Some columns are blank or zero by construction. `pct_chimeric` is blank because
+   STAR runs without chimeric detection; STAR then logs a placeholder 0, which earlier
+   releases reported. `pct_rRNA`, `pct_globin` and `pct_phix` are Bowtie2 overall
+   alignment rates, to two decimals, on the post-trim reads (a deterministic sample
+   when `--contamination-qc-pairs` is set). PhiX spike-in reads are removed at
+   demultiplexing, so `pct_phix` is normally 0.00 (under about 0.005% of mates with
+   1,000,000 pairs). `pct_unmapped_mismatches` is normally 0.00: STAR soft-clips
+   mismatching ends, so such reads fail its length filter and count as too short.
+   `pct_trimmed` is the percentage of read pairs discarded as too short after adapter
+   trimming, not the percentage of reads trimmed.
+
 ### Additional Outputs (Per Sample)
 
 `qc_diagnostics` retains one JSON per sample with RSEM convergence and ignored
