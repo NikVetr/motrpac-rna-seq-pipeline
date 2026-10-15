@@ -446,8 +446,8 @@ It checks raw paths, references and scientific settings, permits changed resourc
 allocations, and uses the current merge image.
 Missing FASTQ/BAM size information is left blank; those files are not merge inputs.
 The merge-only workflow gathers primary expression, and `featureCounts_all_reads.txt`
-when every merged sample has all-read featureCounts (runs before that output lack it
-for UMI samples). `--all-read` instead gathers all-read results as a sensitivity set
+when every merged sample has all-read featureCounts in some listed run (runs before
+that output lack it for UMI samples; a backfill resubmission can supply it). `--all-read` instead gathers all-read results as a sensitivity set
 named `<report>_all_read`, holding only samples quantified all-read as their primary
 expression in some run, so that their QC describes the same counts (secondary
 `--retain-all-read-expression` results are not used).
@@ -456,12 +456,18 @@ all-read samples. The merge image must include the mode check and all-read matri
 (see `MERGE_RESULTS_DOCKER`); older images reject the new inputs.
 Verify the compact handoff in final storage before deleting execution data.
 
-To deduplicate samples first run all-read, resubmit only those samples with
-`--sample-list` and the original runtime profile: trimming, STAR and all-read
-featureCounts are call-cache hits, and UMI grouping and molecule RSEM run. Then
-merge the original and new run roots (new last) using inputs regenerated for the
-whole cohort, which carry the `umi_in_read_name` flags. Keep the original run's
-trimmed FASTQs and STAR BAMs until the resubmission finishes.
+Resubmissions reuse earlier calls only when every task input matches, including
+CPU, memory and disk values and reference paths. Resubmit a run's own submitted
+inputs JSON with only the merge image updated; this backfills all-read
+featureCounts while every other call is a cache hit. To deduplicate samples first
+run all-read, regenerate their inputs with `--sample-list` and the original runtime
+profile and release manifest (check that only `fastq_index`, `umi_in_read_name`
+and the merge image differ from the submitted JSON): trimming, STAR and all-read
+featureCounts are cache hits, and UMI grouping and molecule RSEM run. Then merge
+the original and new run roots (new last) using inputs regenerated for the whole
+cohort, which carry the `umi_in_read_name` flags. A cache hit whose files were
+deleted is discarded and the task reruns, so keep trimmed FASTQs and STAR BAMs
+until resubmissions finish.
 
 `scripts/gcp/capture_task_profiles.py METADATA.json OUTDIR [--skip-batch]` adds
 `task_profiles.tsv` (one row per attempt: requested machine, CPU, memory and disk,

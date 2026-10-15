@@ -157,7 +157,7 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
     raw_paths = {sample: [path for path in paths if path] for sample, paths in raw.items()}
     release = get("reference_release", "unspecified")
     trim = get("trim_trailing_i1_base", False)
-    found = {}
+    found, all_read_fc = {}, {}
     for root in roots:
         metadata = read_metadata(root)
         if metadata.get("status") not in ("Succeeded", "Failed", "Aborted"):
@@ -169,6 +169,8 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             if sample not in raw:
                 continue
             check_compatible(inputs, source, sample, raw[sample], source_raw[sample], has_umi[sample])
+            # All-read featureCounts depends only on the STAR alignment and GTF, so any run (e.g. a backfill) may supply it.
+            all_read_fc[sample] = record.get("fc_all", all_read_fc.get(sample))
             # Earlier all-read results for a sample now quantified by molecules lack genes_umi and are not chosen.
             mode = "umi" if molecule and has_umi[sample] else "all"
             complete = all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics"))
@@ -193,7 +195,7 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             failed.append(sample)
             umi = molecule and has_umi[sample]
         else:
-            files["fc_all"].append(record.get("fc_all"))
+            files["fc_all"].append(all_read_fc.get(sample))
             umi = mode == "umi"
             source_rows.extend([sample, kind, uri]
                                for kind, uri in zip(("raw_r1", "raw_r2", "raw_i1"), raw[sample]) if uri)
