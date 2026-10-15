@@ -43,7 +43,7 @@ inputs from `scripts/make_merge_inputs.py`, merges the completed samples of
 failed or recovered runs after checking raw inputs and scientific settings.
 Missing GCS metadata exports are retrieved through the configured Caper
 controller; no tasks are rerun. At least one complete sample is required.
-`--all-read` gathers retained all-read results as a sensitivity set.
+`--all-read` gathers earlier all-read results, with their matching QC, as a sensitivity set.
 Merged tables plus one `sample_details.tar.gz` archive preserve original RSEM
 results, detailed QC/convergence records and source URIs without a large file
 list for transfer. Study covariates, including

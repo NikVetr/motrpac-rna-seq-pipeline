@@ -5,7 +5,8 @@ Output paths come from workflow metadata, recovered through Caper if the GCS exp
 so call-cache hits resolve to the earlier run directory that holds their files. Samples without
 complete per-sample results are merged as failed: they are absent from the matrices and marked
 status=failed in the sample sheet. Later run roots take precedence. With --all-read, the merge is a
-sensitivity set of the samples that have all-read results; the others are left out, not failed.
+sensitivity set of the samples whose primary expression in some run was all-read, so that their QC
+matches; the others are left out, not failed.
 """
 
 import argparse
@@ -170,7 +171,9 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             check_compatible(inputs, source, sample, raw[sample], source_raw[sample], has_umi[sample])
             # Earlier all-read results for a sample now quantified by molecules lack genes_umi and are not chosen.
             mode = "umi" if molecule and has_umi[sample] else "all"
-            if all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics")):
+            complete = all(k in record for k in (f"genes_{mode}", f"isoforms_{mode}", f"fc_{mode}", "qc", "diagnostics"))
+            # QC describes each run's primary expression, so secondary all-read results would carry molecule QC.
+            if complete and not (mode == "all" and "genes_umi" in record):
                 found[sample] = (mode, record)
 
     if not found:

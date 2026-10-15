@@ -219,6 +219,10 @@ class MergeInputTests(unittest.TestCase):
         self.assertEqual(["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"],
                          legacy["rnaseq_merge.expression_metadata_rows"][2])
 
+        # A run that also retained all-read RSEM for a still reports a's QC for molecule expression.
+        runs[run]["calls"]["rnaseq_pipeline.rsem_quant"].append({"shardIndex": 0, "executionStatus": "Done", "outputs": {
+            "genes": f"{run}/call-rsem_quant/shard-0/a.genes.results",
+            "isoforms": f"{run}/call-rsem_quant/shard-0/a.isoforms.results"}})
         sensitivity = builder.build(inputs, [run, retry], runs.get, no_sizes, all_read=True)
         get = lambda key: sensitivity["rnaseq_merge." + key]
         self.assertEqual((["b", "c"], []), (get("sample_prefix"), get("failed_samples")))

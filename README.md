@@ -448,7 +448,9 @@ Missing FASTQ/BAM size information is left blank; those files are not merge inpu
 The merge-only workflow gathers primary expression, and `featureCounts_all_reads.txt`
 when every merged sample has all-read featureCounts (runs before that output lack it
 for UMI samples). `--all-read` instead gathers all-read results as a sensitivity set
-named `<report>_all_read`, holding only the samples that have them.
+named `<report>_all_read`, holding only samples quantified all-read as their primary
+expression in some run, so that their QC describes the same counts (secondary
+`--retain-all-read-expression` results are not used).
 `--allow-mixed-expression-modes` accepts a cohort that mixes deduplicated and
 all-read samples. The merge image must include the mode check and all-read matrix
 (see `MERGE_RESULTS_DOCKER`); older images reject the new inputs.
