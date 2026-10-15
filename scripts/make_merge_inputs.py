@@ -164,11 +164,16 @@ def build(inputs, roots, read_metadata=workflow_metadata, list_sizes=gcloud_size
             raise ValueError(f"{root} must be a finished workflow")
         source = resolved_inputs(metadata["inputs"])
         source_raw = sample_inputs(source)
+        source_read_names = read_name_umis(source)
         metadata = {**metadata, "inputs": source}
         for sample, record in run_results(metadata).items():
             if sample not in raw:
                 continue
             check_compatible(inputs, source, sample, raw[sample], source_raw[sample], has_umi[sample])
+            # Inputs that predate read-name UMI detection would otherwise select the sample's earlier all-read results.
+            if source_read_names[sample] and not read_names[sample]:
+                raise ValueError(f"{sample} used read-name UMIs in {root}; regenerate the cohort inputs with the "
+                                 "current make_json_rnaseq.py")
             # All-read featureCounts depends only on the STAR alignment and GTF, so any run (e.g. a backfill) may supply it.
             all_read_fc[sample] = record.get("fc_all", all_read_fc.get(sample))
             # Earlier all-read results for a sample now quantified by molecules lack genes_umi and are not chosen.

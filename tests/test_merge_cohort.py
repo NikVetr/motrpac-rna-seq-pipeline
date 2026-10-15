@@ -222,8 +222,10 @@ class MergeInputTests(unittest.TestCase):
         runs[run]["calls"]["rnaseq_pipeline.feature_counts"].append(
             {"shardIndex": 0, "executionStatus": "Done", "outputs": {"fc_out": f"{run}/call-feature_counts/shard-0/a.out"}})
 
-        # Without the read-name flag, b keeps its earlier all-read result.
-        legacy = builder.build({**inputs, "rnaseq_pipeline.umi_in_read_name": None}, [run, retry], runs.get, no_sizes)
+        # Inputs without the read-name flags would select b's earlier all-read result, so they are refused.
+        with self.assertRaisesRegex(ValueError, "b used read-name UMIs in .*run2; regenerate the cohort inputs"):
+            builder.build({**inputs, "rnaseq_pipeline.umi_in_read_name": None}, [run, retry], runs.get, no_sizes)
+        legacy = builder.build({**inputs, "rnaseq_pipeline.umi_in_read_name": None}, [run], runs.get, no_sizes)
         self.assertEqual(["b", "rn8_v116", "0", "1", "all_read", "skipped_no_umi", "none"],
                          legacy["rnaseq_merge.expression_metadata_rows"][2])
 
