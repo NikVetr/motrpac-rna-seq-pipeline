@@ -56,7 +56,7 @@ def collect(metadata_path, output, workers=8, batch=True):
                      and "VMPreemption(50001)" in json.dumps(attempt.get("failures", []))}
     preempted_logs -= {attempt.get("monitoringLog") for _, attempt in selected
                       if attempt.get("executionStatus") == "Done"}
-    # Cache hits copy outputs without running, so they have no monitoring log.
+    # Cache hits reuse earlier outputs without running, so they have no monitoring log.
     cached_logs = {attempt.get("monitoringLog") for _, attempt in selected
                    if (attempt.get("callCaching") or {}).get("hit")}
     uris = sorted({uri for _, attempt in selected
