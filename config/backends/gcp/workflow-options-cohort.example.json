@@ -6,10 +6,10 @@
     "market-policy": "spot-then-on-demand"
   },
   "default_runtime_attributes": {
-    "zones": "us-west2-a us-west2-b us-west2-c",
+    "zones": "us-central1-a us-central1-b us-central1-c",
     "maxRetries": 1
   },
-  "monitoring_script": "gs://motrpac-rnaseq-modernization-us-west2/monitoring/sha256-d855b17c86e355d95769b87571144c1236d64f11d3c989725740c57c58484d62/monitor_resources.sh",
+  "monitoring_script": "gs://omicspipelines-public-resources/rnaseq/monitoring/sha256-d855b17c86e355d95769b87571144c1236d64f11d3c989725740c57c58484d62/monitor_resources.sh",
   "read_from_cache": true,
   "use_reference_disks": false,
   "write_to_cache": true
