@@ -191,6 +191,75 @@ class TaskProfileTests(unittest.TestCase):
                 self.assertEqual(not fatal, result["errors"][0]["expected_after_preemption"])
                 verify_evidence(root / "capture")
 
+    def test_cache_hits_and_unfinished_attempts_may_lack_logs_but_completed_runs_may_not(self):
+        logs = lambda prefix: {"monitoringLog": f"{prefix}/monitoring.log", "stdout": f"{prefix}/stdout", "stderr": f"{prefix}/stderr"}
+        attempts = [{"shardIndex": 0, "attempt": 1, "executionStatus": "Done", "callCaching": {"hit": True}, **logs("gs://b/hit")},
+                    {"shardIndex": 1, "attempt": 1, "executionStatus": "Aborted", **logs("gs://b/aborted")},
+                    {"shardIndex": 2, "attempt": 1, "executionStatus": "Done", **logs("gs://b/ran")}]
+        for missing_from_completed, fatal in ((False, False), (True, True)):
+            with self.subTest(fatal=fatal), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "metadata.json"
+                path.write_text(json.dumps({"id": "workflow", "calls": {"rnaseq_pipeline.udup": attempts}}))
+
+                trace = b"epoch_s\tcpu_usage_usec\tmemory_peak_bytes\tdisk_used_kb\tdisk_available_kb\tmemory_current_bytes\n1\t0\t1024\t0\t1\t1024\n"
+                content = lambda uri: trace if uri.split("#")[0].endswith("monitoring.log") else b"x"
+
+                def cloud(*args):
+                    if args[:3] == ("storage", "objects", "describe"):
+                        if not args[3].startswith("gs://b/ran") or (missing_from_completed and args[3].endswith("stdout")):
+                            raise ValueError(f"{args[3]} not found: 404.")
+                        return json.dumps({"size": len(content(args[3])), "generation": "1"}).encode()
+                    return content(args[2])
+
+                with patch.object(profiles, "cloud", side_effect=cloud):
+                    if fatal:
+                        with self.assertRaisesRegex(ValueError, "incomplete capture: 1 unexpected"):
+                            profiles.collect(path, root / "capture", batch=False)
+                    else:
+                        profiles.collect(path, root / "capture", batch=False)
+                result = json.loads((root / "capture/profiles.json").read_text())
+                expected = {e["uri"]: (e["expected_after_cache_hit"], e["expected_after_unfinished_attempt"]) for e in result["errors"]}
+                self.assertEqual({(True, False)}, {expected[f"gs://b/hit/{name}"] for name in ("monitoring.log", "stdout", "stderr")})
+                self.assertEqual({(False, True)}, {expected[f"gs://b/aborted/{name}"] for name in ("monitoring.log", "stdout", "stderr")})
+                self.assertEqual(fatal, "gs://b/ran/stdout" in expected)
+                self.assertFalse(result["complete_capture"])
+                verify_evidence(root / "capture")
+
+    def test_workflow_files_are_listed_per_root_and_absent_outputs_stay_fatal(self):
+        root_uri = "gs://bkt/x/rnaseq_pipeline/wf"
+        trace = b"epoch_s\tcpu_usage_usec\tmemory_peak_bytes\tdisk_used_kb\tdisk_available_kb\tmemory_current_bytes\n1\t0\t1024\t0\t1\t1024\n"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "metadata.json"
+            path.write_text(json.dumps({"id": "workflow", "calls": {"rnaseq_pipeline.udup": [
+                {"shardIndex": 0, "attempt": 1, "executionStatus": "Done", "monitoringLog": f"{root_uri}/call-udup/monitoring.log",
+                 "outputs": {"umi_metrics": f"{root_uri}/call-udup/a.umi_metrics.json"},
+                 "inputs": {"bam": "gs://raw/a.bam"}}]}}))
+            calls = []
+
+            def cloud(*args):
+                calls.append(args[:3])
+                if args[:3] == ("storage", "objects", "list"):
+                    self.assertEqual(f"{root_uri}/**", args[3])
+                    return json.dumps([{"bucket": "bkt", "name": "x/rnaseq_pipeline/wf/call-udup/monitoring.log",
+                                        "size": len(trace), "generation": "7"}]).encode()
+                if args[:3] == ("storage", "objects", "describe"):
+                    self.assertEqual("gs://raw/a.bam", args[3])
+                    return json.dumps({"size": 5, "generation": "1"}).encode()
+                self.assertEqual(("storage", "cat", f"{root_uri}/call-udup/monitoring.log#7"), args)
+                return trace
+
+            with patch.object(profiles, "cloud", side_effect=cloud):
+                with self.assertRaisesRegex(ValueError, "incomplete capture: 1 unexpected"):
+                    profiles.collect(path, root / "capture", batch=False)
+            result = json.loads((root / "capture/profiles.json").read_text())
+            self.assertEqual(1, calls.count(("storage", "objects", "describe")))
+            self.assertEqual([f"{root_uri}/call-udup/a.umi_metrics.json"], [e["uri"] for e in result["errors"]])
+            self.assertIn("not found: 404", result["errors"][0]["error"])
+            self.assertIsNotNone(result["attempts"][0]["monitoring"])
+            verify_evidence(root / "capture")
+
     def test_batch_permission_error_still_preserves_other_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

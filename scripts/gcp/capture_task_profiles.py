@@ -14,6 +14,7 @@ import subprocess
 from summarize_workflow_cost import monitor
 
 
+RUN_ROOT = re.compile(r"^(gs://[^/]+/.+?/rnaseq_pipeline/[^/]+)/")
 SMALL_METRICS = (".umi_metrics.json", ".umi_molecule_expression_metrics.json",
                  ".sampling_manifest.json", ".Log.final.out", "_qc_info.csv", ".cnt",
                  "_contamination_sampling.json", ".qc_diagnostics.json", "expression_metadata.tsv",
@@ -38,7 +39,7 @@ def file_uris(value):
             yield from file_uris(child)
 
 
-def collect(metadata_path, output, workers=8, batch=True):
+def collect(metadata_path, output, workers=16, batch=True):
     metadata = json.loads(metadata_path.read_text())
     if not metadata.get("calls"):
         raise ValueError("metadata must include calls, inputs, outputs and runtime attributes")
@@ -56,9 +57,16 @@ def collect(metadata_path, output, workers=8, batch=True):
                      and "VMPreemption(50001)" in json.dumps(attempt.get("failures", []))}
     preempted_logs -= {attempt.get("monitoringLog") for _, attempt in selected
                       if attempt.get("executionStatus") == "Done"}
-    # Cache hits reuse earlier outputs without running, so they have no monitoring log.
-    cached_logs = {attempt.get("monitoringLog") for _, attempt in selected
-                   if (attempt.get("callCaching") or {}).get("hit")}
+    # Cache hits reuse another call's results without running, so they have no monitoring log, stdout or stderr
+    # (those stay with the call that produced the results). Attempts that never finished (preempted, failed or
+    # aborted) may also lack them. Only successful attempts that ran must have their logs.
+    log_fields = ("monitoringLog", "stdout", "stderr")
+    cached = lambda attempt: (attempt.get("callCaching") or {}).get("hit")
+    cached_logs = {attempt.get(field) for _, attempt in selected if cached(attempt) for field in log_fields}
+    unfinished_logs = {attempt.get(field) for _, attempt in selected
+                       if attempt.get("executionStatus") != "Done" for field in log_fields}
+    unfinished_logs -= {attempt.get(field) for _, attempt in selected
+                        if attempt.get("executionStatus") == "Done" and not cached(attempt) for field in log_fields}
     uris = sorted({uri for _, attempt in selected
                    for field in ("inputs", "outputs", "monitoringLog", "stdout", "stderr")
                    for uri in file_uris(attempt.get(field))})
@@ -70,9 +78,33 @@ def collect(metadata_path, output, workers=8, batch=True):
             raise ValueError(f"object lacks size/generation: {uri}")
         return uri, {"size_bytes": size, "generation": str(obj["generation"])}
 
+    def list_root(root):
+        """Size and generation of every object under one workflow root, in one paginated listing."""
+        try:
+            listing = json.loads(cloud("storage", "objects", "list", f"{root}/**", "--format=json(bucket,name,size,generation)"))
+        except ValueError as error:
+            if "matched no objects" not in str(error):
+                raise
+            listing = []
+        return {f"gs://{obj['bucket']}/{obj['name']}": {"size_bytes": int(obj["size"]), "generation": str(obj["generation"])}
+                for obj in listing}
+
+    # Workflow files are listed per root (one call instead of one describe per object); others are described.
+    roots = sorted({match[1] for match in map(RUN_ROOT.match, uris) if match})
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        listed = {key: value for part in pool.map(list_root, roots) for key, value in part.items()}
+
+    def lookup(uri):
+        match = RUN_ROOT.match(uri)
+        if match is None:
+            return describe(uri)
+        if uri not in listed:
+            raise ValueError(f"{uri} not found: 404 (absent from the listing of {match[1]})")
+        return uri, listed[uri]
+
     objects, errors = {}, []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [(uri, pool.submit(describe, uri)) for uri in uris]
+        futures = [(uri, pool.submit(lookup, uri)) for uri in uris]
         for uri, future in futures:
             try:
                 key, value = future.result()
@@ -81,7 +113,8 @@ def collect(metadata_path, output, workers=8, batch=True):
                 missing = bool(re.search(r"not found:\s*404\b|\b404[:\s]+not found\b", str(error), re.I))
                 errors.append({"uri": uri, "error": str(error),
                                "expected_after_preemption": uri in preempted_logs and missing,
-                               "expected_after_cache_hit": uri in cached_logs and missing})
+                               "expected_after_cache_hit": uri in cached_logs and missing,
+                               "expected_after_unfinished_attempt": uri in unfinished_logs and missing})
     (output / "objects.json").write_text(json.dumps(objects, indent=2) + "\n")
 
     def download(uri, target, limit):
@@ -97,8 +130,9 @@ def collect(metadata_path, output, workers=8, batch=True):
         target.write_bytes(data)
         return data
 
-    rows = []
-    for call, attempt in selected:
+    def capture_attempt(call, attempt):
+        """Write one attempt's directory; return its row and any Batch read errors."""
+        attempt_errors = []
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", call):
             raise ValueError(f"invalid call name: {call}")
         shard, number = int(attempt["shardIndex"]), int(attempt["attempt"])
@@ -126,8 +160,8 @@ def collect(metadata_path, output, workers=8, batch=True):
                 (directory / "batch.json").write_text(json.dumps(job, indent=2) + "\n")
                 row["batch"] = job
             except ValueError as error:
-                errors.append({"job": attempt["jobId"], "error": str(error)})
-        for field in ("monitoringLog", "stdout", "stderr"):
+                attempt_errors.append({"job": attempt["jobId"], "error": str(error)})
+        for field in log_fields:
             uri = attempt.get(field)
             if not uri:
                 continue
@@ -148,7 +182,13 @@ def collect(metadata_path, output, workers=8, batch=True):
             if data is not None:
                 row["metrics"][name] = json.loads(data) if name.endswith(".json") else data.decode()
         row["outputs"] = attempt.get("outputs", {})  # Includes scalar post-trim read counts.
-        rows.append(row)
+        return row, attempt_errors
+
+    # Batch descriptions and log downloads are one gcloud call each, so attempts are captured concurrently.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        captured = list(pool.map(lambda pair: capture_attempt(*pair), selected))
+    rows = [row for row, _ in captured]
+    errors += [error for _, attempt_errors in captured for error in attempt_errors]
     result = {"schema_version": 1, "captured_utc": datetime.now(timezone.utc).isoformat(),
               "workflow_id": metadata["id"], "workflow_status": metadata.get("status"),
               "workflow_inputs": workflow_inputs,
@@ -166,8 +206,8 @@ def collect(metadata_path, output, workers=8, batch=True):
     manifest = [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  ./{path.relative_to(output)}"
                 for path in sorted(output.rglob("*")) if path.is_file()]
     (output / "evidence-manifest.sha256").write_text("\n".join(manifest) + "\n")
-    unexpected = [error for error in errors
-                  if not (error.get("expected_after_preemption") or error.get("expected_after_cache_hit"))]
+    unexpected = [error for error in errors if not (error.get("expected_after_preemption") or error.get("expected_after_cache_hit")
+                                                    or error.get("expected_after_unfinished_attempt"))]
     if unexpected:
         raise ValueError(f"incomplete capture: {len(unexpected)} unexpected unavailable artifacts; see profiles.json")
     return result
@@ -201,4 +241,4 @@ if __name__ == "__main__":
     result = collect(args.metadata, args.output, batch=not args.skip_batch)
     print(f"Captured {len(result['attempts'])} terminal attempts; {len(result['not_terminal'])} still pending")
     if result["errors"]:
-        print(f"WARNING: {len(result['errors'])} preempted-attempt monitoring logs unavailable; capture remains incomplete")
+        print(f"WARNING: {len(result['errors'])} logs of cache hits or unfinished attempts unavailable; capture remains incomplete")

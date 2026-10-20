@@ -32,9 +32,11 @@ cover molecule and all-read runs. No extra scientific task or BAM scan is needed
 identities. `objects.json` retains size/generation; downloads use that generation.
 A SHA-256 manifest covers captured evidence. Failed parent workflows are
 supported without requiring a final merge. Missing objects are recorded and
-produce an explicit incomplete-capture error, except a monitoring-log 404 for
-an explicitly recorded VM preemption: this prints a warning and keeps
-`complete_capture: false`. Each retry retains its own logs; successful-attempt
+produce an explicit incomplete-capture error, except absent logs (monitoring
+log, stdout, stderr) of cache hits, which never ran, and of attempts that did not
+finish (preempted, failed or aborted): these print a warning and keep
+`complete_capture: false`. Successful attempts that ran must have their logs.
+Workflow files are sized with one listing per workflow root. Each retry retains its own logs; successful-attempt
 measurements never replace missing earlier measurements. Batch read failures
 also preserve the remaining evidence before reporting an error. Live/aborted streams may never
 have been exported; unavailable measurements must not be treated as final peaks
