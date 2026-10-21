@@ -51,7 +51,10 @@ def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "metadata.json"
                 path.write_text(json.dumps(metadata))
-                collect(path, output / root.rsplit("/", 1)[-1], batch=batch)
+                result = collect(path, output / root.rsplit("/", 1)[-1], batch=batch)
+                if result["errors"]:
+                    print(f"WARNING: {root}: {len(result['errors'])} expected missing logs; "
+                          "capture remains incomplete (see its profiles.json)", file=sys.stderr)
         except (RuntimeError, ValueError) as error:
             failures[root] = str(error)
     (output / "runs.json").write_text(json.dumps({"run_roots": roots, "failures": failures}, indent=2) + "\n")

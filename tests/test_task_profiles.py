@@ -1,3 +1,4 @@
+import io
 import json
 from pathlib import Path
 import sys
@@ -32,14 +33,18 @@ class TaskProfileTests(unittest.TestCase):
             def collect(metadata, output, batch):
                 captured.append((json.loads(metadata.read_text())["id"], output.name, batch))
                 output.mkdir()
-                (output / "profiles.json").write_text("{}")
+                result = {"errors": [{"expected_after_cache_hit": True}] if output.name == "w2" else []}
+                (output / "profiles.json").write_text(json.dumps(result))
+                return result
 
             # w2's attached FASTQs came from w0 by cache hit, and w0 reused w00's: both are captured.
             w0, w00 = "0" * 8 + "-0000-0000-0000-" + "0" * 12, "0" * 8 + "-0000-0000-0000-" + "0" * 11 + "1"
             hit = lambda source: {"callCaching": {"hit": True, "result": f"Cache Hit: {source}:rnaseq_pipeline.aumi:0"}}
             calls = {"w2": {"rnaseq_pipeline.aumi": [hit(w0)]}, w0: {"rnaseq_pipeline.aumi": [hit(w00)]}}
             read = lambda run: {"id": run.rsplit("/", 1)[-1], "calls": calls.get(run.rsplit("/", 1)[-1], {})}
-            bundle = cohort.capture([run1 + "/"] + cohort.merge_run_roots(merge), root / "profiles", False, read, collect)
+            with patch("sys.stderr", new_callable=io.StringIO) as warnings:
+                bundle = cohort.capture([run1 + "/"] + cohort.merge_run_roots(merge), root / "profiles", False, read, collect)
+            self.assertIn(f"WARNING: {run2}: 1 expected missing logs; capture remains incomplete", warnings.getvalue())
             self.assertEqual([("w1", "w1", False), ("w2", "w2", False), (w0, w0, False), (w00, w00, False)], captured)
             self.assertEqual([run1, run2, f"gs://bucket/caper/rnaseq_pipeline/{w0}", f"gs://bucket/caper/rnaseq_pipeline/{w00}"],
                              json.loads((root / "profiles/runs.json").read_text())["run_roots"])
