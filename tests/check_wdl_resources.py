@@ -25,7 +25,8 @@ fixture = fixtures.MergeResultsTests()
 fixture.setUp()
 try:
     fixture.test_shuffled_files_preserve_declared_samples_dotted_ids_and_gene_order()
-    for name in ("merge_results", "merge_expression"):
+    # The second merge_results case has no all-read featureCounts, written as Cromwell writes an empty array.
+    for name, all_read in (("merge_results", True), ("merge_results", False), ("merge_expression", None)):
         task = WDL.load(str(repo / "wdl/merge_results" / (name + ".wdl"))).tasks[0]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -35,7 +36,8 @@ try:
                       "memory": 4, "disk_space": 10, "ncpu": 1, "preemptible": 0, "docker": "unused"}
             if name == "merge_results":
                 inputs.update(qc_report_files=list(map(str, fixture.qc.iterdir())), output_report_name="cohort",
-                              all_read_feature_counts_files=inputs["feature_counts_files"], allow_mixed_expression_modes=False)
+                              all_read_feature_counts_files=inputs["feature_counts_files"] if all_read else [],
+                              allow_mixed_expression_modes=False)
                 inputs["expression_metadata_rows"] = [["sample", "not_deduplicated"]] + [[sample, "0"] for sample in fixture.samples]
                 diagnostics = []
                 for sample in fixture.samples:
@@ -49,13 +51,21 @@ try:
             for decl in task.postinputs:
                 env = env.bind(decl.name, decl.expr.eval(env, stdlib))
             command = task.command.eval(env, stdlib).value.replace("/usr/local/src/", str(repo / "wdl/merge_results") + "/")
-            subprocess.run(["bash", "-c", command], cwd=root, check=True, capture_output=True)
+            if all_read is False:
+                for written in root.iterdir():
+                    if written.is_file() and written.stat().st_size == 0:
+                        written.write_text("\n")  # Cromwell's write_lines([])
+            completed = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
+            assert completed.returncode == 0, completed.stderr[-500:]
             for filename in ("rsem_genes_count.txt", "rsem_genes_tpm.txt", "rsem_genes_fpkm.txt", "featureCounts.txt"):
                 actual = root / (("secondary_" if name == "merge_expression" else "") + filename)
                 assert actual.read_bytes() == (fixture.root / filename).read_bytes()
             if name == "merge_results":
                 assert (root / "cohort.csv").read_bytes() == (fixture.root / "cohort.csv").read_bytes()
-                assert (root / "featureCounts_all_reads.txt").read_bytes() == (fixture.root / "featureCounts.txt").read_bytes()
+                if all_read:
+                    assert (root / "featureCounts_all_reads.txt").read_bytes() == (fixture.root / "featureCounts.txt").read_bytes()
+                else:
+                    assert not (root / "featureCounts_all_reads.txt").exists()
                 metadata = task.outputs[-1].expr.eval(env, stdlib).value
                 lines = (root / metadata).read_text().splitlines()
                 assert lines[0].startswith("sample\tnot_deduplicated\tstatus\t") and lines[0].endswith("\tqc_flags")

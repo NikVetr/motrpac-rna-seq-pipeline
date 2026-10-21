@@ -73,7 +73,8 @@ task merge_results {
         python3 /usr/local/src/merge_fc.py \
             --fc-dir feature_counts_files \
             --sample-order ~{sample_order}
-        if [[ -s "~{write_lines(all_read_feature_counts_files)}" ]]; then
+        # Test the length: Cromwell writes an empty array as a single newline, not an empty file.
+        if (( ~{length(all_read_feature_counts_files)} > 0 )); then
             mkdir all_read_feature_counts_files
             while IFS= read -r input; do
                 ln -s -- "$(realpath -- "$input")" all_read_feature_counts_files/
