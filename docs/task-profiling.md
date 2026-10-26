@@ -72,8 +72,10 @@ the same shared calibration workflow across tissues. It does not assert that
 old execution objects still exist; cleanup must check their current generations
 and dependencies separately.
 
-The cohort command refuses running workflows or pending attempts and creates no
-bundle when a capture fails. Expected absent cache-hit/interrupted-attempt logs
+The cohort command records per-workflow failures in `runs.json`, including missing
+files in an unpacked reuse source, and continues checking the remaining workflows.
+It refuses running workflows or pending attempts and creates no bundle when a
+capture fails. Expected absent cache-hit/interrupted-attempt logs
 remain explicit and do not prevent bundling. Gzip level 1 reduces compression
 work while retaining the same evidence. `--destination gs://.../task-profiles`
 uploads only after capture succeeds and refuses to replace an existing object.

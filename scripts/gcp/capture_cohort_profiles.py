@@ -56,7 +56,7 @@ def reuse_capture(root, metadata, target, sources, batch):
         result = json.loads((directory / "profiles.json").read_text())
         if (metadata.get("id") != workflow or metadata.get("workflowRoot", "").rstrip("/") != root or
                 result.get("workflow_id") != workflow or result.get("workflow_status") != metadata.get("status") or
-                metadata.get("status") not in ("Succeeded", "Failed", "Aborted") or result.get("not_terminal")):
+                metadata.get("status") not in capture_task_profiles.TERMINAL_WORKFLOW_STATES or result.get("not_terminal")):
             raise ValueError(f"invalid or nonterminal reusable capture: {directory}")
         if any(not (error.get("expected_after_preemption") or error.get("expected_after_cache_hit") or
                     error.get("expected_after_unfinished_attempt")) for error in result["errors"]):
@@ -66,7 +66,7 @@ def reuse_capture(root, metadata, target, sources, batch):
                     for call, calls in metadata["calls"].items() for a in calls}
         if not expected or len(attempts) != len(result["attempts"]) or set(attempts) != set(expected):
             raise ValueError(f"reusable capture lacks attempts: {directory}")
-        if any(a.get("executionStatus") not in ("Done", "Failed", "RetryableFailure", "Aborted", "Bypassed") or
+        if any(a.get("executionStatus") not in capture_task_profiles.TERMINAL_ATTEMPT_STATES or
                attempts[key].get("status") != a["executionStatus"] for key, a in expected.items()):
             raise ValueError(f"reusable capture has inconsistent attempt states: {directory}")
         if batch and any(a.get("jobId") and not attempts[key].get("batch") for key, a in expected.items()):
@@ -88,7 +88,7 @@ def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=
     for root in roots:  # grows as cache origins are found
         try:
             metadata = read_metadata(root)
-            if metadata.get("status") not in ("Succeeded", "Failed", "Aborted"):
+            if metadata.get("status") not in capture_task_profiles.TERMINAL_WORKFLOW_STATES:
                 raise ValueError(f"workflow is not terminal: {root} ({metadata.get('status')})")
             roots.extend(origin for origin in cache_origins(metadata, root) if origin not in roots)
             target = output / root.rsplit("/", 1)[-1]
@@ -105,7 +105,7 @@ def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=
             if result["errors"]:
                 print(f"WARNING: {root}: {len(result['errors'])} expected missing logs; "
                       "capture remains incomplete (see its profiles.json)", file=sys.stderr)
-        except (RuntimeError, ValueError) as error:
+        except (RuntimeError, ValueError, OSError) as error:
             failures[root] = str(error)
     (output / "runs.json").write_text(json.dumps({"run_roots": roots, "failures": failures, "reused": reused}, indent=2) + "\n")
     if failures:

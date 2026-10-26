@@ -342,6 +342,25 @@ class TaskProfileTests(unittest.TestCase):
                         collect.assert_called_once()
                         self.assertEqual({}, runs["reused"])
 
+    def test_missing_reuse_manifest_records_failure_and_continues_other_workflows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, output = root / "previous", root / "next"
+            (source / "missing").mkdir(parents=True)
+            prefix = "gs://bucket/x/rnaseq_pipeline/"
+            runs = [prefix + "missing", prefix + "good"]
+            collect = Mock(return_value={"errors": [], "not_terminal": []})
+            with self.assertRaisesRegex(RuntimeError, "1 of 2 captures failed"):
+                cohort.capture(runs, output, True, lambda _: {"status": "Succeeded"},
+                               collect, reuse=[source])
+            result = json.loads((output / "runs.json").read_text())
+            self.assertEqual(runs, result["run_roots"])
+            self.assertEqual({runs[0]}, set(result["failures"]))
+            self.assertIn("evidence-manifest.sha256", result["failures"][runs[0]])
+            collect.assert_called_once()
+            self.assertEqual(output / "good", collect.call_args.args[1])
+            self.assertFalse((root / "next.tar.gz").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,8 @@ from summarize_workflow_cost import monitor
 
 
 RUN_ROOT = re.compile(r"^(gs://[^/]+/.+?/rnaseq_pipeline/[^/]+)/")
+TERMINAL_WORKFLOW_STATES = {"Succeeded", "Failed", "Aborted"}
+TERMINAL_ATTEMPT_STATES = {"Done", "Failed", "RetryableFailure", "Aborted", "Bypassed"}
 SMALL_METRICS = (".umi_metrics.json", ".umi_molecule_expression_metrics.json",
                  ".sampling_manifest.json", ".Log.final.out", "_qc_info.csv", ".cnt",
                  "_contamination_sampling.json", ".qc_diagnostics.json", "expression_metadata.tsv",
@@ -39,7 +41,7 @@ def file_uris(value):
             yield from file_uris(child)
 
 
-def collect(metadata_path, output, workers=16, batch=True, cloud_read=None):
+def collect(metadata_path, output, workers=8, batch=True, cloud_read=None):
     if workers < 1:
         raise ValueError("workers must be positive")
     read = cloud_read or cloud
@@ -52,9 +54,8 @@ def collect(metadata_path, output, workers=16, batch=True, cloud_read=None):
         metadata.get("submittedFiles", {}).get("inputs", "{}"))
     attempts = [(call, attempt) for call, calls in metadata["calls"].items() for attempt in calls]
     # No running-stream snapshot is presented as a completed resource measurement.
-    terminal = {"Done", "Failed", "RetryableFailure", "Aborted", "Bypassed"}
     selected = [(call, attempt) for call, attempt in attempts
-                if attempt.get("executionStatus") in terminal]
+                if attempt.get("executionStatus") in TERMINAL_ATTEMPT_STATES]
     preempted_logs = {attempt.get("monitoringLog") for _, attempt in selected
                      if attempt.get("executionStatus") == "RetryableFailure"
                      and "VMPreemption(50001)" in json.dumps(attempt.get("failures", []))}
@@ -194,14 +195,14 @@ def collect(metadata_path, output, workers=16, batch=True, cloud_read=None):
     errors += [error for _, attempt_errors in captured for error in attempt_errors]
     pending = [{"call": c, "shard": a.get("shardIndex"), "attempt": a.get("attempt"),
                 "status": a.get("executionStatus")} for c, a in attempts
-               if a.get("executionStatus") not in terminal]
+               if a.get("executionStatus") not in TERMINAL_ATTEMPT_STATES]
     result = {"schema_version": 1, "captured_utc": datetime.now(timezone.utc).isoformat(),
               "workflow_id": metadata["id"], "workflow_status": metadata.get("status"),
               "workflow_inputs": workflow_inputs,
               "submitted_files": metadata.get("submittedFiles", {}),
               "not_terminal": pending,
               "attempts": rows, "errors": errors, "complete_capture": not errors and not pending
-              and metadata.get("status") in ("Succeeded", "Failed", "Aborted")}
+              and metadata.get("status") in TERMINAL_WORKFLOW_STATES}
     def encode(value):
         if isinstance(value, Decimal):
             return float(value)
