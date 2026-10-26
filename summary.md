@@ -86,7 +86,14 @@ processing tasks; one-CPU reporting and merges retain backend selection. See
 and exact include/exclude sample lists. GCP helpers check locality, monitor
 resources, capture attempt-level evidence and estimate costs from frozen rates.
 `scripts/gcp/capture_cohort_profiles.py` bundles that evidence for every workflow
-behind a cohort before execution data are deleted.
+behind a cohort before execution data are deleted. Its standard-library REST
+reader shares authenticated HTTPS connections and repeated reads within a
+capture, with bounded concurrency and an explicit gcloud transport option.
+Previously captured shared workflows can be reused from local cohort directories
+after metadata, attempt coverage, Batch evidence and checksums are verified.
+Final cohort bundles reject nonterminal workflows and pending attempts; expected
+missing logs remain explicit. Capture reuse does not replace current object and
+consumer checks before deleting execution data. See [task profiling](docs/task-profiling.md).
 Human release profiles select matched v47/v50 references in us-central1.
 Execution storage and workers must share a region; source references and FASTQs
 require explicit read permissions and placement decisions. Cohort submissions

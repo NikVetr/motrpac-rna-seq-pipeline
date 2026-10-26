@@ -10,8 +10,10 @@ snapshot; the bundle is written only if every capture succeeds.
 """
 
 import argparse
+from functools import partial
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -21,6 +23,7 @@ from pathlib import Path
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))
 import capture_task_profiles  # noqa: E402
 from make_merge_inputs import workflow_metadata  # noqa: E402
+from summarize_workflow_cost import verify_evidence  # noqa: E402
 
 RUN_ROOT = re.compile(r"(gs://.+?/rnaseq_pipeline/[^/]+)/call-")
 CACHE_HIT = re.compile(r"Cache Hit: ([0-9a-f-]{36}):")
@@ -38,30 +41,77 @@ def cache_origins(metadata, root):
     return [root.rsplit("/", 1)[0] + "/" + workflow for workflow in sorted({hit[1] for hit in hits if hit})]
 
 
-def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=capture_task_profiles.collect):
+def reuse_capture(root, metadata, target, sources, batch):
+    """Reuse explicitly supplied terminal captures only after checking metadata and all hashes."""
+    workflow = root.rsplit("/", 1)[-1]
+    for source in sources:
+        directory = source / workflow
+        if not directory.is_dir():
+            continue
+        verify_evidence(directory)
+        previous = json.loads((directory / "metadata.json").read_text())
+        if previous != metadata:
+            print(f"Not reusing {directory}: workflow metadata differs; capturing again", file=sys.stderr)
+            continue
+        result = json.loads((directory / "profiles.json").read_text())
+        if (metadata.get("id") != workflow or metadata.get("workflowRoot", "").rstrip("/") != root or
+                result.get("workflow_id") != workflow or result.get("workflow_status") != metadata.get("status") or
+                metadata.get("status") not in ("Succeeded", "Failed", "Aborted") or result.get("not_terminal")):
+            raise ValueError(f"invalid or nonterminal reusable capture: {directory}")
+        if any(not (error.get("expected_after_preemption") or error.get("expected_after_cache_hit") or
+                    error.get("expected_after_unfinished_attempt")) for error in result["errors"]):
+            raise ValueError(f"reusable capture has unexpected missing evidence: {directory}")
+        attempts = {(row["call"], row["shard"], row["attempt"]): row for row in result["attempts"]}
+        expected = {(call, a["shardIndex"], a["attempt"]): a
+                    for call, calls in metadata["calls"].items() for a in calls}
+        if not expected or len(attempts) != len(result["attempts"]) or set(attempts) != set(expected):
+            raise ValueError(f"reusable capture lacks attempts: {directory}")
+        if any(a.get("executionStatus") not in ("Done", "Failed", "RetryableFailure", "Aborted", "Bypassed") or
+               attempts[key].get("status") != a["executionStatus"] for key, a in expected.items()):
+            raise ValueError(f"reusable capture has inconsistent attempt states: {directory}")
+        if batch and any(a.get("jobId") and not attempts[key].get("batch") for key, a in expected.items()):
+            print(f"Not reusing {directory}: Batch descriptions missing; capturing again", file=sys.stderr)
+            continue
+        shutil.copytree(directory, target)
+        verify_evidence(target)
+        print(f"Reused verified capture: {directory}")
+        return result, str(directory)
+    return None
+
+
+def capture(roots, output, batch=True, read_metadata=workflow_metadata, collect=capture_task_profiles.collect, reuse=()):
     roots = list(dict.fromkeys(root.rstrip("/") for root in roots))
     if not roots:
         raise ValueError("no workflow run roots to capture")
     output.mkdir(parents=True, exist_ok=False)
-    failures = {}
+    failures, reused = {}, {}
     for root in roots:  # grows as cache origins are found
         try:
             metadata = read_metadata(root)
+            if metadata.get("status") not in ("Succeeded", "Failed", "Aborted"):
+                raise ValueError(f"workflow is not terminal: {root} ({metadata.get('status')})")
             roots.extend(origin for origin in cache_origins(metadata, root) if origin not in roots)
-            with tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "metadata.json"
-                path.write_text(json.dumps(metadata))
-                result = collect(path, output / root.rsplit("/", 1)[-1], batch=batch)
-                if result["errors"]:
-                    print(f"WARNING: {root}: {len(result['errors'])} expected missing logs; "
-                          "capture remains incomplete (see its profiles.json)", file=sys.stderr)
+            target = output / root.rsplit("/", 1)[-1]
+            previous = reuse_capture(root, metadata, target, reuse, batch)
+            if previous:
+                result, reused[root] = previous
+            else:
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "metadata.json"
+                    path.write_text(json.dumps(metadata))
+                    result = collect(path, target, batch=batch)
+            if result.get("not_terminal"):
+                raise ValueError(f"workflow still has pending attempts: {root}")
+            if result["errors"]:
+                print(f"WARNING: {root}: {len(result['errors'])} expected missing logs; "
+                      "capture remains incomplete (see its profiles.json)", file=sys.stderr)
         except (RuntimeError, ValueError) as error:
             failures[root] = str(error)
-    (output / "runs.json").write_text(json.dumps({"run_roots": roots, "failures": failures}, indent=2) + "\n")
+    (output / "runs.json").write_text(json.dumps({"run_roots": roots, "failures": failures, "reused": reused}, indent=2) + "\n")
     if failures:
         raise RuntimeError(f"{len(failures)} of {len(roots)} captures failed; see {output / 'runs.json'}")
     bundle = output.with_name(output.name + ".tar.gz")
-    with tarfile.open(bundle, "x:gz") as archive:
+    with tarfile.open(bundle, "x:gz", compresslevel=1) as archive:
         archive.add(output, arcname=output.name)
     return bundle
 
@@ -74,9 +124,25 @@ def main(argv=None):
                         help="make_merge_inputs.py output whose source runs are captured")
     parser.add_argument("--destination", help="gs:// prefix to copy the bundle to; an existing object is not replaced")
     parser.add_argument("--skip-batch", action="store_true", help="omit Batch job descriptions (needs batch.jobs.get)")
+    parser.add_argument("--workers", type=int, default=8, help="maximum concurrent cloud reads (default: 8)")
+    parser.add_argument("--transport", choices=("rest", "gcloud"), default="rest", help="cloud read transport")
+    parser.add_argument("--reuse-captures", type=Path, action="append", default=[],
+                        help="completed local cohort capture directory containing workflow-ID subdirectories; repeatable")
     args = parser.parse_args(argv)
     roots = args.run_root + [root for path in args.merge_inputs for root in merge_run_roots(path)]
-    bundle = capture(roots, args.output, batch=not args.skip_batch)
+    if args.workers < 1:
+        parser.error("--workers must be positive")
+    if any(not source.is_dir() for source in args.reuse_captures):
+        parser.error("--reuse-captures must name existing local capture directories")
+    collect = partial(capture_task_profiles.collect, workers=args.workers)
+    if args.transport == "rest":
+        from profile_cloud import ProfileCloud
+        with ProfileCloud() as reader:
+            bundle = capture(roots, args.output, batch=not args.skip_batch,
+                             collect=partial(collect, cloud_read=reader), reuse=args.reuse_captures)
+            print(f"Cloud requests: {reader.requests}; reused reads: {reader.cache_hits}")
+    else:
+        bundle = capture(roots, args.output, batch=not args.skip_batch, collect=collect, reuse=args.reuse_captures)
     print(f"Wrote {bundle}")
     if args.destination:
         target = args.destination.rstrip("/") + "/" + bundle.name

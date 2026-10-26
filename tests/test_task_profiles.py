@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -6,7 +7,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,8 @@ class TaskProfileTests(unittest.TestCase):
             w0, w00 = "0" * 8 + "-0000-0000-0000-" + "0" * 12, "0" * 8 + "-0000-0000-0000-" + "0" * 11 + "1"
             hit = lambda source: {"callCaching": {"hit": True, "result": f"Cache Hit: {source}:rnaseq_pipeline.aumi:0"}}
             calls = {"w2": {"rnaseq_pipeline.aumi": [hit(w0)]}, w0: {"rnaseq_pipeline.aumi": [hit(w00)]}}
-            read = lambda run: {"id": run.rsplit("/", 1)[-1], "calls": calls.get(run.rsplit("/", 1)[-1], {})}
+            read = lambda run: {"id": run.rsplit("/", 1)[-1], "status": "Succeeded",
+                                "calls": calls.get(run.rsplit("/", 1)[-1], {})}
             with patch("sys.stderr", new_callable=io.StringIO) as warnings:
                 bundle = cohort.capture([run1 + "/"] + cohort.merge_run_roots(merge), root / "profiles", False, read, collect)
             self.assertIn(f"WARNING: {run2}: 1 expected missing logs; capture remains incomplete", warnings.getvalue())
@@ -141,7 +143,7 @@ class TaskProfileTests(unittest.TestCase):
             self.assertEqual(7, result["attempts"][1]["metrics"][
                 "s.umi_molecule_expression_metrics.json"]["denominators"][
                 "selected_representative_qnames_present_in_transcriptome"])
-            self.assertTrue(result["complete_capture"])
+            self.assertFalse(result["complete_capture"], "pending attempts make a snapshot incomplete")
             verify_evidence(root / "capture")
             (root / "capture/profiles.json").write_text("tampered")
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
@@ -279,6 +281,66 @@ class TaskProfileTests(unittest.TestCase):
             self.assertEqual("job1", result["errors"][0]["job"])
             self.assertEqual(1, len(result["attempts"]))
             verify_evidence(root / "capture")
+
+    def test_cohort_refuses_running_workflows_and_pending_attempts_without_a_bundle(self):
+        for status, pending in (("Running", []), ("Succeeded", [{"status": "Running"}])):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "capture"
+                def collect(metadata, target, batch):
+                    target.mkdir()
+                    return {"errors": [], "not_terminal": pending}
+                with self.assertRaisesRegex(RuntimeError, "captures failed"):
+                    cohort.capture(["gs://bucket/x/rnaseq_pipeline/id"], output, False,
+                                   lambda root: {"status": status}, collect)
+                self.assertFalse(output.with_suffix(".tar.gz").exists())
+                self.assertTrue(json.loads((output / "runs.json").read_text())["failures"])
+
+    def test_cohort_reuse_verifies_evidence_and_requires_matching_metadata_and_batch(self):
+        run = "gs://bucket/x/rnaseq_pipeline/id"
+        for case in ("valid", "metadata_changed", "batch_missing", "corrupt", "missing_attempt", "pending"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = root / "previous"
+                source.mkdir()
+                metadata = {"id": "id", "workflowRoot": run, "status": "Succeeded", "calls": {
+                    "rnaseq_pipeline.task": [{"shardIndex": 0, "attempt": 1, "executionStatus": "Done",
+                                              "jobId": "projects/p/locations/r/jobs/j", "inputs": {"ncpu": 1}}]}}
+                path = root / "metadata.json"
+                path.write_text(json.dumps(metadata))
+                profiles.collect(path, source / "id", batch=case != "batch_missing",
+                                 cloud_read=lambda *args: b'{"name": "projects/p/locations/r/jobs/j"}')
+                if case == "metadata_changed":
+                    metadata["labels"] = {"changed": "yes"}
+                elif case in ("corrupt", "missing_attempt", "pending"):
+                    profile_path = source / "id/profiles.json"
+                    result = json.loads(profile_path.read_text())
+                    if case == "missing_attempt":
+                        result["attempts"] = []
+                    elif case == "pending":
+                        result["not_terminal"] = [{"status": "Running"}]
+                    profile_path.write_text(json.dumps(result))
+                    if case != "corrupt":
+                        manifest = source / "id/evidence-manifest.sha256"
+                        manifest.write_text("\n".join(
+                            f"{hashlib.sha256(p.read_bytes()).hexdigest()}  ./{p.relative_to(source / 'id')}"
+                            for p in sorted((source / "id").rglob("*")) if p.is_file() and p != manifest) + "\n")
+                output = root / "next"
+                collect = Mock(return_value={"errors": [], "not_terminal": []})
+                if case in ("corrupt", "missing_attempt", "pending"):
+                    with self.assertRaisesRegex(RuntimeError, "captures failed"):
+                        cohort.capture([run], output, True, lambda _: metadata, collect, reuse=[source])
+                    self.assertFalse((root / "next.tar.gz").exists())
+                    collect.assert_not_called()
+                else:
+                    cohort.capture([run], output, True, lambda _: metadata, collect, reuse=[source])
+                    runs = json.loads((output / "runs.json").read_text())
+                    if case == "valid":
+                        collect.assert_not_called()
+                        self.assertEqual({run: str(source / "id")}, runs["reused"])
+                        verify_evidence(output / "id")
+                    else:
+                        collect.assert_called_once()
+                        self.assertEqual({}, runs["reused"])
 
 
 if __name__ == "__main__":

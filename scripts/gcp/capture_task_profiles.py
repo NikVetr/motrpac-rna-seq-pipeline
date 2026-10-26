@@ -39,7 +39,10 @@ def file_uris(value):
             yield from file_uris(child)
 
 
-def collect(metadata_path, output, workers=16, batch=True):
+def collect(metadata_path, output, workers=16, batch=True, cloud_read=None):
+    if workers < 1:
+        raise ValueError("workers must be positive")
+    read = cloud_read or cloud
     metadata = json.loads(metadata_path.read_text())
     if not metadata.get("calls"):
         raise ValueError("metadata must include calls, inputs, outputs and runtime attributes")
@@ -72,7 +75,7 @@ def collect(metadata_path, output, workers=16, batch=True):
                    for uri in file_uris(attempt.get(field))})
 
     def describe(uri):
-        obj = json.loads(cloud("storage", "objects", "describe", uri, "--format=json"))
+        obj = json.loads(read("storage", "objects", "describe", uri, "--format=json"))
         size = int(obj.get("size", obj.get("size_bytes", -1)))
         if size < 0 or not str(obj.get("generation", "")).isdigit():
             raise ValueError(f"object lacks size/generation: {uri}")
@@ -81,7 +84,7 @@ def collect(metadata_path, output, workers=16, batch=True):
     def list_root(root):
         """Size and generation of every object under one workflow root, in one paginated listing."""
         try:
-            listing = json.loads(cloud("storage", "objects", "list", f"{root}/**", "--format=json(bucket,name,size,generation)"))
+            listing = json.loads(read("storage", "objects", "list", f"{root}/**", "--format=json(bucket,name,size,generation)"))
         except ValueError as error:
             if "matched no objects" not in str(error):
                 raise
@@ -124,7 +127,7 @@ def collect(metadata_path, output, workers=16, batch=True):
         if obj["size_bytes"] > limit:
             raise ValueError(f"profiling artifact exceeds {limit} bytes: {uri}")
         versioned = uri.split("#", 1)[0] + "#" + obj["generation"]
-        data = cloud("storage", "cat", versioned)
+        data = read("storage", "cat", versioned)
         if len(data) != obj["size_bytes"]:
             raise ValueError(f"profiling artifact size changed: {uri}")
         target.write_bytes(data)
@@ -156,7 +159,7 @@ def collect(metadata_path, output, workers=16, batch=True):
                "monitoring": None}
         if batch and attempt.get("jobId"):
             try:
-                job = json.loads(cloud("batch", "jobs", "describe", attempt["jobId"], "--format=json"))
+                job = json.loads(read("batch", "jobs", "describe", attempt["jobId"], "--format=json"))
                 (directory / "batch.json").write_text(json.dumps(job, indent=2) + "\n")
                 row["batch"] = job
             except ValueError as error:
@@ -184,19 +187,21 @@ def collect(metadata_path, output, workers=16, batch=True):
         row["outputs"] = attempt.get("outputs", {})  # Includes scalar post-trim read counts.
         return row, attempt_errors
 
-    # Batch descriptions and log downloads are one gcloud call each, so attempts are captured concurrently.
+    # Bound concurrent network reads independently of the number of task attempts.
     with ThreadPoolExecutor(max_workers=workers) as pool:
         captured = list(pool.map(lambda pair: capture_attempt(*pair), selected))
     rows = [row for row, _ in captured]
     errors += [error for _, attempt_errors in captured for error in attempt_errors]
+    pending = [{"call": c, "shard": a.get("shardIndex"), "attempt": a.get("attempt"),
+                "status": a.get("executionStatus")} for c, a in attempts
+               if a.get("executionStatus") not in terminal]
     result = {"schema_version": 1, "captured_utc": datetime.now(timezone.utc).isoformat(),
               "workflow_id": metadata["id"], "workflow_status": metadata.get("status"),
               "workflow_inputs": workflow_inputs,
               "submitted_files": metadata.get("submittedFiles", {}),
-              "not_terminal": [{"call": c, "shard": a.get("shardIndex"), "attempt": a.get("attempt"),
-                                "status": a.get("executionStatus")} for c, a in attempts
-                               if a.get("executionStatus") not in terminal],
-              "attempts": rows, "errors": errors, "complete_capture": not errors}
+              "not_terminal": pending,
+              "attempts": rows, "errors": errors, "complete_capture": not errors and not pending
+              and metadata.get("status") in ("Succeeded", "Failed", "Aborted")}
     def encode(value):
         if isinstance(value, Decimal):
             return float(value)
@@ -237,8 +242,16 @@ if __name__ == "__main__":
     parser.add_argument("metadata", type=Path)
     parser.add_argument("output", type=Path, help="new directory for this capture")
     parser.add_argument("--skip-batch", action="store_true", help="omit Batch job descriptions (needs batch.jobs.get)")
+    parser.add_argument("--workers", type=int, default=8, help="maximum concurrent cloud reads (default: 8)")
+    parser.add_argument("--transport", choices=("rest", "gcloud"), default="rest", help="cloud read transport")
     args = parser.parse_args()
-    result = collect(args.metadata, args.output, batch=not args.skip_batch)
+    if args.transport == "rest":
+        from profile_cloud import ProfileCloud
+        with ProfileCloud() as reader:
+            result = collect(args.metadata, args.output, workers=args.workers, batch=not args.skip_batch, cloud_read=reader)
+            print(f"Cloud requests: {reader.requests}; reused reads: {reader.cache_hits}")
+    else:
+        result = collect(args.metadata, args.output, workers=args.workers, batch=not args.skip_batch)
     print(f"Captured {len(result['attempts'])} terminal attempts; {len(result['not_terminal'])} still pending")
     if result["errors"]:
         print(f"WARNING: {len(result['errors'])} logs of cache hits or unfinished attempts unavailable; capture remains incomplete")

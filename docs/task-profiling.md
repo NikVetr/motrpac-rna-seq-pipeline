@@ -19,8 +19,16 @@ attributes, then capture a snapshot into a new directory:
 python3 scripts/gcp/capture_task_profiles.py metadata.json profiles/run-001
 ```
 
-The standard-library collector uses gcloud Storage object-read and Batch
-job-read permissions. It launches no workers. It describes input/output objects,
+The standard-library collector uses the active gcloud identity and requires Storage
+object-read and Batch job-read permissions. The default REST reader obtains one
+access token (refreshing it as needed), reuses HTTPS connections across worker
+pools and shares identical reads within the cohort capture. Successful responses
+are cached on temporary local disk and discarded when the command exits.
+`--workers 8` bounds concurrent reads; `--transport gcloud` explicitly selects
+the subprocess reader. There is no automatic permission-error fallback.
+The REST reader supports direct HTTPS and HTTP CONNECT proxies; other proxy
+schemes require the gcloud transport.
+It launches no cloud workers. It describes input/output objects,
 captures actual Batch allocations and attempt states, and downloads only logs
 and small existing metrics. BAMs, FASTQs, reference archives and expression
 matrices are never downloaded. Input parameter names keep reference bytes
@@ -42,6 +50,44 @@ also preserve the remaining evidence before reporting an error. Live/aborted str
 have been exported; unavailable measurements must not be treated as final peaks
 or omitted from failure accounting. Capture before deleting jobs or execution
 files. Use a separate directory and metadata export for every snapshot.
+
+For final cohort preservation, capture every run referenced by the merge inputs
+and recursively follow its cache origins:
+
+```bash
+python3 scripts/gcp/capture_cohort_profiles.py profiles/current-tissue \
+  --merge-inputs merge-inputs.json --workers 8 \
+  --reuse-captures profiles/previous-tissue
+```
+
+Omit `--reuse-captures` for the first capture. It can be repeated for several
+previous local cohort directories, including unpacked preserved bundles.
+Each reused workflow must match freshly read metadata exactly and pass all
+SHA-256 checks, terminal-state and attempt-coverage checks. A full capture also
+requires the stored Batch description for every attempt with a job ID.
+Changed metadata or missing Batch descriptions cause a fresh capture; corrupt
+evidence fails. Reused files are copied into the new self-contained bundle, and
+`runs.json` records their source directories. This avoids repeatedly downloading
+the same shared calibration workflow across tissues. It does not assert that
+old execution objects still exist; cleanup must check their current generations
+and dependencies separately.
+
+The cohort command refuses running workflows or pending attempts and creates no
+bundle when a capture fails. Expected absent cache-hit/interrupted-attempt logs
+remain explicit and do not prevent bundling. Gzip level 1 reduces compression
+work while retaining the same evidence. `--destination gs://.../task-profiles`
+uploads only after capture succeeds and refuses to replace an existing object.
+Do not use `--skip-batch` to work around missing permissions for a final cost
+evidence capture; run with an identity that has `batch.jobs.get` instead.
+
+Start with at most two cohort processes and eight readers each on the operator
+controller. Measure controller load and examine actual errors before increasing
+concurrency; this is an operational starting point, not a documented GCP limit.
+Let existing captures finish before changing their code. Validate one new bundle
+and its checksums before adopting the updated reader for the remaining cohorts.
+Storage reads use Google's [paginated object listing](https://docs.cloud.google.com/storage/docs/json_api/v1/objects/list)
+and [generation-specific downloads](https://docs.cloud.google.com/storage/docs/json_api/v1/objects/get);
+allocations use [Batch job GET](https://docs.cloud.google.com/batch/docs/reference/rest/v1/projects.locations.jobs/get).
 
 Per-sample `qc_diagnostics.json` files are included when available. They retain
 RSEM convergence/short-pair diagnostics, strand consistency, featureCounts
